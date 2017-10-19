@@ -29,7 +29,7 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-mod_cluster</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Final-SNAPSHOT</version>
     </parent>
 
     <artifactId>wildfly-mod_cluster-undertow</artifactId>
@@ -45,6 +45,11 @@
         <dependency>
             <groupId>org.wildfly</groupId>
             <artifactId>wildfly-undertow</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.kohsuke.metainf-services</groupId>
+            <artifactId>metainf-services</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>junit</groupId>

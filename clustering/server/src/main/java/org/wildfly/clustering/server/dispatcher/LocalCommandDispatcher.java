@@ -21,8 +21,6 @@
  */
 package org.wildfly.clustering.server.dispatcher;
 
-import static java.security.AccessController.doPrivileged;
-
 import java.security.PrivilegedAction;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -40,6 +38,7 @@ import org.wildfly.clustering.dispatcher.Command;
 import org.wildfly.clustering.dispatcher.CommandDispatcher;
 import org.wildfly.clustering.dispatcher.CommandResponse;
 import org.wildfly.clustering.group.Node;
+import org.wildfly.security.manager.WildFlySecurityManager;
 
 /**
  * Non-clustered {@link CommandDispatcher} implementation
@@ -57,12 +56,8 @@ public class LocalCommandDispatcher<C> implements CommandDispatcher<C> {
     }
 
     private static ThreadFactory createThreadFactory() {
-        return doPrivileged(new PrivilegedAction<ThreadFactory>() {
-            @Override
-            public ThreadFactory run() {
-                return new JBossThreadFactory(new ThreadGroup(LocalCommandDispatcher.class.getSimpleName()), Boolean.FALSE, null, "%G - %t", null, null);
-            }
-        });
+        PrivilegedAction<ThreadFactory> action = () -> new JBossThreadFactory(new ThreadGroup(LocalCommandDispatcher.class.getSimpleName()), Boolean.FALSE, null, "%G - %t", null, null);
+        return WildFlySecurityManager.doUnchecked(action);
     }
 
     public LocalCommandDispatcher(Node node, C context, ExecutorService executor) {
@@ -72,7 +67,7 @@ public class LocalCommandDispatcher<C> implements CommandDispatcher<C> {
     }
 
     @Override
-    public <R> CommandResponse<R> executeOnNode(Command<R, C> command, Node node) {
+    public <R> CommandResponse<R> executeOnNode(Command<R, ? super C> command, Node node) {
         if (!this.node.equals(node)) {
             throw new UnreachableException((Address) null);
         }
@@ -84,7 +79,7 @@ public class LocalCommandDispatcher<C> implements CommandDispatcher<C> {
     }
 
     @Override
-    public <R> Map<Node, CommandResponse<R>> executeOnCluster(Command<R, C> command, Node... excludedNodes) {
+    public <R> Map<Node, CommandResponse<R>> executeOnCluster(Command<R, ? super C> command, Node... excludedNodes) {
         Map<Node, CommandResponse<R>> results = new HashMap<>();
         if ((excludedNodes == null) || (excludedNodes.length == 0) || !Arrays.asList(excludedNodes).contains(this.node)) {
             results.put(this.node, this.executeOnNode(command, this.node));
@@ -93,7 +88,7 @@ public class LocalCommandDispatcher<C> implements CommandDispatcher<C> {
     }
 
     @Override
-    public <R> Future<R> submitOnNode(final Command<R, C> command, Node node) {
+    public <R> Future<R> submitOnNode(final Command<R, ? super C> command, Node node) {
         Callable<R> task = new Callable<R>() {
             @Override
             public R call() throws Exception {
@@ -104,7 +99,7 @@ public class LocalCommandDispatcher<C> implements CommandDispatcher<C> {
     }
 
     @Override
-    public <R> Map<Node, Future<R>> submitOnCluster(Command<R, C> command, Node... excludedNodes) {
+    public <R> Map<Node, Future<R>> submitOnCluster(Command<R, ? super C> command, Node... excludedNodes) {
         Map<Node, Future<R>> results = new HashMap<>();
         if ((excludedNodes == null) || (excludedNodes.length == 0) || !Arrays.asList(excludedNodes).contains(this.node)) {
             results.put(this.node, this.submitOnNode(command, this.node));
@@ -114,6 +109,10 @@ public class LocalCommandDispatcher<C> implements CommandDispatcher<C> {
 
     @Override
     public void close() {
-        this.executor.shutdown();
+        PrivilegedAction<Void> action = () -> {
+            this.executor.shutdown();
+            return null;
+        };
+        WildFlySecurityManager.doUnchecked(action);
     }
 }

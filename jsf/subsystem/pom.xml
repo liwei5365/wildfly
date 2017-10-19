@@ -29,7 +29,7 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-jsf-parent</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Final-SNAPSHOT</version>
     </parent>
 
     <artifactId>wildfly-jsf</artifactId>
@@ -50,7 +50,12 @@
 
         <dependency>
             <groupId>org.wildfly</groupId>
-            <artifactId>wildfly-weld</artifactId>
+            <artifactId>wildfly-weld-common</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.wildfly</groupId>
+            <artifactId>wildfly-bean-validation</artifactId>
         </dependency>
 
         <dependency>

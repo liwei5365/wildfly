@@ -24,7 +24,6 @@
 
 package org.jboss.as.security;
 
-import org.jboss.as.controller.AbstractAddStepHandler;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.PathElement;
@@ -42,18 +41,18 @@ import org.jboss.dmr.ModelType;
  */
 public class LoginModuleResourceDefinition extends SimpleResourceDefinition {
     static final SimpleAttributeDefinition CODE = new SimpleAttributeDefinitionBuilder(Constants.CODE, ModelType.STRING)
-            .setAllowNull(false)
+            .setRequired(true)
             .setMinSize(1)
             .build();
 
     static final SimpleAttributeDefinition FLAG = new SimpleAttributeDefinitionBuilder(Constants.FLAG, ModelType.STRING)
-            .setAllowNull(false)
+            .setRequired(true)
             .setAllowExpression(true)
             .setValidator(new EnumValidator<ModuleFlag>(ModuleFlag.class, false, true))
             .build();
 
     static final SimpleAttributeDefinition MODULE = new SimpleAttributeDefinitionBuilder(Constants.MODULE, ModelType.STRING)
-            .setAllowNull(true)
+            .setRequired(false)
             .setAllowExpression(false)
             .setMinSize(1)
             .build();
@@ -74,12 +73,14 @@ public class LoginModuleResourceDefinition extends SimpleResourceDefinition {
     @Override
     public void registerAttributes(ManagementResourceRegistration resourceRegistration) {
         super.registerAttributes(resourceRegistration);
+        SecurityDomainReloadWriteHandler writeHandler = new SecurityDomainReloadWriteHandler(ATTRIBUTES);
         for (AttributeDefinition attribute : ATTRIBUTES) {
-            resourceRegistration.registerReadWriteAttribute(attribute, null, new SecurityDomainReloadWriteHandler(attribute));
+            resourceRegistration.registerReadWriteAttribute(attribute, null, writeHandler);
         }
     }
 
-    private static class LoginModuleAdd extends AbstractAddStepHandler {
+    private static class LoginModuleAdd extends SecurityDomainReloadAddHandler {
+
         @Override
         protected void populateModel(ModelNode operation, ModelNode model) throws OperationFailedException {
             for (AttributeDefinition attribute : ATTRIBUTES) {

@@ -35,12 +35,11 @@ import javax.jms.MessageProducer;
 import javax.jms.QueueConnectionFactory;
 import javax.jms.Session;
 
-import org.jboss.ejb3.annotation.ResourceAdapter;
 import org.jboss.logging.Logger;
 
 /**
  * @author wangchao
- * 
+ *
  */
 @MessageDriven(name = "TestMD", activationConfig = {
         @ActivationConfigProperty(propertyName = "destinationType", propertyValue = "javax.jms.Queue"),
@@ -57,7 +56,7 @@ public class SimpleMDB implements MessageListener {
 
     @Override
     public void onMessage(Message msg) {
-        log.info("OnMessage working...");
+        log.trace("OnMessage working...");
         try {
             Destination destination = msg.getJMSReplyTo();
             Connection conn = connectionFactory.createConnection();

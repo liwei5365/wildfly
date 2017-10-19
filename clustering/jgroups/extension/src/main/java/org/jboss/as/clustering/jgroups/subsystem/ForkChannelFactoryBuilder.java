@@ -21,83 +21,77 @@
  */
 package org.jboss.as.clustering.jgroups.subsystem;
 
-import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import org.jboss.as.clustering.controller.Capability;
+import org.jboss.as.clustering.controller.CapabilityServiceNameProvider;
 import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.clustering.jgroups.ForkChannelFactory;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
+import org.jboss.as.controller.registry.PlaceholderResource;
+import org.jboss.as.controller.registry.Resource;
 import org.jboss.dmr.ModelNode;
-import org.jboss.dmr.Property;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceController;
-import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.msc.service.ValueService;
-import org.jboss.msc.value.InjectedValue;
 import org.jboss.msc.value.Value;
 import org.jgroups.Channel;
+import org.jgroups.protocols.FORK;
+import org.jgroups.stack.Protocol;
+import org.jgroups.stack.ProtocolStack;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
 import org.wildfly.clustering.jgroups.spi.ProtocolConfiguration;
-import org.wildfly.clustering.jgroups.spi.service.ChannelServiceName;
-import org.wildfly.clustering.jgroups.spi.service.ProtocolStackServiceName;
 import org.wildfly.clustering.service.Builder;
-import org.wildfly.clustering.service.Dependency;
 import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.SuppliedValueService;
 import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * Builder for a service that provides a {@link ChannelFactory} for creating fork channels.
  * @author Paul Ferraro
  */
-public class ForkChannelFactoryBuilder implements ResourceServiceBuilder<ChannelFactory>, Value<ChannelFactory> {
+public class ForkChannelFactoryBuilder extends CapabilityServiceNameProvider implements ResourceServiceBuilder<ChannelFactory> {
 
-    private final String channelName;
-    private final InjectedValue<Channel> parentChannel = new InjectedValue<>();
-    private final InjectedValue<ChannelFactory> parentFactory = new InjectedValue<>();
-    private final List<ValueDependency<ProtocolConfiguration>> protocols = new LinkedList<>();
+    private final PathAddress address;
+    @SuppressWarnings("rawtypes")
+    private volatile List<ValueDependency<ProtocolConfiguration>> protocols;
+    private volatile ValueDependency<Channel> parentChannel;
+    private volatile ValueDependency<ChannelFactory> parentFactory;
 
-    public ForkChannelFactoryBuilder(String channelName) {
-        this.channelName = channelName;
-    }
-
-    @Override
-    public ServiceName getServiceName() {
-        return ProtocolStackServiceName.CHANNEL_FACTORY.getServiceName(this.channelName);
+    public ForkChannelFactoryBuilder(Capability capability, PathAddress address) {
+        super(capability, address);
+        this.address = address;
     }
 
     @Override
     public ServiceBuilder<ChannelFactory> build(ServiceTarget target) {
-        ServiceBuilder<ChannelFactory> builder = target.addService(this.getServiceName(), new ValueService<>(this))
-                .addDependency(ChannelServiceName.CONNECTOR.getServiceName(this.channelName), Channel.class, this.parentChannel)
-                .addDependency(ChannelServiceName.FACTORY.getServiceName(this.channelName), ChannelFactory.class, this.parentFactory)
-                .setInitialMode(ServiceController.Mode.PASSIVE)
-        ;
-        for (Dependency dependency : this.protocols) {
-            dependency.register(builder);
-        }
+        @SuppressWarnings("unchecked")
+        Supplier<ChannelFactory> supplier = () -> new ForkChannelFactory(this.parentChannel.getValue(), this.parentFactory.getValue(), this.protocols.stream().map(Value::getValue).map(protocol -> (ProtocolConfiguration<? extends Protocol>) protocol).collect(Collectors.toList()));
+        Consumer<ChannelFactory> destroyer = factory -> {
+            ProtocolStack stack = this.parentChannel.getValue().getProtocolStack();
+            FORK fork = (FORK) stack.findProtocol(FORK.class);
+            fork.remove(this.address.getLastElement().getValue());
+        };
+        ServiceBuilder<ChannelFactory> builder = target.addService(this.getServiceName(), new SuppliedValueService<>(Function.identity(), supplier, destroyer)).setInitialMode(ServiceController.Mode.PASSIVE);
+        Stream.concat(Stream.of(this.parentChannel, this.parentFactory), this.protocols.stream()).forEach(dependency -> dependency.register(builder));
         return builder;
     }
 
     @Override
-    public ChannelFactory getValue() {
-        List<ProtocolConfiguration> protocols = new ArrayList<>(this.protocols.size());
-        for (Value<ProtocolConfiguration> protocol : this.protocols) {
-            protocols.add(protocol.getValue());
-        }
-        return new ForkChannelFactory(this.parentChannel.getValue(), this.parentFactory.getValue(), protocols);
-    }
-
-    @Override
     public Builder<ChannelFactory> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.protocols.clear();
-        if (model.hasDefined(ProtocolResourceDefinition.WILDCARD_PATH.getKey())) {
-            for (Property protocol : model.get(ProtocolResourceDefinition.WILDCARD_PATH.getKey()).asPropertyList()) {
-                this.protocols.add(new InjectedValueDependency<>(new ProtocolConfigurationBuilder(this.channelName, protocol.getName()), ProtocolConfiguration.class));
-            }
-        }
+        Resource resource = context.getCurrentAddress().equals(this.address) ? context.readResourceFromRoot(this.address, false) : PlaceholderResource.INSTANCE;
+        this.protocols = resource.getChildren(ProtocolResourceDefinition.WILDCARD_PATH.getKey()).stream().map(entry -> new InjectedValueDependency<>(new ProtocolServiceNameProvider(this.address, entry.getPathElement()), ProtocolConfiguration.class)).collect(Collectors.toList());
+        String channelName = this.address.getParent().getLastElement().getValue();
+        this.parentChannel = new InjectedValueDependency<>(JGroupsRequirement.CHANNEL.getServiceName(context, channelName), Channel.class);
+        this.parentFactory = new InjectedValueDependency<>(JGroupsRequirement.CHANNEL_SOURCE.getServiceName(context, channelName), ChannelFactory.class);
         return this;
     }
 }

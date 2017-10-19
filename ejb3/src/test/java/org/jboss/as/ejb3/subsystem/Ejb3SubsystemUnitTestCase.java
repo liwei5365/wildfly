@@ -22,27 +22,18 @@
 
 package org.jboss.as.ejb3.subsystem;
 
-import java.io.IOException;
-import java.util.List;
 
-import org.jboss.as.controller.AttributeDefinition;
-import org.jboss.as.controller.ModelVersion;
+import java.io.IOException;
+
 import org.jboss.as.controller.PathAddress;
-import org.jboss.as.controller.PathElement;
-import org.jboss.as.model.test.FailedOperationTransformationConfig;
-import org.jboss.as.model.test.ModelFixer;
-import org.jboss.as.model.test.ModelTestControllerVersion;
-import org.jboss.as.model.test.ModelTestUtils;
+import org.jboss.as.controller.operations.common.Util;
 import org.jboss.as.subsystem.test.AbstractSubsystemBaseTest;
 import org.jboss.as.subsystem.test.AdditionalInitialization;
 import org.jboss.as.subsystem.test.KernelServices;
-import org.jboss.as.subsystem.test.KernelServicesBuilder;
 import org.jboss.dmr.ModelNode;
-import org.jboss.dmr.ModelType;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.wildfly.clustering.singleton.SingletonPolicy;
+import org.wildfly.clustering.singleton.SingletonDefaultRequirement;
 
 /**
  * Test case for testing the integrity of the EJB3 subsystem.
@@ -59,7 +50,7 @@ import org.wildfly.clustering.singleton.SingletonPolicy;
 public class Ejb3SubsystemUnitTestCase extends AbstractSubsystemBaseTest {
 
     private static final AdditionalInitialization ADDITIONAL_INITIALIZATION = AdditionalInitialization.withCapabilities(
-            SingletonPolicy.CAPABILITY_NAME.concat(".default"));
+            SingletonDefaultRequirement.SINGLETON_POLICY.getName());
 
     public Ejb3SubsystemUnitTestCase() {
         super(EJB3Extension.SUBSYSTEM_NAME, new EJB3Extension());
@@ -77,7 +68,7 @@ public class Ejb3SubsystemUnitTestCase extends AbstractSubsystemBaseTest {
 
     @Override
     protected String getSubsystemXsdPath() throws Exception {
-        return "schema/wildfly-ejb3_4_0.xsd";
+        return "schema/wildfly-ejb3_5_0.xsd";
     }
 
     @Override
@@ -88,8 +79,63 @@ public class Ejb3SubsystemUnitTestCase extends AbstractSubsystemBaseTest {
     }
 
     @Test
+    @Override
+    public void testSchemaOfSubsystemTemplates() throws Exception {
+        super.testSchemaOfSubsystemTemplates();
+    }
+
+    @Test
     public void test15() throws Exception {
         standardSubsystemTest("subsystem15.xml", false);
+    }
+
+    /** WFLY-7797 */
+    @Test
+    public void testPoolSizeAlternatives() throws Exception {
+        // Parse the subsystem xml and install into the first controller
+        final String subsystemXml = getSubsystemXml();
+        final KernelServices ks = createKernelServicesBuilder(AdditionalInitialization.MANAGEMENT).setSubsystemXml(subsystemXml).build();
+        Assert.assertTrue("Subsystem boot failed!", ks.isSuccessfulBoot());
+
+        PathAddress pa = PathAddress.pathAddress("subsystem", "ejb3").append("strict-max-bean-instance-pool", "slsb-strict-max-pool");
+
+        ModelNode composite = Util.createEmptyOperation("composite", PathAddress.EMPTY_ADDRESS);
+        ModelNode steps = composite.get("steps");
+        ModelNode writeMax = Util.getWriteAttributeOperation(pa, "max-pool-size", 5);
+        ModelNode writeDerive = Util.getWriteAttributeOperation(pa, "derive-size", "none");
+
+        steps.add(writeMax);
+        steps.add(writeDerive);
+
+        // none works in combo with max-pool-size
+        ModelNode response = ks.executeOperation(composite);
+        Assert.assertEquals(response.toString(), "success", response.get("outcome").asString());
+
+        validatePoolConfig(ks, pa);
+
+        steps.setEmptyList();
+
+        // Other values fail in combo with max-pool-size
+        writeMax.get("value").set(10);
+        writeDerive.get("value").set("from-cpu-count");
+
+        steps.add(writeMax);
+        steps.add(writeDerive);
+
+        ks.executeForFailure(composite);
+
+        validatePoolConfig(ks, pa);
+
+    }
+
+    private void validatePoolConfig(KernelServices ks, PathAddress pa) {
+        ModelNode ra = Util.createEmptyOperation("read-attribute", pa);
+        ra.get("name").set("max-pool-size");
+        ModelNode response = ks.executeOperation(ra);
+        Assert.assertEquals(response.toString(), 5, response.get("result").asInt());
+        ra.get("name").set("derive-size");
+        response = ks.executeOperation(ra);
+        Assert.assertFalse(response.toString(), response.hasDefined("result"));
     }
 
 }

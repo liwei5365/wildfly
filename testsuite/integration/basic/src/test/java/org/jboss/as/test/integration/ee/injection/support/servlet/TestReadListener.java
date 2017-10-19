@@ -49,7 +49,7 @@ public class TestReadListener implements ReadListener {
         ServletInputStream input = handler.getWebConnection().getInputStream();
 
         int len = -1;
-        byte b[] = new byte[1024];
+        byte[] b = new byte[1024];
 
         if (input.isReady()) {
             // Expected data is "dummy request#"
@@ -64,8 +64,6 @@ public class TestReadListener implements ReadListener {
                     writeLine(writer, "END");
                     writer.flush();
                 }
-            } else {
-                System.out.println("Data length: " + len);
             }
         }
     }

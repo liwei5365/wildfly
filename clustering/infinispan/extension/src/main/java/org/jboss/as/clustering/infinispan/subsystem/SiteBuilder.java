@@ -27,53 +27,48 @@ import static org.jboss.as.clustering.infinispan.subsystem.JGroupsTransportResou
 import org.infinispan.configuration.global.GlobalConfigurationBuilder;
 import org.infinispan.configuration.global.SiteConfiguration;
 import org.infinispan.configuration.global.SiteConfigurationBuilder;
-import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.msc.value.InjectedValue;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
 import org.wildfly.clustering.jgroups.spi.RelayConfiguration;
-import org.wildfly.clustering.jgroups.spi.service.ChannelServiceName;
 import org.wildfly.clustering.service.Builder;
-import org.wildfly.clustering.service.GroupServiceNameFactory;
+import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
-public class SiteBuilder extends CacheContainerComponentBuilder<SiteConfiguration> implements ResourceServiceBuilder<SiteConfiguration> {
+public class SiteBuilder extends GlobalComponentBuilder<SiteConfiguration> {
 
-    private final InjectedValue<ChannelFactory> factory = new InjectedValue<>();
+    private volatile ValueDependency<ChannelFactory> factory;
 
-    private volatile String channelName = null;
-
-    public SiteBuilder(String containerName) {
-        super(CacheContainerComponent.SITE, containerName);
+    public SiteBuilder(PathAddress containerAddress) {
+        super(CacheContainerComponent.SITE, containerAddress);
     }
 
     @Override
     public ServiceBuilder<SiteConfiguration> build(ServiceTarget target) {
         ServiceBuilder<SiteConfiguration> builder = super.build(target);
-        if (this.channelName != null) {
-            builder.addDependency(ChannelServiceName.FACTORY.getServiceName(this.channelName), ChannelFactory.class, this.factory);
-        }
-        return builder;
+        return (this.factory != null) ? this.factory.register(builder) : builder;
     }
 
     @Override
     public Builder<SiteConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.channelName = ModelNodes.asString(CHANNEL.getDefinition().resolveModelAttribute(context, model), GroupServiceNameFactory.DEFAULT_GROUP);
+        String channel = ModelNodes.optionalString(CHANNEL.resolveModelAttribute(context, model)).orElse(null);
+        this.factory = new InjectedValueDependency<>(JGroupsRequirement.CHANNEL_SOURCE.getServiceName(context, channel), ChannelFactory.class);
         return this;
     }
 
     @Override
     public SiteConfiguration getValue() {
         SiteConfigurationBuilder builder = new GlobalConfigurationBuilder().site();
-        ChannelFactory factory = this.factory.getOptionalValue();
-        if (factory != null) {
+        if (this.factory != null) {
             RelayConfiguration relay = this.factory.getValue().getProtocolStackConfiguration().getRelay();
             if (relay != null) {
                 builder.localSite(relay.getSiteName());

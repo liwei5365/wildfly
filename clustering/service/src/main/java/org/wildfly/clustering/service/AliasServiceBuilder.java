@@ -30,7 +30,7 @@ import org.jboss.msc.service.ValueService;
 import org.jboss.msc.value.InjectedValue;
 
 /**
- * Builds a alias to another service.
+ * Builds an alias to another service.
  * @author Paul Ferraro
  * @param <T> the type of the target service
  */
@@ -62,6 +62,6 @@ public class AliasServiceBuilder<T> implements Builder<T> {
     public ServiceBuilder<T> build(ServiceTarget target) {
         return target.addService(this.name, new ValueService<>(this.value))
                 .addDependency(this.targetName, this.targetClass, this.value)
-                .setInitialMode(ServiceController.Mode.ON_DEMAND);
+                .setInitialMode(ServiceController.Mode.PASSIVE);
     }
 }

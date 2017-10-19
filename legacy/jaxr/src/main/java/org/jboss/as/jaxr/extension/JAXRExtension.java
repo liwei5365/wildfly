@@ -70,17 +70,12 @@ public class JAXRExtension extends AbstractLegacyExtension {
 
         ManagementResourceRegistration subsystemRoot = subsystemRegistration.registerSubsystemModel(new JAXRSubsystemRootResource());
 
-        if (context.isRegisterTransformers()) {
-            JAXRSubsystemRootResource.registerTransformerers(subsystemRegistration);
-        }
-
         return Collections.singleton(subsystemRoot);
     }
 
     @Override
     protected void initializeLegacyParsers(ExtensionParsingContext context) {
-        final JAXRSubsystemParser parser = new JAXRSubsystemParser();
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JAXR_1_1.getUriString(), parser);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JAXR_1_0.getUriString(), parser);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JAXR_1_1.getUriString(), JAXRSubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JAXR_1_0.getUriString(), JAXRSubsystemParser::new);
     }
 }

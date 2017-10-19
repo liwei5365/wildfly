@@ -22,7 +22,6 @@
 package org.jboss.as.test.integration.hibernate;
 
 import java.util.Properties;
-
 import javax.ejb.Stateful;
 import javax.ejb.TransactionManagement;
 import javax.ejb.TransactionManagementType;
@@ -47,9 +46,6 @@ import org.hibernate.internal.util.config.ConfigurationHelper;
 public class SFSBHibernateTransaction {
 
     private static SessionFactory sessionFactory;
-
-    protected static final Class[] NO_CLASSES = new Class[0];
-    protected static final String NO_MAPPINGS = new String();
 
     public void cleanup() {
         sessionFactory.close();
@@ -76,9 +72,7 @@ public class SFSBHibernateTransaction {
 
             sessionFactory = configuration.buildSessionFactory();
         } catch (Throwable ex) { // Make sure you log the exception, as it might be swallowed
-            System.err.println("Initial SessionFactory creation failed." + ex);
-            // ex.printStackTrace();
-            throw new ExceptionInInitializerError(ex);
+            throw new RuntimeException("Could not setup config", ex);
         }
 
     }
@@ -99,10 +93,7 @@ public class SFSBHibernateTransaction {
             session.save(student);
             trans.commit();
         } catch (Exception e) {
-
-            e.printStackTrace();
             throw new RuntimeException("transactional failure while persisting student entity", e);
-
         }
 
         session.close();
@@ -113,7 +104,7 @@ public class SFSBHibernateTransaction {
     public Student updateStudent(String address, int id) {
 
         Session session = sessionFactory.openSession();
-        Student student = (Student) session.load(Student.class, id);
+        Student student = session.load(Student.class, id);
         student.setAddress(address);
 
         try {
@@ -122,10 +113,7 @@ public class SFSBHibernateTransaction {
             session.save(student);
             trans.commit();
         } catch (Exception e) {
-
-            e.printStackTrace();
             throw new RuntimeException("transactional failure while persisting student entity", e);
-
         }
 
         session.close();
@@ -135,7 +123,7 @@ public class SFSBHibernateTransaction {
     // fetch student
     public Student getStudentNoTx(int id) {
         // Transaction trans = sessionFactory.openSession().beginTransaction();
-        Student emp = (Student) sessionFactory.openSession().load(Student.class, id);
+        Student emp = sessionFactory.openSession().load(Student.class, id);
         return emp;
     }
 

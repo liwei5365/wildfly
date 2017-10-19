@@ -22,55 +22,41 @@
 
 package org.wildfly.clustering.web.infinispan.session;
 
-import org.jboss.msc.service.Service;
+import java.util.AbstractMap;
+import java.util.Map;
+import java.util.function.Function;
+
+import org.jboss.as.clustering.controller.CapabilityServiceBuilder;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.msc.service.StartContext;
-import org.jboss.msc.service.StartException;
-import org.jboss.msc.service.StopContext;
-import org.jboss.msc.value.Value;
-import org.wildfly.clustering.registry.RegistryEntryProvider;
-import org.wildfly.clustering.service.Builder;
-import org.wildfly.clustering.spi.CacheGroupServiceName;
+import org.wildfly.clustering.service.MappedValueService;
+import org.wildfly.clustering.service.ValueDependency;
+import org.wildfly.clustering.spi.ClusteringCacheRequirement;
 
 /**
- * Service that provides the {@link RegistryEntryProvider} for the routing {@link org.wildfly.clustering.registry.Registry}.
+ * Service that provides the {@link Map.Entry} for the routing {@link org.wildfly.clustering.registry.Registry}.
  * @author Paul Ferraro
  */
-public class RouteRegistryEntryProviderBuilder implements Builder<RegistryEntryProvider<String, Void>>, Service<RegistryEntryProvider<String, Void>> {
+public class RouteRegistryEntryProviderBuilder implements CapabilityServiceBuilder<Map.Entry<String, Void>> {
 
-    private final Value<? extends Value<String>> route;
+    private final String serverName;
+    private final ValueDependency<String> route;
 
-    private volatile RegistryEntryProvider<String, Void> provider;
-
-    public RouteRegistryEntryProviderBuilder(Value<? extends Value<String>> route) {
+    public RouteRegistryEntryProviderBuilder(String serverName, ValueDependency<String> route) {
+        this.serverName = serverName;
         this.route = route;
     }
 
     @Override
     public ServiceName getServiceName() {
-        return CacheGroupServiceName.REGISTRY_ENTRY.getServiceName(InfinispanSessionManagerFactoryBuilder.DEFAULT_CACHE_CONTAINER, RouteCacheGroupBuilderProvider.CACHE_NAME);
+        return ServiceName.parse(ClusteringCacheRequirement.REGISTRY_ENTRY.resolve(InfinispanSessionManagerFactoryBuilder.DEFAULT_CACHE_CONTAINER, this.serverName));
     }
 
     @Override
-    public ServiceBuilder<RegistryEntryProvider<String, Void>> build(ServiceTarget target) {
-        return target.addService(this.getServiceName(), this).setInitialMode(ServiceController.Mode.ON_DEMAND);
-    }
-
-    @Override
-    public RegistryEntryProvider<String, Void> getValue() {
-        return this.provider;
-    }
-
-    @Override
-    public void start(StartContext context) throws StartException {
-        this.provider = new RouteRegistryEntryProvider(this.route.getValue());
-    }
-
-    @Override
-    public void stop(StopContext context) {
-        this.provider = null;
+    public ServiceBuilder<Map.Entry<String, Void>> build(ServiceTarget target) {
+        Function<String, Map.Entry<String, Void>> mapper = route -> new AbstractMap.SimpleImmutableEntry<>(route, null);
+        return this.route.register(target.addService(this.getServiceName(), new MappedValueService<>(mapper, this.route))).setInitialMode(ServiceController.Mode.ON_DEMAND);
     }
 }

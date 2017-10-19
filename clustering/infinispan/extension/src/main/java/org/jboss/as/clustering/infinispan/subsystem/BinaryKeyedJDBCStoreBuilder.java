@@ -26,12 +26,11 @@ import org.infinispan.configuration.cache.PersistenceConfiguration;
 import org.infinispan.persistence.jdbc.configuration.JdbcBinaryStoreConfiguration;
 import org.infinispan.persistence.jdbc.configuration.JdbcBinaryStoreConfigurationBuilder;
 import org.infinispan.persistence.jdbc.configuration.TableManipulationConfiguration;
-import org.jboss.as.controller.OperationContext;
-import org.jboss.as.controller.OperationFailedException;
-import org.jboss.dmr.ModelNode;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.msc.value.InjectedValue;
+import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * Builds a service providing a {@link JdbcBinaryStoreConfiguration}.
@@ -39,33 +38,21 @@ import org.jboss.msc.value.InjectedValue;
  */
 public class BinaryKeyedJDBCStoreBuilder extends JDBCStoreBuilder<JdbcBinaryStoreConfiguration, JdbcBinaryStoreConfigurationBuilder> {
 
-    private final InjectedValue<TableManipulationConfiguration> table = new InjectedValue<>();
+    private final ValueDependency<TableManipulationConfiguration> table;
 
-    private final String containerName;
-    private final String cacheName;
-
-    private volatile JdbcBinaryStoreConfigurationBuilder builder;
-
-    BinaryKeyedJDBCStoreBuilder(String containerName, String cacheName) {
-        super(JdbcBinaryStoreConfigurationBuilder.class, containerName, cacheName);
-        this.containerName = containerName;
-        this.cacheName = cacheName;
+    BinaryKeyedJDBCStoreBuilder(PathAddress cacheAddress) {
+        super(cacheAddress, JdbcBinaryStoreConfigurationBuilder.class);
+        this.table = new InjectedValueDependency<>(CacheComponent.BINARY_TABLE.getServiceName(cacheAddress), TableManipulationConfiguration.class);
     }
 
     @Override
     public ServiceBuilder<PersistenceConfiguration> build(ServiceTarget target) {
-        return super.build(target).addDependency(CacheComponent.BINARY_TABLE.getServiceName(this.containerName, this.cacheName), TableManipulationConfiguration.class, this.table);
+        return this.table.register(super.build(target));
     }
 
     @Override
-    public PersistenceConfiguration getValue() {
-        this.builder.table().read(this.table.getValue());
-        return super.getValue();
-    }
-
-    @Override
-    JdbcBinaryStoreConfigurationBuilder createStore(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.builder = super.createStore(context, model);
-        return this.builder;
+    public void accept(JdbcBinaryStoreConfigurationBuilder builder) {
+        builder.table().read(this.table.getValue());
+        super.accept(builder);
     }
 }

@@ -29,7 +29,7 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-webservices</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Final-SNAPSHOT</version>
     </parent>
 
     <artifactId>wildfly-webservices-tests-integration</artifactId>
@@ -47,6 +47,10 @@
             <artifactId>wildfly-controller-client</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.wildfly.common</groupId>
+            <artifactId>wildfly-common</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.wildfly</groupId>
             <artifactId>wildfly-security</artifactId>
             <exclusions>
@@ -61,20 +65,6 @@
             <artifactId>jboss-marshalling-river</artifactId>
         </dependency>
         <!-- dependencies for running tests -->
-        <dependency>
-            <groupId>org.jboss</groupId>
-            <artifactId>jboss-remote-naming</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.jboss.xnio</groupId>
-                    <artifactId>xnio-api</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.jboss.remoting3</groupId>
-                    <artifactId>jboss-remoting</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
         <dependency>
             <groupId>com.sun.mail</groupId>
             <artifactId>javax.mail</artifactId>
@@ -131,6 +121,14 @@
             <groupId>org.apache.activemq</groupId>
             <artifactId>artemis-commons</artifactId>
         </dependency>
+        <dependency> <!-- Required by activemq... -->
+            <groupId>org.glassfish</groupId>
+            <artifactId>javax.json</artifactId>
+        </dependency>
+        <dependency> <!-- Required for activemq compatibility -->
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.jboss.xnio</groupId>
             <artifactId>xnio-api</artifactId>
@@ -138,6 +136,20 @@
         <dependency>
             <groupId>org.jboss.xnio</groupId>
             <artifactId>xnio-nio</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wildfly.client</groupId>
+            <artifactId>wildfly-client-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wildfly</groupId>
+            <artifactId>wildfly-naming-client</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.jboss.remoting3</groupId>
+                    <artifactId>jboss-remoting</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 

@@ -31,8 +31,6 @@ import org.jboss.as.server.deployment.DeploymentResourceSupport;
 import org.jboss.as.server.deployment.DeploymentUnit;
 import org.jboss.as.server.deployment.DeploymentUnitProcessingException;
 import org.jboss.as.server.deployment.DeploymentUnitProcessor;
-import org.jboss.modules.Module;
-import org.wildfly.extension.batch.jberet.BatchServiceNames;
 import org.wildfly.extension.batch.jberet._private.BatchLogger;
 
 /**
@@ -52,37 +50,27 @@ public class BatchDeploymentResourceProcessor implements DeploymentUnitProcessor
         final DeploymentUnit deploymentUnit = phaseContext.getDeploymentUnit();
         if (deploymentUnit.hasAttachment(Attachments.MODULE) && !DeploymentTypeMarker.isType(DeploymentType.EAR, deploymentUnit) && deploymentUnit.hasAttachment(Attachments.DEPLOYMENT_ROOT)) {
             BatchLogger.LOGGER.tracef("Processing deployment '%s' for the batch deployment resources.", deploymentUnit.getName());
-            // Get the class loader for the current module
-            final Module module = deploymentUnit.getAttachment(Attachments.MODULE);
-            final ClassLoader moduleClassLoader = module.getClassLoader();
             final DeploymentResourceSupport deploymentResourceSupport = deploymentUnit.getAttachment(Attachments.DEPLOYMENT_RESOURCE_SUPPORT);
             // Add the job operator service used interact with a deployments batch job
-            final JobOperatorService jobOperatorService = new JobOperatorService(moduleClassLoader);
+            final WildFlyJobOperator jobOperator = deploymentUnit.getAttachment(BatchAttachments.JOB_OPERATOR);
 
-            // Get all the job XML service
-            final WildFlyJobXmlResolver jobXmlResolver = deploymentUnit.getAttachment(WildFlyJobXmlResolver.JOB_XML_RESOLVER);
             // Process each job XML file
-            for (String jobXml : jobXmlResolver.getJobXmlNames(moduleClassLoader)) {
+            for (String jobName : jobOperator.getAllJobNames()) {
                 try {
-                    final String jobName = jobXmlResolver.resolveJobName(jobXml, moduleClassLoader);
                     // Add the job information to the service
-                    jobOperatorService.addAllowedJob(jobXml, jobName);
-                    BatchLogger.LOGGER.debugf("Added job XML %s with job name %s to allowed jobs for deployment %s", jobXml, jobName, deploymentUnit.getName());
+                    BatchLogger.LOGGER.debugf("Added job %s to allowed jobs for deployment %s", jobName, deploymentUnit.getName());
                     // Register the a resource for each job found
                     final PathAddress jobAddress = PathAddress.pathAddress(BatchJobResourceDefinition.JOB, jobName);
                     if (!deploymentResourceSupport.hasDeploymentSubModel(subsystemName, jobAddress)) {
                         deploymentResourceSupport.registerDeploymentSubResource(subsystemName,
-                                jobAddress, new BatchJobExecutionResource(jobOperatorService, jobName));
+                                jobAddress, new BatchJobExecutionResource(jobOperator, jobName));
                     }
                 } catch (Exception e) {
                     // The deployment shouldn't fail in this case, just the specific resource registration should be skipped
                     // Log a debug message so the error is not lost
-                    BatchLogger.LOGGER.debugf(e, "Could not parse the XML file %s. The job will not be registered for runtime views on the deployment (%s).", jobXml, deploymentUnit.getName());
+                    BatchLogger.LOGGER.debugf(e, "Batch jobs as an error occurred will not be registered for runtime views on the deployment (%s).", jobName, deploymentUnit.getName());
                 }
             }
-            phaseContext.getServiceTarget().addService(BatchServiceNames.jobOperatorServiceName(deploymentUnit), jobOperatorService)
-                    .addDependency(BatchServiceNames.batchEnvironmentServiceName(deploymentUnit))
-                    .install();
         }
     }
 

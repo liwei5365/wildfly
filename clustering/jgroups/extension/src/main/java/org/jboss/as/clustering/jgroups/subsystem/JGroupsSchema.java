@@ -21,19 +21,24 @@
  */
 package org.jboss.as.clustering.jgroups.subsystem;
 
+import java.util.Locale;
+
+import org.jboss.as.clustering.controller.Schema;
+
 /**
  * Enumeration of the supported subsystem xml schemas.
  * @author Paul Ferraro
  */
-public enum JGroupsSchema {
+public enum JGroupsSchema implements Schema<JGroupsSchema> {
 
     VERSION_1_0(1, 0),
     VERSION_1_1(1, 1),
     VERSION_2_0(2, 0),
     VERSION_3_0(3, 0),
     VERSION_4_0(4, 0),
+    VERSION_5_0(5, 0),
     ;
-    public static final JGroupsSchema CURRENT = VERSION_4_0;
+    public static final JGroupsSchema CURRENT = VERSION_5_0;
 
     private final int major;
     private final int minor;
@@ -43,29 +48,18 @@ public enum JGroupsSchema {
         this.minor = minor;
     }
 
-    /**
-     * Indicates whether this version of the schema is greater than or equal to the version of the specified schema.
-     * @param schema
-     * @return true, if this version of the schema is greater than or equal to the version of the specified schema, false otherwise.
-     */
-    public boolean since(JGroupsSchema schema) {
-        return (this.major > schema.major) || ((this.major == schema.major) && (this.minor >= schema.minor));
+    @Override
+    public int major() {
+        return this.major;
     }
 
-    /**
-     * Get the namespace URI for this schema version.
-     * @return the namespace URI
-     */
+    @Override
+    public int minor() {
+        return this.minor;
+    }
+
+    @Override
     public String getNamespaceUri() {
-        return this.format("urn:jboss:domain:jgroups:%d.%d");
-    }
-
-    /**
-     * Formats a string using the specified pattern.
-     * @param pattern a formatter pattern
-     * @return a formatted string
-     */
-    String format(String pattern) {
-        return String.format(pattern, this.major, this.minor);
+        return String.format(Locale.ROOT, "urn:jboss:domain:jgroups:%d.%d", this.major, this.minor);
     }
 }

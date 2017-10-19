@@ -21,8 +21,11 @@
  */
 package org.wildfly.clustering.infinispan.spi.service;
 
+import java.util.function.Consumer;
+
 import org.infinispan.configuration.cache.Configuration;
-import org.infinispan.manager.EmbeddedCacheManager;
+import org.jboss.as.clustering.controller.CapabilityServiceBuilder;
+import org.jboss.as.controller.capability.CapabilityServiceSupport;
 import org.jboss.msc.service.Service;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceController;
@@ -31,38 +34,46 @@ import org.jboss.msc.service.ServiceTarget;
 import org.jboss.msc.service.StartContext;
 import org.jboss.msc.service.StartException;
 import org.jboss.msc.service.StopContext;
-import org.jboss.msc.value.InjectedValue;
-import org.wildfly.clustering.service.AsynchronousServiceBuilder;
+import org.wildfly.clustering.infinispan.spi.CacheContainer;
+import org.wildfly.clustering.infinispan.spi.InfinispanRequirement;
 import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * Builder for {@link Configuration} services.
  * @author Paul Ferraro
  */
-public class ConfigurationBuilder implements Builder<Configuration>, Service<Configuration> {
+public class ConfigurationBuilder implements CapabilityServiceBuilder<Configuration>, Service<Configuration> {
 
-    private final InjectedValue<EmbeddedCacheManager> container = new InjectedValue<>();
+    private final ServiceName name;
     private final String containerName;
     private final String cacheName;
-    private final ConfigurationBuilderFactory factory;
+    private final Consumer<org.infinispan.configuration.cache.ConfigurationBuilder> consumer;
 
-    public ConfigurationBuilder(String containerName, String cacheName, ConfigurationBuilderFactory factory) {
+    private volatile ValueDependency<CacheContainer> container;
+
+    public ConfigurationBuilder(ServiceName name, String containerName, String cacheName, Consumer<org.infinispan.configuration.cache.ConfigurationBuilder> consumer) {
+        this.name = name;
         this.containerName = containerName;
         this.cacheName = cacheName;
-        this.factory = factory;
+        this.consumer = consumer;
     }
 
     @Override
     public ServiceName getServiceName() {
-        return CacheServiceName.CONFIGURATION.getServiceName(this.containerName, this.cacheName);
+        return this.name;
+    }
+
+    @Override
+    public Builder<Configuration> configure(CapabilityServiceSupport support) {
+        this.container = new InjectedValueDependency<>(InfinispanRequirement.CONTAINER.getServiceName(support, this.containerName), CacheContainer.class);
+        return this;
     }
 
     @Override
     public ServiceBuilder<Configuration> build(ServiceTarget target) {
-        return new AsynchronousServiceBuilder<>(this.getServiceName(), this).build(target)
-                .addDependency(CacheContainerServiceName.CACHE_CONTAINER.getServiceName(this.containerName), EmbeddedCacheManager.class, this.container)
-                .setInitialMode(ServiceController.Mode.ON_DEMAND)
-        ;
+        return this.container.register(target.addService(this.name, this).setInitialMode(ServiceController.Mode.ON_DEMAND));
     }
 
     @Override
@@ -72,7 +83,9 @@ public class ConfigurationBuilder implements Builder<Configuration>, Service<Con
 
     @Override
     public void start(StartContext context) throws StartException {
-        this.container.getValue().defineConfiguration(this.cacheName, this.factory.createConfigurationBuilder().build());
+        org.infinispan.configuration.cache.ConfigurationBuilder builder = new org.infinispan.configuration.cache.ConfigurationBuilder();
+        this.consumer.accept(builder);
+        this.container.getValue().defineConfiguration(this.cacheName, builder.build());
     }
 
     @Override

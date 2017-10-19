@@ -33,7 +33,7 @@ import org.jboss.resteasy.spi.StringConverter;
 
 /**
  * A RestEasy {@link StringConverter} test implementation for Currency.
- * 
+ *
  * @author Josef Cacek
  */
 @Provider
@@ -49,19 +49,19 @@ public class CurrencyConverterProvider implements StringConverter<Currency> {
 
     /**
      * Converts from a provided String currency code to a Currency instance.
-     * 
+     *
      * @param str
      * @return
      * @see org.jboss.resteasy.spi.StringConverter#fromString(java.lang.String)
      */
     public Currency fromString(String str) {
-        LOGGER.info("Converting to currency: " + str);
+        LOGGER.trace("Converting to currency: " + str);
         return Currency.getInstance(str);
     }
 
     /**
      * Returns Currency code.
-     * 
+     *
      * @param currency
      * @return
      * @see org.jboss.resteasy.spi.StringConverter#toString(java.lang.Object)
@@ -72,14 +72,14 @@ public class CurrencyConverterProvider implements StringConverter<Currency> {
 
     /**
      * Test method for currency converter.
-     * 
+     *
      * @param currency
      * @return
      */
     @GET
     @Path(PATH_CONVERTER)
     public String testCurrencyConverter(@PathParam(PARAM_CURRENCY) Currency currency) {
-        LOGGER.info("Returning currency symbol");
+        LOGGER.trace("Returning currency symbol");
         return currency.getSymbol();
     }
 

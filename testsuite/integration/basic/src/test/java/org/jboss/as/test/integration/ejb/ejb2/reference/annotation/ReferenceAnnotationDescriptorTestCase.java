@@ -23,7 +23,6 @@
 package org.jboss.as.test.integration.ejb.ejb2.reference.annotation;
 
 import java.rmi.NoSuchObjectException;
-
 import javax.ejb.EJBHome;
 import javax.ejb.EJBMetaData;
 import javax.ejb.EJBObject;
@@ -38,7 +37,6 @@ import org.jboss.as.test.integration.ejb.ejb2.reference.global.Session21Bean;
 import org.jboss.as.test.integration.ejb.ejb2.reference.global.Session21Home;
 import org.jboss.as.test.integration.ejb.ejb2.reference.global.Session30;
 import org.jboss.as.test.integration.ejb.ejb2.reference.global.Session30RemoteBusiness;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -55,36 +53,33 @@ import org.junit.runner.RunWith;
 @RunWith(Arquillian.class)
 public class ReferenceAnnotationDescriptorTestCase {
 
-    private static final Logger log = Logger.getLogger(ReferenceAnnotationDescriptorTestCase.class);
-
     @Deployment
     public static Archive<?> deployment() {
         final JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "reference-ejb2-ejb3.jar")
-           .addClasses(
-                   HomedStatefulSession30Bean.class,
-                   LocalSession30.class,
-                   LocalSession30Business.class,
-                   LocalStatefulSession30.class,
-                   LocalStatefulSession30Business.class,
-                   ReferenceAnnotationDescriptorTestCase.class,
-                   Session30Home.class,
-                   Session30LocalHome.class,
-                   Session30Bean.class,
-                   StatefulSession30.class,
-                   StatefulSession30Bean.class,
-                   StatefulSession30Home.class,
-                   StatefulSession30LocalHome.class,
-                   StatefulSession30RemoteBusiness.class
-                   )
-           .addClasses(
-                   Session30.class,
-                   Session30RemoteBusiness.class,
-                   Session21.class,
-                   Session21Home.class,
-                   Session21Bean.class);
+                .addClasses(
+                        HomedStatefulSession30Bean.class,
+                        LocalSession30.class,
+                        LocalSession30Business.class,
+                        LocalStatefulSession30.class,
+                        LocalStatefulSession30Business.class,
+                        ReferenceAnnotationDescriptorTestCase.class,
+                        Session30Home.class,
+                        Session30LocalHome.class,
+                        Session30Bean.class,
+                        StatefulSession30.class,
+                        StatefulSession30Bean.class,
+                        StatefulSession30Home.class,
+                        StatefulSession30LocalHome.class,
+                        StatefulSession30RemoteBusiness.class
+                )
+                .addClasses(
+                        Session30.class,
+                        Session30RemoteBusiness.class,
+                        Session21.class,
+                        Session21Home.class,
+                        Session21Bean.class);
         jar.addAsManifestResource(ReferenceAnnotationDescriptorTestCase.class.getPackage(), "jboss-ejb3.xml", "jboss-ejb3.xml");
         jar.addAsManifestResource(ReferenceAnnotationDescriptorTestCase.class.getPackage(), "ejb-jar.xml", "ejb-jar.xml");
-        log.info(jar.toString(true));
         return jar;
     }
 
@@ -123,7 +118,7 @@ public class ReferenceAnnotationDescriptorTestCase {
 
         Session30Home home = (Session30Home) jndiContext.lookup("java:module/Session30!" + Session30Home.class.getName());
         Assert.assertNotNull(home);
-        Session30 sessionRemote = (Session30) home.create();
+        Session30 sessionRemote = home.create();
         Assert.assertNotNull(sessionRemote);
         access = sessionRemote.access();
         Assert.assertEquals("Session30", access);
@@ -135,13 +130,13 @@ public class ReferenceAnnotationDescriptorTestCase {
 
         StatefulSession30Home home = (StatefulSession30Home) jndiContext.lookup("java:module/StatefulSession30!" + StatefulSession30Home.class.getName());
         Assert.assertNotNull(home);
-        StatefulSession30 session = (StatefulSession30) home.create();
+        StatefulSession30 session = home.create();
         Assert.assertNotNull(session);
         session.setValue("123");
         String value = session.getValue();
         Assert.assertEquals("123", value);
 
-        EJBObject ejbObject = (EJBObject) session;
+        EJBObject ejbObject = session;
 
         Handle handle = session.getHandle();
         Assert.assertNotNull(handle);
@@ -155,7 +150,7 @@ public class ReferenceAnnotationDescriptorTestCase {
             // OK: EJB3.1 7.5.3
         }
 
-        session = (StatefulSession30) home.create();
+        session = home.create();
         Assert.assertNotNull(session);
         session.setValue("123");
         value = session.getValue();
@@ -183,18 +178,18 @@ public class ReferenceAnnotationDescriptorTestCase {
 
         StatefulSession30Home home = (StatefulSession30Home) jndiContext.lookup("java:module/StatefulSession30!" + StatefulSession30Home.class.getName());
         Assert.assertNotNull(home);
-        session = (StatefulSession30) home.create();
+        session = home.create();
         Assert.assertNotNull(session);
         session.setValue("123");
         value = session.getValue();
         Assert.assertEquals("123", value);
 
-        session = (StatefulSession30) home.create("456");
+        session = home.create("456");
         Assert.assertNotNull(session);
         value = session.getValue();
         Assert.assertEquals("456", value);
 
-        session = (StatefulSession30) home.create("combined", new Integer("789"));
+        session = home.create("combined", new Integer("789"));
         Assert.assertNotNull(session);
         value = session.getValue();
         Assert.assertEquals("combined789", value);
@@ -206,18 +201,18 @@ public class ReferenceAnnotationDescriptorTestCase {
 
         StatefulSession30Home home = (StatefulSession30Home) jndiContext.lookup("java:module/HomedStatefulSession30!" + StatefulSession30Home.class.getName());
         Assert.assertNotNull(home);
-        StatefulSession30 session = (StatefulSession30) home.create();
+        StatefulSession30 session = home.create();
         Assert.assertNotNull(session);
         session.setValue("123");
         String value = session.getValue();
         Assert.assertEquals("123", value);
 
-        session = (StatefulSession30) home.create("456");
+        session = home.create("456");
         Assert.assertNotNull(session);
         value = session.getValue();
         Assert.assertEquals("456", value);
 
-        session = (StatefulSession30) home.create("combined", new Integer("789"));
+        session = home.create("combined", new Integer("789"));
         Assert.assertNotNull(session);
         value = session.getValue();
         Assert.assertEquals("combined789", value);
@@ -265,25 +260,25 @@ public class ReferenceAnnotationDescriptorTestCase {
 
         StatefulSession30Home home = (StatefulSession30Home) jndiContext.lookup("java:module/StatefulSession30!" + StatefulSession30Home.class.getName());
         Assert.assertNotNull(home);
-        StatefulSession30 session3 = (StatefulSession30) home.create();
+        StatefulSession30 session3 = home.create();
         Assert.assertNotNull(session3);
         session3.setValue("123");
         Assert.assertEquals("123", session3.getValue());
 
-        StatefulSession30 session4 = (StatefulSession30) home.create();
+        StatefulSession30 session4 = home.create();
         Assert.assertNotNull(session4);
         Assert.assertEquals("default", session4.getValue());
         Assert.assertEquals("default", session4.getValue());
 
-        StatefulSession30 session5 = (StatefulSession30) home.create("init");
+        StatefulSession30 session5 = home.create("init");
         Assert.assertNotNull(session5);
         Assert.assertEquals("init", session5.getValue());
 
-        StatefulSession30 session6 = (StatefulSession30) home.create("init", new Integer(123));
+        StatefulSession30 session6 = home.create("init", new Integer(123));
         Assert.assertNotNull(session6);
         Assert.assertEquals("init123", session6.getValue());
 
-        StatefulSession30 session7 = (StatefulSession30) home.create("secondinit");
+        StatefulSession30 session7 = home.create("secondinit");
         Assert.assertNotNull(session7);
         Assert.assertEquals("secondinit", session7.getValue());
 
@@ -315,7 +310,7 @@ public class ReferenceAnnotationDescriptorTestCase {
         Assert.assertNotNull(metadata);
         Assert.assertEquals(StatefulSession30.class, metadata.getRemoteInterfaceClass());
 
-        StatefulSession30 session = (StatefulSession30) home.create();
+        StatefulSession30 session = home.create();
         Assert.assertNotNull(session);
         ejbHome = session.getEJBHome();
         Assert.assertNotNull(ejbHome);
@@ -332,7 +327,7 @@ public class ReferenceAnnotationDescriptorTestCase {
         Handle handle1 = ejbObject.getHandle();
         Assert.assertNotNull(handle1);
 
-        StatefulSession30 session1 = (StatefulSession30) home.create();
+        StatefulSession30 session1 = home.create();
         Assert.assertFalse(session.isIdentical(session1));
         Assert.assertTrue(session.isIdentical(session));
     }
@@ -357,7 +352,7 @@ public class ReferenceAnnotationDescriptorTestCase {
         Assert.assertNotNull(metadata);
         Assert.assertEquals(Session30.class.getName(), metadata.getRemoteInterfaceClass().getName());
 
-        Session30 session = (Session30) home.create();
+        Session30 session = home.create();
         Assert.assertNotNull(session);
         ejbHome = session.getEJBHome();
         Assert.assertNotNull(ejbHome);
@@ -374,7 +369,7 @@ public class ReferenceAnnotationDescriptorTestCase {
         Handle handle1 = ejbObject.getHandle();
         Assert.assertNotNull(handle1);
 
-        Session30 session1 = (Session30) home.create();
+        Session30 session1 = home.create();
         Assert.assertTrue(session.isIdentical(session1));
     }
 }

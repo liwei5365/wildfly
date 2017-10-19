@@ -26,6 +26,7 @@ import java.net.URL;
 import javax.xml.namespace.QName;
 import javax.xml.ws.BindingProvider;
 import javax.xml.ws.Service;
+
 import org.junit.Assert;
 import org.apache.cxf.ws.security.SecurityConstants;
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -33,7 +34,6 @@ import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.test.integration.ws.wsse.EJBEncryptServiceImpl;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
@@ -46,7 +46,7 @@ import org.jboss.wsf.stack.cxf.client.UseNewBusFeature;
 
 /**
  * Test WS sign + encrypt capability
- * 
+ * <p>
  * Certificates can ge generated using keytool -genkey -keyalg RSA -storetype JKS
  * Public key can be extracted using keytool -export
  * Public key can be imported using keytool -import
@@ -58,7 +58,6 @@ import org.jboss.wsf.stack.cxf.client.UseNewBusFeature;
 @RunAsClient
 public class EJBSignEncryptTestCase {
 
-    private static Logger log = Logger.getLogger(EJBSignEncryptTestCase.class.getName());
     @ArquillianResource
     URL baseUrl;
 
@@ -73,8 +72,6 @@ public class EJBSignEncryptTestCase {
                 addAsManifestResource(ServiceIface.class.getPackage(), "wsdl/SecurityService-ejb-sign-encrypt.wsdl", "wsdl/SecurityService.wsdl").
                 addAsManifestResource(ServiceIface.class.getPackage(), "wsdl/SecurityService_schema1.xsd", "wsdl/SecurityService_schema1.xsd").
                 addAsManifestResource(EJBSignEncryptTestCase.class.getPackage(), "jaxws-endpoint-config.xml", "jaxws-endpoint-config.xml");
-
-        log.info(jar.toString(true));
 
         return jar;
     }
@@ -92,10 +89,10 @@ public class EJBSignEncryptTestCase {
     }
 
     private void setupWsse(ServiceIface proxy) throws MalformedURLException {
-        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.CALLBACK_HANDLER,      new KeystorePasswordCallback());
-        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.SIGNATURE_PROPERTIES,  "org/jboss/as/test/integration/ws/wsse/alice.properties");
-        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.ENCRYPT_PROPERTIES,    "org/jboss/as/test/integration/ws/wsse/alice.properties");
-        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.SIGNATURE_USERNAME,    "alice");
-        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.ENCRYPT_USERNAME,      "bob");
+        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.CALLBACK_HANDLER, new KeystorePasswordCallback());
+        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.SIGNATURE_PROPERTIES, "org/jboss/as/test/integration/ws/wsse/alice.properties");
+        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.ENCRYPT_PROPERTIES, "org/jboss/as/test/integration/ws/wsse/alice.properties");
+        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.SIGNATURE_USERNAME, "alice");
+        ((BindingProvider) proxy).getRequestContext().put(SecurityConstants.ENCRYPT_USERNAME, "bob");
     }
 }

@@ -23,75 +23,76 @@
 package org.jboss.as.clustering.infinispan.subsystem;
 
 import static org.jboss.as.clustering.infinispan.subsystem.CacheContainerResourceDefinition.Attribute.*;
+import static org.jboss.as.clustering.infinispan.subsystem.CacheContainerResourceDefinition.Capability.*;
 
-import java.util.ServiceLoader;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Stream;
 
 import javax.management.MBeanServer;
 
 import org.infinispan.configuration.global.GlobalConfiguration;
 import org.infinispan.configuration.global.ShutdownHookBehavior;
+import org.infinispan.configuration.global.SiteConfiguration;
 import org.infinispan.configuration.global.ThreadPoolConfiguration;
 import org.infinispan.configuration.global.TransportConfiguration;
 import org.infinispan.marshall.core.Ids;
+import org.jboss.as.clustering.controller.CapabilityServiceNameProvider;
+import org.jboss.as.clustering.controller.CommonRequirement;
 import org.jboss.as.clustering.controller.ResourceServiceBuilder;
-import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.clustering.infinispan.InfinispanLogger;
 import org.jboss.as.clustering.infinispan.MBeanServerProvider;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
-import org.jboss.as.jmx.MBeanServerService;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.as.server.Services;
 import org.jboss.dmr.ModelNode;
 import org.jboss.marshalling.ModularClassResolver;
-import org.jboss.modules.ModuleIdentifier;
-import org.jboss.modules.ModuleLoadException;
+import org.jboss.modules.Module;
 import org.jboss.modules.ModuleLoader;
 import org.jboss.msc.service.ServiceBuilder;
-import org.jboss.msc.service.ServiceController;
-import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceTarget;
 import org.jboss.msc.service.ValueService;
 import org.jboss.msc.value.InjectedValue;
 import org.jboss.msc.value.Value;
-import org.wildfly.clustering.infinispan.spi.marshalling.AdvancedExternalizerAdapter;
-import org.wildfly.clustering.infinispan.spi.service.CacheContainerServiceName;
-import org.wildfly.clustering.infinispan.spi.service.CacheServiceName;
 import org.wildfly.clustering.marshalling.Externalizer;
+import org.wildfly.clustering.marshalling.infinispan.AdvancedExternalizerAdapter;
 import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
-public class GlobalConfigurationBuilder implements ResourceServiceBuilder<GlobalConfiguration>, Value<GlobalConfiguration> {
+public class GlobalConfigurationBuilder extends CapabilityServiceNameProvider implements ResourceServiceBuilder<GlobalConfiguration>, Value<GlobalConfiguration> {
 
     private final InjectedValue<ModuleLoader> loader = new InjectedValue<>();
-    private final InjectedValue<MBeanServer> server = new InjectedValue<>();
-    private final InjectedValue<TransportConfiguration> transport = new InjectedValue<>();
-    private final InjectedValue<ThreadPoolConfiguration> asyncOperationsThreadPool = new InjectedValue<>();
-    private final InjectedValue<ThreadPoolConfiguration> expirationThreadPool = new InjectedValue<>();
-    private final InjectedValue<ThreadPoolConfiguration> listenerThreadPool = new InjectedValue<>();
-    private final InjectedValue<ThreadPoolConfiguration> persistenceThreadPool = new InjectedValue<>();
-    private final InjectedValue<ThreadPoolConfiguration> remoteCommandThreadPool = new InjectedValue<>();
-    private final InjectedValue<ThreadPoolConfiguration> stateTransferThreadPool = new InjectedValue<>();
-    private final InjectedValue<ThreadPoolConfiguration> transportThreadPool = new InjectedValue<>();
+    private final ValueDependency<Module> module;
+    private final ValueDependency<TransportConfiguration> transport;
+    private final ValueDependency<SiteConfiguration> site;
+    private final Map<ThreadPoolResourceDefinition, ValueDependency<ThreadPoolConfiguration>> pools = new EnumMap<>(ThreadPoolResourceDefinition.class);
+    private final Map<ScheduledThreadPoolResourceDefinition, ValueDependency<ThreadPoolConfiguration>> schedulers = new EnumMap<>(ScheduledThreadPoolResourceDefinition.class);
     private final String name;
 
+    private volatile ValueDependency<MBeanServer> server;
     private volatile boolean statisticsEnabled;
-    private volatile ModuleIdentifier module;
 
-    GlobalConfigurationBuilder(String name) {
-        this.name = name;
-    }
-
-    @Override
-    public ServiceName getServiceName() {
-        return CacheContainerServiceName.CONFIGURATION.getServiceName(this.name);
+    GlobalConfigurationBuilder(PathAddress address) {
+        super(CONFIGURATION, address);
+        this.name = address.getLastElement().getValue();
+        this.module = new InjectedValueDependency<>(CacheContainerComponent.MODULE.getServiceName(address), Module.class);
+        this.transport = new InjectedValueDependency<>(CacheContainerComponent.TRANSPORT.getServiceName(address), TransportConfiguration.class);
+        this.site = new InjectedValueDependency<>(CacheContainerComponent.SITE.getServiceName(address), SiteConfiguration.class);
+        EnumSet.allOf(ThreadPoolResourceDefinition.class).forEach(pool -> this.pools.put(pool, new InjectedValueDependency<>(pool.getServiceName(address), ThreadPoolConfiguration.class)));
+        EnumSet.allOf(ScheduledThreadPoolResourceDefinition.class).forEach(pool -> this.schedulers.put(pool, new InjectedValueDependency<>(pool.getServiceName(address), ThreadPoolConfiguration.class)));
     }
 
     @Override
     public Builder<GlobalConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.module = ModelNodes.asModuleIdentifier(MODULE.getDefinition().resolveModelAttribute(context, model));
-        this.statisticsEnabled = STATISTICS_ENABLED.getDefinition().resolveModelAttribute(context, model).asBoolean();
+        this.server = context.hasOptionalCapability(CommonRequirement.MBEAN_SERVER.getName(), null, null) ? new InjectedValueDependency<>(CommonRequirement.MBEAN_SERVER.getServiceName(context), MBeanServer.class) : null;
+        this.statisticsEnabled = STATISTICS_ENABLED.resolveModelAttribute(context, model).asBoolean();
         return this;
     }
 
@@ -110,54 +111,45 @@ public class GlobalConfigurationBuilder implements ResourceServiceBuilder<Global
                 .siteId(transport.siteId())
         ;
 
-        ModuleLoader moduleLoader = this.loader.getValue();
-        builder.serialization().classResolver(ModularClassResolver.getInstance(moduleLoader));
-        try {
-            ClassLoader loader = moduleLoader.loadModule(this.module).getClassLoader();
-            builder.classLoader(loader);
-            int id = Ids.MAX_ID;
-            for (Externalizer<?> externalizer: ServiceLoader.load(Externalizer.class, loader)) {
-                InfinispanLogger.ROOT_LOGGER.debugf("Cache container %s will use an externalizer for %s", this.name, externalizer.getTargetClass().getName());
-                builder.serialization().addAdvancedExternalizer(id++, new AdvancedExternalizerAdapter<>(externalizer));
-            }
-        } catch (ModuleLoadException e) {
-            throw new IllegalStateException(e);
+        Module module = this.module.getValue();
+        builder.serialization().classResolver(ModularClassResolver.getInstance(this.loader.getValue()));
+        builder.classLoader(module.getClassLoader());
+        int id = Ids.MAX_ID;
+        for (Externalizer<?> externalizer : module.loadService(Externalizer.class)) {
+            InfinispanLogger.ROOT_LOGGER.debugf("Cache container %s will use an externalizer for %s", this.name, externalizer.getTargetClass().getName());
+            builder.serialization().addAdvancedExternalizer(id++, new AdvancedExternalizerAdapter<>(externalizer));
         }
 
-        builder.transport().transportThreadPool().read(this.transportThreadPool.getValue());
-        builder.transport().remoteCommandThreadPool().read(this.remoteCommandThreadPool.getValue());
+        builder.transport().transportThreadPool().read(this.pools.get(ThreadPoolResourceDefinition.TRANSPORT).getValue());
+        builder.transport().remoteCommandThreadPool().read(this.pools.get(ThreadPoolResourceDefinition.REMOTE_COMMAND).getValue());
 
-        builder.asyncThreadPool().read(this.asyncOperationsThreadPool.getValue());
-        builder.expirationThreadPool().read(this.expirationThreadPool.getValue());
-        builder.listenerThreadPool().read(this.listenerThreadPool.getValue());
-        builder.stateTransferThreadPool().read(this.stateTransferThreadPool.getValue());
-        builder.persistenceThreadPool().read(this.persistenceThreadPool.getValue());
+        builder.asyncThreadPool().read(this.pools.get(ThreadPoolResourceDefinition.ASYNC_OPERATIONS).getValue());
+        builder.expirationThreadPool().read(this.schedulers.get(ScheduledThreadPoolResourceDefinition.EXPIRATION).getValue());
+        builder.listenerThreadPool().read(this.pools.get(ThreadPoolResourceDefinition.LISTENER).getValue());
+        builder.stateTransferThreadPool().read(this.pools.get(ThreadPoolResourceDefinition.STATE_TRANSFER).getValue());
+        builder.persistenceThreadPool().read(this.pools.get(ThreadPoolResourceDefinition.PERSISTENCE).getValue());
 
         builder.shutdown().hookBehavior(ShutdownHookBehavior.DONT_REGISTER);
         builder.globalJmxStatistics()
                 .enabled(this.statisticsEnabled)
                 .cacheManagerName(this.name)
-                .mBeanServerLookup(new MBeanServerProvider(this.server.getValue()))
-                .jmxDomain(CacheContainerServiceName.CACHE_CONTAINER.getServiceName(CacheServiceName.DEFAULT_CACHE).getParent().getCanonicalName())
+                .mBeanServerLookup(new MBeanServerProvider((this.server != null) ? this.server.getValue() : null))
+                .jmxDomain("org.wildfly.clustering.infinispan")
                 .allowDuplicateDomains(true);
+
+        builder.site().read(this.site.getValue());
 
         return builder.build();
     }
 
     @Override
     public ServiceBuilder<GlobalConfiguration> build(ServiceTarget target) {
-        return target.addService(this.getServiceName(), new ValueService<>(this))
+        ServiceBuilder<GlobalConfiguration> builder = target.addService(this.getServiceName(), new ValueService<>(this))
                 .addDependency(Services.JBOSS_SERVICE_MODULE_LOADER, ModuleLoader.class, this.loader)
-                .addDependency(MBeanServerService.SERVICE_NAME, MBeanServer.class, this.server)
-                .addDependency(CacheContainerComponent.TRANSPORT.getServiceName(this.name), TransportConfiguration.class, this.transport)
-                .addDependency(ThreadPoolResourceDefinition.ASYNC_OPERATIONS.getServiceName(this.name), ThreadPoolConfiguration.class, this.asyncOperationsThreadPool)
-                .addDependency(ScheduledThreadPoolResourceDefinition.EXPIRATION.getServiceName(this.name), ThreadPoolConfiguration.class, this.expirationThreadPool)
-                .addDependency(ThreadPoolResourceDefinition.LISTENER.getServiceName(this.name), ThreadPoolConfiguration.class, this.listenerThreadPool)
-                .addDependency(ThreadPoolResourceDefinition.STATE_TRANSFER.getServiceName(this.name), ThreadPoolConfiguration.class, this.stateTransferThreadPool)
-                .addDependency(ThreadPoolResourceDefinition.PERSISTENCE.getServiceName(this.name), ThreadPoolConfiguration.class, this.persistenceThreadPool)
-                .addDependency(ThreadPoolResourceDefinition.REMOTE_COMMAND.getServiceName(this.name), ThreadPoolConfiguration.class, this.remoteCommandThreadPool)
-                .addDependency(ThreadPoolResourceDefinition.TRANSPORT.getServiceName(this.name), ThreadPoolConfiguration.class, this.transportThreadPool)
-                .setInitialMode(ServiceController.Mode.PASSIVE)
-        ;
+                ;
+        this.pools.values().forEach(dependency -> dependency.register(builder));
+        this.schedulers.values().forEach(dependency -> dependency.register(builder));
+        Stream.of(this.module, this.transport, this.site, this.server).filter(Objects::nonNull).forEach(dependency -> dependency.register(builder));
+        return builder;
     }
 }

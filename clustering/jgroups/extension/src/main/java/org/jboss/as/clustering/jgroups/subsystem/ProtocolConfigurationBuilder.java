@@ -22,19 +22,34 @@
 
 package org.jboss.as.clustering.jgroups.subsystem;
 
+import org.jboss.as.controller.PathAddress;
+import org.jboss.msc.service.ServiceName;
+import org.jgroups.stack.Protocol;
 import org.wildfly.clustering.jgroups.spi.ProtocolConfiguration;
 
 /**
  * @author Paul Ferraro
  */
-public class ProtocolConfigurationBuilder extends AbstractProtocolConfigurationBuilder<ProtocolConfiguration> {
+public class ProtocolConfigurationBuilder<P extends Protocol> extends AbstractProtocolConfigurationBuilder<P, ProtocolConfiguration<P>> {
 
-    public ProtocolConfigurationBuilder(String stackName, String name) {
-        super(stackName, name);
+    private final PathAddress address;
+
+    public ProtocolConfigurationBuilder(PathAddress address) {
+        super(address.getLastElement().getValue());
+        this.address = address;
     }
 
     @Override
-    public ProtocolConfiguration getValue() {
+    public ServiceName getServiceName() {
+        return new ProtocolServiceNameProvider(this.address).getServiceName();
+    }
+
+    @Override
+    public ProtocolConfiguration<P> getValue() {
         return this;
+    }
+
+    @Override
+    public void accept(P protocol) {
     }
 }

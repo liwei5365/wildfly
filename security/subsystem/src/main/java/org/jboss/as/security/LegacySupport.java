@@ -405,7 +405,6 @@ class LegacySupport {
                 }
             }
             context.getResult().set(result);
-            context.stepCompleted();
         }
     }
 
@@ -440,7 +439,6 @@ class LegacySupport {
                 ModelNode removeModuleOp = Util.createRemoveOperation(address);
                 context.addStep(new ModelNode(), removeModuleOp, new SecurityDomainReloadRemoveHandler(), OperationContext.Stage.MODEL, true);
             }
-            context.stepCompleted();
         }
     }
 
@@ -480,7 +478,6 @@ class LegacySupport {
                 ModelNode removeModuleOp = Util.createRemoveOperation(address);
                 context.addStep(new ModelNode(), removeModuleOp, new SecurityDomainReloadRemoveHandler(), OperationContext.Stage.MODEL, true);
             }
-            context.stepCompleted();
         }
     }
 
@@ -492,7 +489,7 @@ class LegacySupport {
             return new LegacySupportListAttributeBuilder(attributeName)
                     .setXmlName(xmlName)
                     .setElementValidator(elementValidator)
-                    .setAllowNull(true)
+                    .setRequired(false)
                     .setMinSize(1)
                     .setMaxSize(Integer.MAX_VALUE)
                     .setDeprecated(ModelVersion.create(1, 2))

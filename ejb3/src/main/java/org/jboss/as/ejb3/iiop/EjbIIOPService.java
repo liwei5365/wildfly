@@ -31,11 +31,12 @@ import java.util.Map;
 import javax.ejb.EJBHome;
 import javax.ejb.EJBMetaData;
 import javax.rmi.PortableRemoteObject;
+import javax.transaction.TransactionManager;
 
+import com.arjuna.ats.jbossatx.jta.TransactionManagerService;
 import org.jboss.as.ee.component.ComponentView;
 import org.jboss.as.ejb3.logging.EjbLogger;
 import org.jboss.as.ejb3.component.EJBComponent;
-import org.jboss.as.ejb3.component.entity.EntityBeanComponent;
 import org.jboss.as.ejb3.component.stateless.StatelessSessionComponent;
 import org.jboss.as.ejb3.iiop.stub.DynamicStubFactoryFactory;
 import org.jboss.as.server.moduleservice.ServiceModuleLoader;
@@ -85,6 +86,7 @@ import org.wildfly.iiop.openjdk.rmi.marshal.strategy.SkeletonStrategy;
 import org.wildfly.security.manager.WildFlySecurityManager;
 
 import com.sun.corba.se.spi.extension.ZeroPortPolicy;
+import org.wildfly.transaction.client.ContextTransactionManager;
 
 /**
  * This is an IIOP "proxy factory" for <code>EJBHome</code>s and
@@ -136,6 +138,11 @@ public class EjbIIOPService implements Service<EjbIIOPService> {
      * The module loader
      */
     private final InjectedValue<ServiceModuleLoader> serviceModuleLoaderInjectedValue = new InjectedValue<ServiceModuleLoader>();
+
+    /**
+     * The JTS underlying transaction manager service (not ContextTransactionManager)
+     */
+    private final InjectedValue<TransactionManagerService> transactionManagerInjectedValue = new InjectedValue<>();
 
     /**
      * Used for serializing EJB id's
@@ -242,7 +249,8 @@ public class EjbIIOPService implements Service<EjbIIOPService> {
             configuration.setClassResolver(ModularClassResolver.getInstance(serviceModuleLoaderInjectedValue.getValue()));
             this.configuration = configuration;
             this.factory = factory;
-
+            final TransactionManager jtsTransactionManager = transactionManagerInjectedValue.getValue().getTransactionManager();
+            assert ! (jtsTransactionManager instanceof ContextTransactionManager);
 
             // Should create a CORBA interface repository?
             final boolean interfaceRepositorySupported = false;
@@ -324,7 +332,8 @@ public class EjbIIOPService implements Service<EjbIIOPService> {
 
             // Instantiate home servant, bind it to the servant registry, and create CORBA reference to the EJBHome.
             final EjbCorbaServant homeServant = new EjbCorbaServant(poaCurrent, homeMethodMap, homeRepositoryIds, homeInterfaceDef,
-                    orb, homeView.getValue(), factory, configuration, component.getTransactionManager(), module.getClassLoader(), true, securityDomain);
+                    orb, homeView.getValue(), factory, configuration, jtsTransactionManager, module.getClassLoader(), true, securityDomain,
+                    component.getSecurityDomain());
 
             homeServantRegistry = poaRegistry.getValue().getRegistryWithPersistentPOAPerServant();
             ReferenceFactory homeReferenceFactory = homeServantRegistry.bind(homeServantName(name), homeServant, policies);
@@ -337,25 +346,17 @@ public class EjbIIOPService implements Service<EjbIIOPService> {
             final HomeHandleImplIIOP homeHandle = new HomeHandleImplIIOP(orb.object_to_string(corbaRef));
             homeServant.setHomeHandle(homeHandle);
 
-            // Initialize beanPOA and create metadata depending on the kind of bean
-            if (component instanceof EntityBeanComponent) {
-
-                // This is an entity bean (lifespan: persistent)
-                beanServantRegistry = poaRegistry.getValue().getRegistryWithPersistentPOAPerServant();
-                final EntityBeanComponent entityBeanComponent = (EntityBeanComponent) component;
-                final Class<?> pkClass = entityBeanComponent.getPrimaryKeyClass();
-                ejbMetaData = new EJBMetaDataImplIIOP(entityBeanComponent.getRemoteClass(), entityBeanComponent.getHomeClass(), pkClass, false, false, homeHandle);
+            // Initialize beanPOA and create metadata
+            // This is a session bean (lifespan: transient)
+            beanServantRegistry = poaRegistry.getValue().getRegistryWithTransientPOAPerServant();
+            if (component instanceof StatelessSessionComponent) {
+                // Stateless session bean
+                ejbMetaData = new EJBMetaDataImplIIOP(remoteView.getValue().getViewClass(), homeView.getValue().getViewClass(), null, true, true, homeHandle);
             } else {
-                // This is a session bean (lifespan: transient)
-                beanServantRegistry = poaRegistry.getValue().getRegistryWithTransientPOAPerServant();
-                if (component instanceof StatelessSessionComponent) {
-                    // Stateless session bean
-                    ejbMetaData = new EJBMetaDataImplIIOP(remoteView.getValue().getViewClass(), homeView.getValue().getViewClass(), null, true, true, homeHandle);
-                } else {
-                    // Stateful session bean
-                    ejbMetaData = new EJBMetaDataImplIIOP(remoteView.getValue().getViewClass(), homeView.getValue().getViewClass(), null, true, false, homeHandle);
-                }
+                // Stateful session bean
+                ejbMetaData = new EJBMetaDataImplIIOP(remoteView.getValue().getViewClass(), homeView.getValue().getViewClass(), null, true, false, homeHandle);
             }
+
             homeServant.setEjbMetaData(ejbMetaData);
 
             // If there is an interface repository, then get the beanInterfaceDef from the IR
@@ -367,8 +368,8 @@ public class EjbIIOPService implements Service<EjbIIOPService> {
 
             // Instantiate the ejb object servant and bind it to the servant registry.
             final EjbCorbaServant beanServant = new EjbCorbaServant(poaCurrent, beanMethodMap, beanRepositoryIds,
-                    beanInterfaceDef, orb, remoteView.getValue(), factory, configuration, component.getTransactionManager(),
-                    module.getClassLoader(), false, securityDomain);
+                    beanInterfaceDef, orb, remoteView.getValue(), factory, configuration, jtsTransactionManager,
+                    module.getClassLoader(), false, securityDomain, component.getSecurityDomain());
             beanReferenceFactory = beanServantRegistry.bind(beanServantName(name), beanServant, policies);
 
             // Register bean home in local CORBA naming context
@@ -575,5 +576,9 @@ public class EjbIIOPService implements Service<EjbIIOPService> {
 
     public InjectedValue<IORSecurityConfigMetaData> getIORSecConfigMetaDataInjectedValue() {
         return iorSecConfigMetaData;
+    }
+
+    public InjectedValue<TransactionManagerService> getTransactionManagerInjectedValue() {
+        return transactionManagerInjectedValue;
     }
 }

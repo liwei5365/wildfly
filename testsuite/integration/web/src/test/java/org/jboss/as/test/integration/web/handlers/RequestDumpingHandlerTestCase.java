@@ -141,13 +141,11 @@ public class RequestDumpingHandlerTestCase {
             operation.get("keystore-password").set(SecurityTestConstants.KEYSTORE_PASSWORD);
             Utils.applyUpdate(operation, managementClient.getControllerClient());
 
-            ServerReload.executeReloadAndWaitForCompletion(managementClient.getControllerClient());
-
             operation = createOpNode(HTTPS_LISTENER_PATH, ModelDescriptionConstants.ADD);
             operation.get("socket-binding").set(HTTPS);
             operation.get("security-realm").set(HTTPS_REALM);
             Utils.applyUpdate(operation, managementClient.getControllerClient());
-
+            ServerReload.executeReloadAndWaitForCompletion(managementClient.getControllerClient());
         }
 
         @Override
@@ -172,12 +170,12 @@ public class RequestDumpingHandlerTestCase {
             op = createOpNode(HTTPS_REALM_AUTH_PATH, ModelDescriptionConstants.REMOVE);
             ManagementOperations.executeOperation(managementClient.getControllerClient(), op);
 
-            ServerReload.executeReloadAndWaitForCompletion(managementClient.getControllerClient());
+            //ServerReload.executeReloadAndWaitForCompletion(managementClient.getControllerClient());
 
             op = createOpNode(HTTPS_LISTENER_PATH, ModelDescriptionConstants.REMOVE);
             ManagementOperations.executeOperation(managementClient.getControllerClient(), op);
 
-            ServerReload.executeReloadAndWaitForCompletion(managementClient.getControllerClient());
+            //ServerReload.executeReloadAndWaitForCompletion(managementClient.getControllerClient());
 
             op = createOpNode(HTTPS_REALM_PATH, ModelDescriptionConstants.REMOVE);
             ManagementOperations.executeOperation(managementClient.getControllerClient(), op);
@@ -193,9 +191,9 @@ public class RequestDumpingHandlerTestCase {
 
     private final String HTTPS_PORT = "8443";
 
-    private final static String DEPLOYMENT = "no-req-dump";
-    private final static String DEPLOYMENT_DUMP = "req-dump";
-    private final static String DEPLOYMENT_WS = "req-dump-ws";
+    private static final String DEPLOYMENT = "no-req-dump";
+    private static final String DEPLOYMENT_DUMP = "req-dump";
+    private static final String DEPLOYMENT_WS = "req-dump-ws";
 
     @Deployment(name = DEPLOYMENT_DUMP)
     public static WebArchive deployWithReqDump() {
@@ -223,10 +221,12 @@ public class RequestDumpingHandlerTestCase {
                 .addPackage(WebSocketTestCase.class.getPackage())
                 .addClass(TestSuiteEnvironment.class)
                 .addAsManifestResource(createPermissionsXmlAsset(
-                // Needed for the TestSuiteEnvironment.getServerAddress()
-                        new PropertyPermission("management.address", "read"), new PropertyPermission("node0", "read"),
+                        // Needed for the TestSuiteEnvironment.getServerAddress()
+                        new PropertyPermission("management.address", "read"),
+                        new PropertyPermission("node0", "read"),
+                        new PropertyPermission("jboss.http.port", "read"),
                         // Needed for the serverContainer.connectToServer()
-                        new SocketPermission("*:8080", "connect,resolve")), "permissions.xml")
+                        new SocketPermission("*:" + TestSuiteEnvironment.getHttpPort(), "connect,resolve")), "permissions.xml")
                 .addAsManifestResource(new StringAsset("io.undertow.websockets.jsr.UndertowContainerProvider"),
                         "services/javax.websocket.ContainerProvider")
                 .addAsWebInfResource(RequestDumpingHandlerTestCase.class.getPackage(), "jboss-web-req-dump.xml",
@@ -272,7 +272,7 @@ public class RequestDumpingHandlerTestCase {
     @Test
     @OperateOnDeployment(DEPLOYMENT_WS)
     public void testReqDumpHandlerOnWebsockets(@ArquillianResource URL url) throws Exception {
-        URI wsUri = new URI("ws", "", TestSuiteEnvironment.getServerAddress(), 8080, "/" + DEPLOYMENT_WS + "/websocket/Stuart",
+        URI wsUri = new URI("ws", "", TestSuiteEnvironment.getServerAddress(), TestSuiteEnvironment.getHttpPort(), "/" + DEPLOYMENT_WS + "/websocket/Stuart",
                 "", "");
         new RequestDumpingHandlerTestImpl.WsRequestDumpingHandlerTestImpl(wsUri, logFilePath, true);
     }

@@ -29,7 +29,7 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-clustering-infinispan</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Final-SNAPSHOT</version>
     </parent>
 
     <artifactId>wildfly-clustering-infinispan-spi</artifactId>
@@ -40,11 +40,11 @@
     <dependencies>
         <dependency>
             <groupId>org.wildfly</groupId>
-            <artifactId>wildfly-clustering-marshalling-api</artifactId>
+            <artifactId>wildfly-clustering-common</artifactId>
         </dependency>
         <dependency>
             <groupId>org.wildfly</groupId>
-            <artifactId>wildfly-clustering-service</artifactId>
+            <artifactId>wildfly-clustering-marshalling-api</artifactId>
         </dependency>
         <dependency>
             <groupId>org.wildfly.security</groupId>
@@ -55,12 +55,14 @@
             <artifactId>infinispan-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.jboss.logging</groupId>
-            <artifactId>jboss-logging</artifactId>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.jboss.msc</groupId>
-            <artifactId>jboss-msc</artifactId>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-all</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

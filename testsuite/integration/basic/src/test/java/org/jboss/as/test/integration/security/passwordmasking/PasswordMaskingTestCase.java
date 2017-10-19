@@ -57,7 +57,6 @@ import org.jboss.dmr.ModelNode;
 import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -67,7 +66,6 @@ import org.junit.runner.RunWith;
 
 @RunWith(Arquillian.class)
 @ServerSetup(PasswordMaskingTestCase.PasswordMaskingTestCaseSetup.class)
-@Ignore("WFLY-3289")
 public class PasswordMaskingTestCase {
 
    private static Logger LOGGER = Logger.getLogger(PasswordMaskingTestCase.class);
@@ -164,7 +162,7 @@ public class PasswordMaskingTestCase {
 
    }
 
-   static final String RESOURCE_LOCATION = PasswordMaskingTestCase.class.getProtectionDomain().getCodeSource().getLocation().getFile()
+   static final String RESOURCE_LOCATION = PasswordMaskingTestCase.class.getResource("/").getPath()
            + "security/pwdmsk-vault/";
    static final String VAULT_BLOCK = "MaskedDS";
    static final String DS_CLEAR_TEXT_PASSWORD = "sa";

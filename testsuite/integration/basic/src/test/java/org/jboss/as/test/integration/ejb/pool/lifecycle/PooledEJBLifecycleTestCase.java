@@ -16,8 +16,12 @@
  */
 package org.jboss.as.test.integration.ejb.pool.lifecycle;
 
-import java.io.InputStream;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
+import java.util.PropertyPermission;
 import javax.ejb.EJB;
 import javax.jms.Connection;
 import javax.jms.Destination;
@@ -44,7 +48,6 @@ import org.jboss.as.test.integration.common.jms.JMSOperationsProvider;
 import org.jboss.as.test.shared.TimeoutUtil;
 import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
-import org.jboss.shrinkwrap.api.asset.Asset;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.descriptor.api.Descriptors;
@@ -52,10 +55,6 @@ import org.jboss.shrinkwrap.descriptor.api.spec.se.manifest.ManifestDescriptor;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 /**
  * Tests instance lifecycle of EJB components which can potentially be pooled. Note that this testcase does *not* mandate that the components being tested be pooled. It's completely upto the container
@@ -96,7 +95,7 @@ public class PooledEJBLifecycleTestCase {
         archive.addClass(TimeoutUtil.class);
         archive.addClass(PointlesMathInterface.class);
         archive.addClass(Constants.class);
-        log.info(archive.toString(true));
+        archive.addAsManifestResource(createPermissionsXmlAsset(new PropertyPermission("ts.timeout.factor", "read")), "jboss-permissions.xml");
         return archive;
     }
 
@@ -112,7 +111,6 @@ public class PooledEJBLifecycleTestCase {
                         .attribute("Dependencies", DEPLOYED_SINGLETON_MODULE + ", org.apache.activemq.artemis.ra")
                         .exportAsString()));
 
-        log.info(archive.toString(true));
         return archive;
     }
 
@@ -126,13 +124,12 @@ public class PooledEJBLifecycleTestCase {
                 Descriptors.create(ManifestDescriptor.class)
                         .attribute("Dependencies", DEPLOYED_SINGLETON_MODULE + ", org.apache.activemq.artemis.ra")
                         .exportAsString()));
-        log.info(archive.toString(true));
         return archive;
     }
 
     @Before
     public void beforeTest() {
-        log.info("Clearing state of the singleton lifecycle tracker bean");
+        log.trace("Clearing state of the singleton lifecycle tracker bean");
         lifecycleTracker.clearState();
     }
 
@@ -144,20 +141,20 @@ public class PooledEJBLifecycleTestCase {
         boolean requiresUndeploy = false;
         try {
             // do the deployment of the MDB
-            log.info("About to deploy MDB archive " + MDB_DEPLOYMENT_NAME);
+            log.trace("About to deploy MDB archive " + MDB_DEPLOYMENT_NAME);
             deployer.deploy(MDB_DEPLOYMENT_NAME);
             // we keep track of this to make sure we undeploy before leaving this method
             requiresUndeploy = true;
-            log.info("deployed " + MDB_DEPLOYMENT_NAME);
+            log.trace("deployed " + MDB_DEPLOYMENT_NAME);
 
             // now send a messag to the queue on which the MDB is listening
-            log.info("Sending a message to the queue on which the MDB " + " is listening");
+            log.trace("Sending a message to the queue on which the MDB " + " is listening");
             triggerRequestResponseCycleOnQueue();
 
             assertTrue("@PostConstruct wasn't invoked on MDB", lifecycleTracker.wasPostConstructInvokedOn(this.getClass().getPackage().getName() + ".LifecycleCounterMDB"));
 
             // undeploy
-            log.info("About to undeploy MDB archive " + MDB_DEPLOYMENT_NAME);
+            log.trace("About to undeploy MDB archive " + MDB_DEPLOYMENT_NAME);
             deployer.undeploy(MDB_DEPLOYMENT_NAME);
             // we have undeployed successfully, there's no need anymore to trigger an undeployment before returning from this method
             requiresUndeploy = false;
@@ -169,7 +166,7 @@ public class PooledEJBLifecycleTestCase {
                     deployer.undeploy(MDB_DEPLOYMENT_NAME);
                 } catch (Throwable t) {
                     // log and return since we don't want to corrupt any original exceptions that might have caused the test to fail
-                    log.info("Ignoring the undeployment failure of " + MDB_DEPLOYMENT_NAME, t);
+                    log.trace("Ignoring the undeployment failure of " + MDB_DEPLOYMENT_NAME, t);
                 }
             }
         }
@@ -181,10 +178,10 @@ public class PooledEJBLifecycleTestCase {
         boolean requiresUndeploy = false;
         try {
             // deploy the SLSB
-            log.info("About to deploy SLSB archive " + SLSB_DEPLOYMENT_NAME);
+            log.trace("About to deploy SLSB archive " + SLSB_DEPLOYMENT_NAME);
             deployer.deploy(SLSB_DEPLOYMENT_NAME);
             requiresUndeploy = true;
-            log.info("deployed " + SLSB_DEPLOYMENT_NAME);
+            log.trace("deployed " + SLSB_DEPLOYMENT_NAME);
 
             // invoke on bean
             final PointlesMathInterface mathBean = (PointlesMathInterface) new InitialContext().lookup(SLSB_JNDI_NAME);
@@ -192,7 +189,7 @@ public class PooledEJBLifecycleTestCase {
 
             assertTrue("@PostConstruct wasn't invoked on SLSB", lifecycleTracker.wasPostConstructInvokedOn(this.getClass().getPackage().getName() + ".PointLessMathBean"));
 
-            log.info("About to undeploy SLSB archive " + SLSB_DEPLOYMENT_NAME);
+            log.trace("About to undeploy SLSB archive " + SLSB_DEPLOYMENT_NAME);
             deployer.undeploy(SLSB_DEPLOYMENT_NAME);
             requiresUndeploy = false;
 
@@ -204,7 +201,7 @@ public class PooledEJBLifecycleTestCase {
                     deployer.undeploy(SLSB_DEPLOYMENT_NAME);
                 } catch (Throwable t) {
                     // log and return since we don't want to corrupt any original exceptions that might have caused the test to fail
-                    log.info("Ignoring the undeployment failure of " + SLSB_DEPLOYMENT_NAME, t);
+                    log.trace("Ignoring the undeployment failure of " + SLSB_DEPLOYMENT_NAME, t);
                 }
             }
         }
@@ -225,12 +222,13 @@ public class PooledEJBLifecycleTestCase {
             message.setJMSReplyTo(replyDestination);
             final Destination destination = (Destination) ctx.lookup(Constants.QUEUE_JNDI_NAME);
             final MessageProducer producer = session.createProducer(destination);
+            // create receiver
+            final QueueReceiver receiver = session.createReceiver(replyDestination);
             producer.send(message);
             producer.close();
 
-            // wait for a reply
-            final QueueReceiver receiver = session.createReceiver(replyDestination);
-            final Message reply = receiver.receive(TimeoutUtil.adjust(1000));
+            //wait for reply
+            final Message reply = receiver.receive(TimeoutUtil.adjust(5000));
             assertNotNull("Did not receive a reply on the reply queue. Perhaps the original (request) message didn't make it to the MDB?", reply);
             final String result = ((TextMessage) reply).getText();
             assertEquals("Unexpected reply messsage", Constants.REPLY_MESSAGE_PREFIX + requestMessage, result);
@@ -273,7 +271,7 @@ public class PooledEJBLifecycleTestCase {
             connection.close();
         } catch (Throwable t) {
             // just log
-            log.info("Ignoring a problem which occurred while closing: " + connection, t);
+            log.trace("Ignoring a problem which occurred while closing: " + connection, t);
         }
     }
 }

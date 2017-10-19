@@ -22,7 +22,18 @@
 
 package org.jboss.as.connector.deployers.datasource;
 
+import static org.jboss.as.connector.logging.ConnectorLogger.SUBSYSTEM_DATASOURCES_LOGGER;
+import static org.jboss.as.connector.subsystems.jca.Constants.DEFAULT_NAME;
+
+import java.lang.reflect.Method;
+import java.sql.Connection;
+import java.util.Iterator;
+import java.util.Map;
+
+import javax.sql.XADataSource;
+
 import org.jboss.as.connector.logging.ConnectorLogger;
+import org.jboss.as.connector.metadata.ds.DsSecurityImpl;
 import org.jboss.as.connector.services.driver.registry.DriverRegistry;
 import org.jboss.as.connector.subsystems.datasources.AbstractDataSourceService;
 import org.jboss.as.connector.subsystems.datasources.DataSourceReferenceFactoryService;
@@ -39,8 +50,6 @@ import org.jboss.as.naming.ServiceBasedNamingStore;
 import org.jboss.as.naming.deployment.ContextNames;
 import org.jboss.as.naming.service.BinderService;
 import org.jboss.as.naming.service.NamingService;
-import org.jboss.as.security.deployment.SecurityAttachments;
-import org.jboss.as.security.service.SubjectFactoryService;
 import org.jboss.as.server.Services;
 import org.jboss.as.server.deployment.DeploymentPhaseContext;
 import org.jboss.as.server.deployment.DeploymentUnit;
@@ -51,7 +60,6 @@ import org.jboss.invocation.proxy.MethodIdentifier;
 import org.jboss.jca.common.api.metadata.Defaults;
 import org.jboss.jca.common.api.metadata.ds.TransactionIsolation;
 import org.jboss.jca.common.metadata.ds.DsPoolImpl;
-import org.jboss.jca.common.metadata.ds.DsSecurityImpl;
 import org.jboss.jca.common.metadata.ds.DsXaPoolImpl;
 import org.jboss.jca.core.api.connectionmanager.ccm.CachedConnectionManager;
 import org.jboss.jca.core.api.management.ManagementRepository;
@@ -65,16 +73,6 @@ import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.security.SubjectFactory;
-
-import javax.sql.XADataSource;
-import java.lang.reflect.Method;
-import java.sql.Connection;
-import java.util.Iterator;
-import java.util.Map;
-
-import static org.jboss.as.connector.logging.ConnectorLogger.SUBSYSTEM_DATASOURCES_LOGGER;
-import static org.jboss.as.connector.subsystems.jca.Constants.DEFAULT_NAME;
 
 /**
  * A binding description for DataSourceDefinition annotations.
@@ -136,13 +134,12 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
         final String poolName = uniqueName(context, jndiName);
         final ContextNames.BindInfo bindInfo = ContextNames.bindInfoForEnvEntry(context.getApplicationName(), context.getModuleName(), context.getComponentName(), !context.isCompUsesModule(), jndiName);
         final DeploymentReflectionIndex reflectionIndex = deploymentUnit.getAttachment(org.jboss.as.server.deployment.Attachments.REFLECTION_INDEX);
-        final boolean securityEnabled = phaseContext.getDeploymentUnit().hasAttachment(SecurityAttachments.SECURITY_ENABLED);
         try {
             final Class<?> clazz = module.getClassLoader().loadClass(className);
 
             clearUnknownProperties(reflectionIndex, clazz, properties);
             populateProperties(reflectionIndex, clazz, properties);
-            DsSecurityImpl dsSecurity = new DsSecurityImpl(user, password, null, null);
+            DsSecurityImpl dsSecurity = new DsSecurityImpl(user, password, null, false, null, null);
 
             if (XADataSource.class.isAssignableFrom(clazz) && transactional) {
                 final DsXaPoolImpl xaPool = new DsXaPoolImpl(minPoolSize < 0 ? Defaults.MIN_POOL_SIZE : Integer.valueOf(minPoolSize),
@@ -150,7 +147,7 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
                                                              maxPoolSize < 1 ? Defaults.MAX_POOL_SIZE : Integer.valueOf(maxPoolSize),
                                                              Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY,
                                                              Defaults.IS_SAME_RM_OVERRIDE, Defaults.INTERLEAVING, Defaults.PAD_XID,
-                                                             Defaults.WRAP_XA_RESOURCE, Defaults.NO_TX_SEPARATE_POOL, Boolean.FALSE, null, null);
+                                                             Defaults.WRAP_XA_RESOURCE, Defaults.NO_TX_SEPARATE_POOL, Boolean.FALSE, null, Defaults.FAIR, null);
                 final ModifiableXaDataSource dataSource = new ModifiableXaDataSource(transactionIsolation(),
                         null, dsSecurity, null, null, null,
                         null, null, null, poolName, true,
@@ -159,18 +156,18 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
                         xaPool, null);
                 final XaDataSourceService xds = new XaDataSourceService(bindInfo.getBinderServiceName().getCanonicalName(), bindInfo, module.getClassLoader());
                 xds.getDataSourceConfigInjector().inject(dataSource);
-                startDataSource(xds, bindInfo, eeModuleDescription, context, phaseContext.getServiceTarget(), serviceBuilder, injector, securityEnabled);
+                startDataSource(xds, bindInfo, eeModuleDescription, context, phaseContext.getServiceTarget(), serviceBuilder, injector);
             } else {
                 final DsPoolImpl commonPool = new DsPoolImpl(minPoolSize < 0 ? Defaults.MIN_POOL_SIZE : Integer.valueOf(minPoolSize),
                                                              initialPoolSize < 0 ? Defaults.INITIAL_POOL_SIZE : Integer.valueOf(initialPoolSize),
                                                              maxPoolSize < 1 ? Defaults.MAX_POOL_SIZE : Integer.valueOf(maxPoolSize),
-                                                             Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY, Boolean.FALSE, null, null);
+                                                             Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY, Boolean.FALSE, null, Defaults.FAIR, null);
                 final ModifiableDataSource dataSource = new ModifiableDataSource(url, null, className, null, transactionIsolation(), properties,
                         null, dsSecurity, null, null, null, null, null, false, poolName, true, jndiName, Defaults.SPY, Defaults.USE_CCM,
                         transactional, Defaults.CONNECTABLE, Defaults.TRACKING, Defaults.MCP, Defaults.ENLISTMENT_TRACE, commonPool);
                 final LocalDataSourceService ds = new LocalDataSourceService(bindInfo.getBinderServiceName().getCanonicalName(), bindInfo, module.getClassLoader());
                 ds.getDataSourceConfigInjector().inject(dataSource);
-                startDataSource(ds, bindInfo, eeModuleDescription, context, phaseContext.getServiceTarget(), serviceBuilder, injector, securityEnabled);
+                startDataSource(ds, bindInfo, eeModuleDescription, context, phaseContext.getServiceTarget(), serviceBuilder, injector);
             }
 
         } catch (Exception e) {
@@ -217,13 +214,13 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
                                  final EEModuleDescription moduleDescription,
                                  final ResolutionContext context,
                                  final ServiceTarget serviceTarget,
-                                 final ServiceBuilder valueSourceServiceBuilder, final Injector<ManagedReferenceFactory> injector, boolean securityEnabled) {
+                                 final ServiceBuilder valueSourceServiceBuilder, final Injector<ManagedReferenceFactory> injector) {
 
         final ServiceName dataSourceServiceName = AbstractDataSourceService.getServiceName(bindInfo);
         final ServiceBuilder<?> dataSourceServiceBuilder =
                 Services.addServerExecutorDependency(
                         serviceTarget.addService(dataSourceServiceName, dataSourceService),
-                        dataSourceService.getExecutorServiceInjector(), false)
+                        dataSourceService.getExecutorServiceInjector())
                 .addDependency(ConnectorServices.IRONJACAMAR_MDR, MetadataRepository.class, dataSourceService.getMdrInjector())
                 .addDependency(ConnectorServices.RA_REPOSITORY_SERVICE, ResourceAdapterRepository.class, dataSourceService.getRaRepositoryInjector())
                 .addDependency(ConnectorServices.BOOTSTRAP_CONTEXT_SERVICE.append(DEFAULT_NAME))
@@ -235,10 +232,14 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
                 .addDependency(ConnectorServices.JDBC_DRIVER_REGISTRY_SERVICE, DriverRegistry.class,
                         dataSourceService.getDriverRegistryInjector()).addDependency(NamingService.SERVICE_NAME);
 
-        if(securityEnabled) {
-            dataSourceServiceBuilder.addDependency(SubjectFactoryService.SERVICE_NAME, SubjectFactory.class,
-                    dataSourceService.getSubjectFactoryInjector());
-        }
+        // We don't need to inject legacy security subsystem services. They are only used with a configured legacy
+        // security domain, and the annotation does not support configuring that
+//        if(securityEnabled) {
+//            dataSourceServiceBuilder.addDependency(SimpleSecurityManagerService.SERVICE_NAME, ServerSecurityManager.class,
+//                    dataSourceService.getServerSecurityManager());
+//            dataSourceServiceBuilder.addDependency(SubjectFactoryService.SERVICE_NAME, SubjectFactory.class,
+//                    dataSourceService.getSubjectFactoryInjector());
+//        }
 
 
         final DataSourceReferenceFactoryService referenceFactoryService = new DataSourceReferenceFactoryService();
@@ -256,11 +257,19 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
                     public void transition(final ServiceController<? extends Object> controller, final ServiceController.Transition transition) {
                         switch (transition) {
                             case STARTING_to_UP: {
-                                SUBSYSTEM_DATASOURCES_LOGGER.boundDataSource(jndiName);
+                                if (isTransactional()) {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.boundDataSource(jndiName);
+                                } else {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.boundNonJTADataSource(jndiName);
+                                }
                                 break;
                             }
                             case START_REQUESTED_to_DOWN: {
-                                SUBSYSTEM_DATASOURCES_LOGGER.unboundDataSource(jndiName);
+                                if (isTransactional()) {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.unboundDataSource(jndiName);
+                                } else {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.unBoundNonJTADataSource(jndiName);
+                                }
                                 break;
                             }
                             case REMOVING_to_REMOVED: {

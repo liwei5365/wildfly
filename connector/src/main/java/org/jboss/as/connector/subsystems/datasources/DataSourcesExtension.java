@@ -33,6 +33,7 @@ import static org.jboss.as.connector.subsystems.common.pool.Constants.IDLETIMEOU
 import static org.jboss.as.connector.subsystems.common.pool.Constants.INITIAL_POOL_SIZE;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.MAX_POOL_SIZE;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.MIN_POOL_SIZE;
+import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_FAIR;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_FLUSH_STRATEGY;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_PREFILL;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_USE_STRICT_MIN;
@@ -40,12 +41,14 @@ import static org.jboss.as.connector.subsystems.common.pool.Constants.USE_FAST_F
 import static org.jboss.as.connector.subsystems.datasources.Constants.ALLOCATION_RETRY;
 import static org.jboss.as.connector.subsystems.datasources.Constants.ALLOCATION_RETRY_WAIT_MILLIS;
 import static org.jboss.as.connector.subsystems.datasources.Constants.ALLOW_MULTIPLE_USERS;
+import static org.jboss.as.connector.subsystems.datasources.Constants.AUTHENTICATION_CONTEXT;
 import static org.jboss.as.connector.subsystems.datasources.Constants.CHECK_VALID_CONNECTION_SQL;
 import static org.jboss.as.connector.subsystems.datasources.Constants.CONNECTABLE;
 import static org.jboss.as.connector.subsystems.datasources.Constants.CONNECTION_LISTENER_CLASS;
 import static org.jboss.as.connector.subsystems.datasources.Constants.CONNECTION_LISTENER_PROPERTIES;
 import static org.jboss.as.connector.subsystems.datasources.Constants.CONNECTION_PROPERTIES;
 import static org.jboss.as.connector.subsystems.datasources.Constants.CONNECTION_URL;
+import static org.jboss.as.connector.subsystems.datasources.Constants.CREDENTIAL_REFERENCE;
 import static org.jboss.as.connector.subsystems.datasources.Constants.DATASOURCES;
 import static org.jboss.as.connector.subsystems.datasources.Constants.DATASOURCE_CLASS;
 import static org.jboss.as.connector.subsystems.datasources.Constants.DATASOURCE_DRIVER;
@@ -58,6 +61,7 @@ import static org.jboss.as.connector.subsystems.datasources.Constants.DRIVER_MIN
 import static org.jboss.as.connector.subsystems.datasources.Constants.DRIVER_MODULE_NAME;
 import static org.jboss.as.connector.subsystems.datasources.Constants.DRIVER_NAME;
 import static org.jboss.as.connector.subsystems.datasources.Constants.DRIVER_XA_DATASOURCE_CLASS_NAME;
+import static org.jboss.as.connector.subsystems.datasources.Constants.ELYTRON_ENABLED;
 import static org.jboss.as.connector.subsystems.datasources.Constants.ENABLED;
 import static org.jboss.as.connector.subsystems.datasources.Constants.ENLISTMENT_TRACE;
 import static org.jboss.as.connector.subsystems.datasources.Constants.EXCEPTION_SORTER_CLASSNAME;
@@ -77,6 +81,9 @@ import static org.jboss.as.connector.subsystems.datasources.Constants.PREPARED_S
 import static org.jboss.as.connector.subsystems.datasources.Constants.QUERY_TIMEOUT;
 import static org.jboss.as.connector.subsystems.datasources.Constants.REAUTHPLUGIN_PROPERTIES;
 import static org.jboss.as.connector.subsystems.datasources.Constants.REAUTH_PLUGIN_CLASSNAME;
+import static org.jboss.as.connector.subsystems.datasources.Constants.RECOVERY_AUTHENTICATION_CONTEXT;
+import static org.jboss.as.connector.subsystems.datasources.Constants.RECOVERY_CREDENTIAL_REFERENCE;
+import static org.jboss.as.connector.subsystems.datasources.Constants.RECOVERY_ELYTRON_ENABLED;
 import static org.jboss.as.connector.subsystems.datasources.Constants.RECOVERY_PASSWORD;
 import static org.jboss.as.connector.subsystems.datasources.Constants.RECOVERY_SECURITY_DOMAIN;
 import static org.jboss.as.connector.subsystems.datasources.Constants.RECOVERY_USERNAME;
@@ -154,7 +161,7 @@ public class DataSourcesExtension implements Extension {
     public static final String SUBSYSTEM_NAME = Constants.DATASOURCES;
     private static final String RESOURCE_NAME = DataSourcesExtension.class.getPackage().getName() + ".LocalDescriptions";
 
-    private static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(4, 0, 0);
+    static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(5, 0, 0);
 
     static StandardResourceDescriptionResolver getResourceDescriptionResolver(final String... keyPrefix) {
         StringBuilder prefix = new StringBuilder(SUBSYSTEM_NAME);
@@ -176,30 +183,27 @@ public class DataSourcesExtension implements Extension {
         final ManagementResourceRegistration registration = subsystem.registerSubsystemModel(DataSourcesSubsystemRootDefinition.createInstance(registerRuntimeOnly));
 
 
-        subsystem.registerXMLElementWriter(DataSourceSubsystemParser.INSTANCE);
+        subsystem.registerXMLElementWriter(new DataSourceSubsystemParser());
 
 
         if (registerRuntimeOnly) {
             subsystem.registerDeploymentModel(DataSourcesSubsystemRootDefinition.createDeployedInstance(registerRuntimeOnly));
         }
-        if (context.isRegisterTransformers()) {
-            DataSourcesSubsystemRootDefinition.registerTransformers(subsystem);
-        }
     }
 
     @Override
     public void initializeParsers(final ExtensionParsingContext context) {
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_1_1.getUriString(), DataSourceSubsystemParser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_1_2.getUriString(), DataSourceSubsystemParser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_2_0.getUriString(), DataSourceSubsystemParser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_3_0.getUriString(), DataSourceSubsystemParser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_4_0.getUriString(), DataSourceSubsystemParser.INSTANCE);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_1_1.getUriString(), DataSourceSubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_1_2.getUriString(), DataSourceSubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_2_0.getUriString(), DataSourceSubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_3_0.getUriString(), DataSourceSubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_4_0.getUriString(), DataSourceSubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.DATASOURCES_5_0.getUriString(), DataSourceSubsystemParser::new);
     }
 
     public static final class DataSourceSubsystemParser implements XMLStreamConstants, XMLElementReader<List<ModelNode>>,
             XMLElementWriter<SubsystemMarshallingContext> {
 
-        static final DataSourceSubsystemParser INSTANCE = new DataSourceSubsystemParser();
 
         /**
          * {@inheritDoc}
@@ -310,6 +314,7 @@ public class DataSourcesExtension implements Extension {
                         MIN_POOL_SIZE.isMarshallable(dataSourceNode) ||
                         MAX_POOL_SIZE.isMarshallable(dataSourceNode) ||
                         POOL_PREFILL.isMarshallable(dataSourceNode) ||
+                        POOL_FAIR.isMarshallable(dataSourceNode) ||
                         POOL_USE_STRICT_MIN.isMarshallable(dataSourceNode) ||
                         POOL_FLUSH_STRATEGY.isMarshallable(dataSourceNode) ||
                         ALLOW_MULTIPLE_USERS.isMarshallable(dataSourceNode) ||
@@ -335,6 +340,7 @@ public class DataSourcesExtension implements Extension {
                     INITIAL_POOL_SIZE.marshallAsElement(dataSourceNode, writer);
                     MAX_POOL_SIZE.marshallAsElement(dataSourceNode, writer);
                     POOL_PREFILL.marshallAsElement(dataSourceNode, writer);
+                    POOL_FAIR.marshallAsElement(dataSourceNode, writer);
                     POOL_USE_STRICT_MIN.marshallAsElement(dataSourceNode, writer);
                     POOL_FLUSH_STRATEGY.marshallAsElement(dataSourceNode, writer);
                     ALLOW_MULTIPLE_USERS.marshallAsElement(dataSourceNode, writer);
@@ -387,7 +393,9 @@ public class DataSourcesExtension implements Extension {
                 }
                 boolean securityRequired = USERNAME.isMarshallable(dataSourceNode) ||
                         PASSWORD.isMarshallable(dataSourceNode) ||
+                        CREDENTIAL_REFERENCE.isMarshallable(dataSourceNode) ||
                         SECURITY_DOMAIN.isMarshallable(dataSourceNode) ||
+                        ELYTRON_ENABLED.isMarshallable(dataSourceNode) ||
                         REAUTH_PLUGIN_CLASSNAME.isMarshallable(dataSourceNode) ||
                         REAUTHPLUGIN_PROPERTIES.isMarshallable(dataSourceNode);
                 if (securityRequired) {
@@ -395,6 +403,9 @@ public class DataSourcesExtension implements Extension {
                     USERNAME.marshallAsElement(dataSourceNode, writer);
                     PASSWORD.marshallAsElement(dataSourceNode, writer);
                     SECURITY_DOMAIN.marshallAsElement(dataSourceNode, writer);
+                    CREDENTIAL_REFERENCE.marshallAsElement(dataSourceNode, writer);
+                    ELYTRON_ENABLED.marshallAsElement(dataSourceNode, writer);
+                    AUTHENTICATION_CONTEXT.marshallAsElement(dataSourceNode, writer);
 
                     if (dataSourceNode.hasDefined(REAUTH_PLUGIN_CLASSNAME.getName())) {
                         writer.writeStartElement(DsSecurity.Tag.REAUTH_PLUGIN.getLocalName());
@@ -418,17 +429,22 @@ public class DataSourcesExtension implements Extension {
                 boolean recoveryRequired = RECOVERY_USERNAME.isMarshallable(dataSourceNode) ||
                         RECOVERY_PASSWORD.isMarshallable(dataSourceNode) ||
                         RECOVERY_SECURITY_DOMAIN.isMarshallable(dataSourceNode) ||
+                        RECOVERY_ELYTRON_ENABLED.isMarshallable(dataSourceNode) ||
                         RECOVER_PLUGIN_CLASSNAME.isMarshallable(dataSourceNode) ||
+                        RECOVERY_CREDENTIAL_REFERENCE.isMarshallable(dataSourceNode) ||
                         NO_RECOVERY.isMarshallable(dataSourceNode) ||
                         RECOVER_PLUGIN_PROPERTIES.isMarshallable(dataSourceNode);
                 if (recoveryRequired && isXADataSource) {
                     writer.writeStartElement(XaDataSource.Tag.RECOVERY.getLocalName());
                     NO_RECOVERY.marshallAsAttribute(dataSourceNode, writer);
-                    if (hasAnyOf(dataSourceNode, RECOVERY_USERNAME, RECOVERY_PASSWORD, RECOVERY_SECURITY_DOMAIN)) {
+                    if (hasAnyOf(dataSourceNode, RECOVERY_USERNAME, RECOVERY_PASSWORD, RECOVERY_SECURITY_DOMAIN, RECOVERY_ELYTRON_ENABLED, RECOVERY_CREDENTIAL_REFERENCE)) {
                         writer.writeStartElement(Recovery.Tag.RECOVER_CREDENTIAL.getLocalName());
                         RECOVERY_USERNAME.marshallAsElement(dataSourceNode, writer);
                         RECOVERY_PASSWORD.marshallAsElement(dataSourceNode, writer);
+                        RECOVERY_ELYTRON_ENABLED.marshallAsElement(dataSourceNode, writer);
+                        RECOVERY_AUTHENTICATION_CONTEXT.marshallAsElement(dataSourceNode, writer);
                         RECOVERY_SECURITY_DOMAIN.marshallAsElement(dataSourceNode, writer);
+                        RECOVERY_CREDENTIAL_REFERENCE.marshallAsElement(dataSourceNode, writer);
                         writer.writeEndElement();
                     }
                     if (hasAnyOf(dataSourceNode, RECOVER_PLUGIN_CLASSNAME)) {

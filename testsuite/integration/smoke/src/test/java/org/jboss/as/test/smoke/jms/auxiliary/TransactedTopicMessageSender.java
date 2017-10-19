@@ -30,7 +30,13 @@ import javax.ejb.Stateful;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
 import javax.enterprise.context.RequestScoped;
-import javax.jms.*;
+import javax.jms.Connection;
+import javax.jms.ConnectionFactory;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.MessageProducer;
+import javax.jms.Session;
+import javax.jms.Topic;
 
 /**
  * Auxiliary class for JMS smoke tests - sends messages to a topic from within a transaction
@@ -57,13 +63,13 @@ public class TransactedTopicMessageSender {
         Connection connection = null;
         Session session = null;
         try {
-            logger.info("Creating a Connection");
+            logger.trace("Creating a Connection");
             connection = factory.createConnection();
-            logger.info("Creating a Session");
+            logger.trace("Creating a Session");
             session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
             MessageProducer producer = session.createProducer(topic);
             Message message = session.createTextMessage("Hello world!");
-            logger.info("Sending message");
+            logger.trace("Sending message");
             producer.send(message);
         } catch (Exception e) {
             e.printStackTrace();
@@ -82,13 +88,13 @@ public class TransactedTopicMessageSender {
         Connection connection = null;
         Session session = null;
         try {
-            logger.info("Creating a Connection");
+            logger.trace("Creating a Connection");
             connection = factory.createConnection();
-            logger.info("Creating a Session");
+            logger.trace("Creating a Session");
             session = connection.createSession(true, Session.AUTO_ACKNOWLEDGE);
             MessageProducer producer = session.createProducer(topic);
             Message message = session.createTextMessage("Hello world 2!");
-            logger.info("Sending message");
+            logger.trace("Sending message");
             producer.send(message);
             // ROLLBACK
             ctx.setRollbackOnly();

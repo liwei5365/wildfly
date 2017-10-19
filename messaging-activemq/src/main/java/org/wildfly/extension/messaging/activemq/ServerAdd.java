@@ -23,6 +23,9 @@
 package org.wildfly.extension.messaging.activemq;
 
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.PATH;
+import static org.wildfly.extension.messaging.activemq.Capabilities.ACTIVEMQ_SERVER_CAPABILITY;
+import static org.wildfly.extension.messaging.activemq.Capabilities.ELYTRON_DOMAIN_CAPABILITY;
+import static org.wildfly.extension.messaging.activemq.Capabilities.JMX_CAPABILITY;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.ADDRESS_SETTING;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.BINDINGS_DIRECTORY;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.BROADCAST_GROUP;
@@ -30,7 +33,6 @@ import static org.wildfly.extension.messaging.activemq.CommonAttributes.DISCOVER
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.HTTP_ACCEPTOR;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.INCOMING_INTERCEPTORS;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.JGROUPS_CHANNEL;
-import static org.wildfly.extension.messaging.activemq.CommonAttributes.JGROUPS_STACK;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.JOURNAL_DIRECTORY;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.LARGE_MESSAGES_DIRECTORY;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.MODULE;
@@ -40,24 +42,32 @@ import static org.wildfly.extension.messaging.activemq.CommonAttributes.PAGING_D
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.SECURITY_SETTING;
 import static org.wildfly.extension.messaging.activemq.PathDefinition.PATHS;
 import static org.wildfly.extension.messaging.activemq.PathDefinition.RELATIVE_TO;
-import static org.wildfly.extension.messaging.activemq.ServerDefinition.ACTIVEMQ_SERVER_CAPABILITY;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.ASYNC_CONNECTION_EXECUTION_ENABLED;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.CLUSTER_PASSWORD;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.CLUSTER_USER;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.CONNECTION_TTL_OVERRIDE;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.CREATE_BINDINGS_DIR;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.CREATE_JOURNAL_DIR;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.ELYTRON_DOMAIN;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.ID_CACHE_SIZE;
-import static org.wildfly.extension.messaging.activemq.ServerDefinition.JMX_CAPABILITY;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JMX_DOMAIN;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JMX_MANAGEMENT_ENABLED;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_BINDINGS_TABLE;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_BUFFER_SIZE;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_BUFFER_TIMEOUT;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_COMPACT_MIN_FILES;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_COMPACT_PERCENTAGE;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_DATABASE;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_DATASOURCE;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_FILE_SIZE;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_JDBC_NETWORK_TIMEOUT;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_JMS_BINDINGS_TABLE;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_LARGE_MESSAGES_TABLE;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_MAX_IO;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_MESSAGES_TABLE;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_MIN_FILES;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_PAGE_STORE_TABLE;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_POOL_FILES;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_SYNC_NON_TRANSACTIONAL;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_SYNC_TRANSACTIONAL;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_TYPE;
@@ -89,6 +99,7 @@ import static org.wildfly.extension.messaging.activemq.ServerDefinition.TRANSACT
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.WILD_CARD_ROUTING_ENABLED;
 import static org.wildfly.extension.messaging.activemq.ha.HAPolicyConfigurationBuilder.addHAPolicyConfiguration;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -96,19 +107,24 @@ import java.util.Map;
 import java.util.Set;
 
 import javax.management.MBeanServer;
+import javax.sql.DataSource;
 
 import org.apache.activemq.artemis.api.config.ActiveMQDefaultConfiguration;
 import org.apache.activemq.artemis.api.core.BroadcastGroupConfiguration;
 import org.apache.activemq.artemis.api.core.DiscoveryGroupConfiguration;
 import org.apache.activemq.artemis.api.core.Interceptor;
 import org.apache.activemq.artemis.api.core.SimpleString;
+import org.apache.activemq.artemis.core.config.BridgeConfiguration;
 import org.apache.activemq.artemis.core.config.Configuration;
 import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
+import org.apache.activemq.artemis.core.config.storage.DatabaseStorageConfiguration;
 import org.apache.activemq.artemis.core.security.Role;
 import org.apache.activemq.artemis.core.server.ActiveMQServer;
 import org.apache.activemq.artemis.core.server.JournalType;
 import org.apache.activemq.artemis.core.settings.impl.AddressSettings;
 import org.jboss.as.controller.AbstractAddStepHandler;
+import org.jboss.as.controller.AttributeDefinition;
+import org.jboss.as.controller.ObjectTypeAttributeDefinition;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.OperationStepHandler;
@@ -116,6 +132,7 @@ import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.registry.Resource;
+import org.jboss.as.controller.security.CredentialReference;
 import org.jboss.as.controller.services.path.PathManager;
 import org.jboss.as.controller.services.path.PathManagerService;
 import org.jboss.as.network.OutboundSocketBinding;
@@ -131,10 +148,15 @@ import org.jboss.msc.service.ServiceBuilder.DependencyType;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceTarget;
+import org.jboss.msc.value.InjectedValue;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
-import org.wildfly.clustering.jgroups.spi.service.ProtocolStackServiceName;
+import org.wildfly.clustering.jgroups.spi.JGroupsDefaultRequirement;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
+import org.wildfly.common.function.ExceptionSupplier;
 import org.wildfly.extension.messaging.activemq.jms.JMSService;
 import org.wildfly.extension.messaging.activemq.logging.MessagingLogger;
+import org.wildfly.security.auth.server.SecurityDomain;
+import org.wildfly.security.credential.source.CredentialSource;
 
 
 /**
@@ -166,21 +188,55 @@ class ServerAdd extends AbstractAddStepHandler {
     protected void populateModel(OperationContext context, ModelNode operation, Resource resource) throws OperationFailedException {
         super.populateModel(context, operation, resource);
 
-        if (context.isNormalServer()) {
-            // add an operation to create all the messaging paths resources that have not been already been created
-            // prior to adding the ActiveMQ server
-            context.addStep(new OperationStepHandler() {
-                @Override
-                public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
-                    final ModelNode model = Resource.Tools.readModel(resource);
-                    for (String path : PathDefinition.PATHS.keySet()) {
-                        if (!model.get(ModelDescriptionConstants.PATH).hasDefined(path)) {
-                            PathAddress pathAddress = PathAddress.pathAddress(PathElement.pathElement(ModelDescriptionConstants.PATH, path));
-                            context.createResource(pathAddress);
-                        }
+        // add an operation to create all the messaging paths resources that have not been already been created
+        // prior to adding the ActiveMQ server
+        context.addStep(new OperationStepHandler() {
+            @Override
+            public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
+                final ModelNode model = Resource.Tools.readModel(resource);
+                for (String path : PathDefinition.PATHS.keySet()) {
+                    if (!model.get(ModelDescriptionConstants.PATH).hasDefined(path)) {
+                        PathAddress pathAddress = PathAddress.pathAddress(PathElement.pathElement(ModelDescriptionConstants.PATH, path));
+                        context.createResource(pathAddress);
                     }
                 }
-            }, OperationContext.Stage.MODEL);
+            }
+        }, OperationContext.Stage.MODEL);
+        context.addStep((operationContext, model) -> {
+            // check that if journal-datasource is defined, no other attributes related to file-system journal are set.
+            if (ServerDefinition.JOURNAL_DATASOURCE.resolveModelAttribute(context, model).isDefined()) {
+                checkNoAttributesIsDefined(ServerDefinition.JOURNAL_DATASOURCE.getName(), operationContext.getCurrentAddress(), model,
+                        ServerDefinition.JOURNAL_TYPE,
+                        ServerDefinition.JOURNAL_BUFFER_TIMEOUT,
+                        ServerDefinition.JOURNAL_BUFFER_SIZE,
+                        ServerDefinition.JOURNAL_SYNC_TRANSACTIONAL,
+                        ServerDefinition.JOURNAL_SYNC_NON_TRANSACTIONAL,
+                        ServerDefinition.LOG_JOURNAL_WRITE_RATE,
+                        ServerDefinition.JOURNAL_FILE_SIZE,
+                        ServerDefinition.JOURNAL_MIN_FILES,
+                        ServerDefinition.JOURNAL_POOL_FILES,
+                        ServerDefinition.JOURNAL_COMPACT_PERCENTAGE,
+                        ServerDefinition.JOURNAL_COMPACT_MIN_FILES,
+                        ServerDefinition.JOURNAL_MAX_IO,
+                        ServerDefinition.CREATE_BINDINGS_DIR,
+                        ServerDefinition.CREATE_JOURNAL_DIR);
+            }
+        }, OperationContext.Stage.MODEL);
+    }
+
+    /*
+     * Check that none of the attrs are defined, or log a warning.
+     */
+    private void checkNoAttributesIsDefined(String definedAttributeName, PathAddress address, ModelNode model, AttributeDefinition... attrs) throws OperationFailedException {
+        List<String> definedAttributes = new ArrayList<>();
+        for(AttributeDefinition attr : attrs) {
+            if (model.get(attr.getName()).isDefined()) {
+                definedAttributes.add(attr.getName());
+            }
+        }
+
+        if (!definedAttributes.isEmpty()) {
+            MessagingLogger.ROOT_LOGGER.invalidConfiguration(address, definedAttributeName, definedAttributes);
         }
     }
 
@@ -211,7 +267,8 @@ class ServerAdd extends AbstractAddStepHandler {
 
                 // Create the ActiveMQ Service
                 final ActiveMQServerService serverService = new ActiveMQServerService(
-                        configuration, new ActiveMQServerService.PathConfig(bindingsPath, bindingsRelativeToPath, journalPath, journalRelativeToPath, largeMessagePath, largeMessageRelativeToPath, pagingPath, pagingRelativeToPath));
+                        configuration, new ActiveMQServerService.PathConfig(bindingsPath, bindingsRelativeToPath, journalPath, journalRelativeToPath, largeMessagePath, largeMessageRelativeToPath, pagingPath, pagingRelativeToPath)
+                );
                 processIncomingInterceptors(INCOMING_INTERCEPTORS.resolveModelAttribute(context, operation), serverService);
                 processOutgoingInterceptors(OUTGOING_INTERCEPTORS.resolveModelAttribute(context, operation), serverService);
 
@@ -222,15 +279,31 @@ class ServerAdd extends AbstractAddStepHandler {
                     ServiceName jmxCapability = context.getCapabilityServiceName(JMX_CAPABILITY, MBeanServer.class);
                     serviceBuilder.addDependency(jmxCapability, MBeanServer.class, serverService.getMBeanServer());
                 }
+                ModelNode dataSource = JOURNAL_DATASOURCE.resolveModelAttribute(context, model);
+                if (dataSource.isDefined()) {
+                    ServiceName dataSourceCapability = context.getCapabilityServiceName("org.wildfly.data-source", dataSource.asString(), DataSource.class);
+                    serviceBuilder.addDependency(dataSourceCapability, DataSource.class, serverService.getDataSource());
+                }
 
                 serviceBuilder.addDependency(PathManagerService.SERVICE_NAME, PathManager.class, serverService.getPathManagerInjector());
 
-                // Add security
-                String domain = SECURITY_DOMAIN.resolveModelAttribute(context, model).asString();
-                serviceBuilder.addDependency(DependencyType.REQUIRED,
-                        SecurityDomainService.SERVICE_NAME.append(domain),
-                        SecurityDomainContext.class,
-                        serverService.getSecurityDomainContextInjector());
+                // Inject a reference to the Elytron security domain if one has been defined.
+                final ModelNode elytronSecurityDomain = ELYTRON_DOMAIN.resolveModelAttribute(context, model);
+                if (elytronSecurityDomain.isDefined()) {
+                    ServiceName elytronDomainCapability = context.getCapabilityServiceName(ELYTRON_DOMAIN_CAPABILITY, elytronSecurityDomain.asString(), SecurityDomain.class);
+                    serviceBuilder.addDependency(elytronDomainCapability, SecurityDomain.class, serverService.getElytronDomainInjector());
+                } else {
+                    // Add legacy security
+                    String domain = SECURITY_DOMAIN.resolveModelAttribute(context, model).asString();
+                    serviceBuilder.addDependency(DependencyType.REQUIRED,
+                            SecurityDomainService.SERVICE_NAME.append(domain),
+                            SecurityDomainContext.class,
+                            serverService.getSecurityDomainContextInjector());
+                }
+
+                // inject credential-references for bridges
+                addBridgeCredentialStoreReference(serverService, configuration, BridgeDefinition.CREDENTIAL_REFERENCE, context, model, serviceBuilder);
+                addClusterCredentialStoreReference(serverService, ServerDefinition.CREDENTIAL_REFERENCE, context, model, serviceBuilder);
 
                 // Process acceptors and connectors
                 final Set<String> socketBindings = new HashSet<String>();
@@ -242,7 +315,7 @@ class ServerAdd extends AbstractAddStepHandler {
                 if (model.hasDefined(HTTP_ACCEPTOR)) {
                     for (final Property property : model.get(HTTP_ACCEPTOR).asPropertyList()) {
                         String httpListener = HTTPAcceptorDefinition.HTTP_LISTENER.resolveModelAttribute(context, property.getValue()).asString();
-                        serviceBuilder.addDependency(HTTPUpgradeService.HTTP_UPGRADE_REGISTRY.append(httpListener));
+                        serviceBuilder.addDependency(MessagingServices.HTTP_UPGRADE_REGISTRY.append(httpListener));
                     }
                 }
 
@@ -278,8 +351,8 @@ class ServerAdd extends AbstractAddStepHandler {
                         ModelNode broadcastGroupModel = model.get(BROADCAST_GROUP, name);
 
                         if (broadcastGroupModel.hasDefined(JGROUPS_CHANNEL.getName())) {
-                            ModelNode channelFactory = JGROUPS_STACK.resolveModelAttribute(context, broadcastGroupModel);
-                            ServiceName channelFactoryServiceName = channelFactory.isDefined() ? ProtocolStackServiceName.CHANNEL_FACTORY.getServiceName(channelFactory.asString()) : ProtocolStackServiceName.CHANNEL_FACTORY.getServiceName();
+                            ModelNode channelFactory = BroadcastGroupDefinition.JGROUPS_STACK.resolveModelAttribute(context, broadcastGroupModel);
+                            ServiceName channelFactoryServiceName = channelFactory.isDefined() ? JGroupsRequirement.CHANNEL_FACTORY.getServiceName(context, channelFactory.asString()) : JGroupsDefaultRequirement.CHANNEL_FACTORY.getServiceName(context);
                             String channelName = JGROUPS_CHANNEL.resolveModelAttribute(context, broadcastGroupModel).asString();
                             serviceBuilder.addDependency(channelFactoryServiceName, ChannelFactory.class, serverService.getJGroupsInjector(key));
                             serverService.getJGroupsChannels().put(key, channelName);
@@ -295,8 +368,8 @@ class ServerAdd extends AbstractAddStepHandler {
                         final String key = "discovery" + name;
                         ModelNode discoveryGroupModel = model.get(DISCOVERY_GROUP, name);
                         if (discoveryGroupModel.hasDefined(JGROUPS_CHANNEL.getName())) {
-                            ModelNode channelFactory = JGROUPS_STACK.resolveModelAttribute(context, discoveryGroupModel);
-                            ServiceName channelFactoryServiceName = channelFactory.isDefined() ? ProtocolStackServiceName.CHANNEL_FACTORY.getServiceName(channelFactory.asString()) : ProtocolStackServiceName.CHANNEL_FACTORY.getServiceName();
+                            ModelNode channelFactory = DiscoveryGroupDefinition.JGROUPS_STACK.resolveModelAttribute(context, discoveryGroupModel);
+                            ServiceName channelFactoryServiceName = channelFactory.isDefined() ? JGroupsRequirement.CHANNEL_FACTORY.getServiceName(context, channelFactory.asString()) : JGroupsDefaultRequirement.CHANNEL_FACTORY.getServiceName(context);
                             String channelName = JGROUPS_CHANNEL.resolveModelAttribute(context, discoveryGroupModel).asString();
                             serviceBuilder.addDependency(channelFactoryServiceName, ChannelFactory.class, serverService.getJGroupsInjector(key));
                             serverService.getJGroupsChannels().put(key, channelName);
@@ -364,6 +437,7 @@ class ServerAdd extends AbstractAddStepHandler {
         configuration.setJournalCompactPercentage(JOURNAL_COMPACT_PERCENTAGE.resolveModelAttribute(context, model).asInt());
         configuration.setJournalFileSize(JOURNAL_FILE_SIZE.resolveModelAttribute(context, model).asInt());
         configuration.setJournalMinFiles(JOURNAL_MIN_FILES.resolveModelAttribute(context, model).asInt());
+        configuration.setJournalPoolFiles(JOURNAL_POOL_FILES.resolveModelAttribute(context, model).asInt());
         configuration.setJournalSyncNonTransactional(JOURNAL_SYNC_NON_TRANSACTIONAL.resolveModelAttribute(context, model).asBoolean());
         configuration.setJournalSyncTransactional(JOURNAL_SYNC_TRANSACTIONAL.resolveModelAttribute(context, model).asBoolean());
         configuration.setLogJournalWriteRate(LOG_JOURNAL_WRITE_RATE.resolveModelAttribute(context, model).asBoolean());
@@ -399,6 +473,7 @@ class ServerAdd extends AbstractAddStepHandler {
         configuration.setTransactionTimeoutScanPeriod(TRANSACTION_TIMEOUT_SCAN_PERIOD.resolveModelAttribute(context, model).asLong());
         configuration.setWildcardRoutingEnabled(WILD_CARD_ROUTING_ENABLED.resolveModelAttribute(context, model).asBoolean());
 
+        processStorageConfiguration(context, model, configuration);
         addHAPolicyConfiguration(context, configuration, model);
 
         processAddressSettings(context, configuration, model);
@@ -414,6 +489,28 @@ class ServerAdd extends AbstractAddStepHandler {
         ConnectorServiceDefinition.addConnectorServiceConfigs(context, configuration, model);
 
         return configuration;
+    }
+
+    private static void processStorageConfiguration(OperationContext context, ModelNode model, Configuration configuration) throws OperationFailedException {
+        ModelNode journalDataSource = JOURNAL_DATASOURCE.resolveModelAttribute(context, model);
+        if (!journalDataSource.isDefined()) {
+            return;
+        }
+        DatabaseStorageConfiguration storageConfiguration = new DatabaseStorageConfiguration();
+        storageConfiguration.setBindingsTableName(JOURNAL_BINDINGS_TABLE.resolveModelAttribute(context, model).asString());
+        storageConfiguration.setJMSBindingsTableName(JOURNAL_JMS_BINDINGS_TABLE.resolveModelAttribute(context, model).asString());
+        storageConfiguration.setMessageTableName(JOURNAL_MESSAGES_TABLE.resolveModelAttribute(context, model).asString());
+        storageConfiguration.setLargeMessageTableName(JOURNAL_LARGE_MESSAGES_TABLE.resolveModelAttribute(context, model).asString());
+        storageConfiguration.setPageStoreTableName(JOURNAL_PAGE_STORE_TABLE.resolveModelAttribute(context, model).asString());
+        storageConfiguration.setJdbcNetworkTimeout(JOURNAL_JDBC_NETWORK_TIMEOUT.resolveModelAttribute(context, model).asInt());
+        ModelNode databaseNode = JOURNAL_DATABASE.resolveModelAttribute(context, model);
+        final String database = databaseNode.isDefined() ? databaseNode.asString() : null;
+        try {
+            storageConfiguration.setSqlProvider(new PropertySQLProviderFactory(database));
+        } catch (IOException e) {
+            throw new OperationFailedException(e);
+        }
+        configuration.setStoreConfiguration(storageConfiguration);
     }
 
     /**
@@ -444,19 +541,24 @@ class ServerAdd extends AbstractAddStepHandler {
         List<Class> classes = new ArrayList<>();
 
         for (ModelNode classModel : classesModel) {
-            String className = classModel.get(NAME).asString();
-            String moduleName = classModel.get(MODULE).asString();
-            try {
-                ModuleIdentifier moduleID = ModuleIdentifier.create(moduleName);
-                Module module = Module.getCallerModuleLoader().loadModule(moduleID);
-                Class<?> clazz = module.getClassLoader().loadClass(className);
-                classes.add(clazz);
-            } catch (Exception e) {
-                throw MessagingLogger.ROOT_LOGGER.unableToLoadClassFromModule(className, moduleName);
-            }
+            Class<?> clazz = unwrapClass(classModel);
+            classes.add(clazz);
         }
 
         return classes;
+    }
+
+    private static Class unwrapClass(ModelNode classModel) throws OperationFailedException {
+        String className = classModel.get(NAME).asString();
+        String moduleName = classModel.get(MODULE).asString();
+        try {
+            ModuleIdentifier moduleID = ModuleIdentifier.fromString(moduleName);
+            Module module = Module.getCallerModuleLoader().loadModule(moduleID);
+            Class<?> clazz = module.getClassLoader().loadClass(className);
+            return clazz;
+        } catch (Exception e) {
+            throw MessagingLogger.ROOT_LOGGER.unableToLoadClassFromModule(className, moduleName);
+        }
     }
 
     private void processIncomingInterceptors(ModelNode model, ActiveMQServerService serverService) throws OperationFailedException {
@@ -482,7 +584,7 @@ class ServerAdd extends AbstractAddStepHandler {
         for (Class clazz : unwrapClasses(interceptors)) {
             try {
                 Interceptor interceptor = Interceptor.class.cast(clazz.newInstance());
-                serverService.getIncomingInterceptors().add(interceptor);
+                serverService.getOutgoingInterceptors().add(interceptor);
             } catch (Exception e) {
                 throw new OperationFailedException(e);
             }
@@ -509,6 +611,37 @@ class ServerAdd extends AbstractAddStepHandler {
                     configuration.getSecurityRoles().put(match, roles);
                 }
             }
+        }
+    }
+
+    private static void addBridgeCredentialStoreReference(ActiveMQServerService amqService, Configuration configuration, ObjectTypeAttributeDefinition credentialReferenceAttributeDefinition, OperationContext context, ModelNode model, ServiceBuilder<?> serviceBuilder) throws OperationFailedException {
+        for (BridgeConfiguration bridgeConfiguration: configuration.getBridgeConfigurations()) {
+            String name = bridgeConfiguration.getName();
+            InjectedValue<ExceptionSupplier<CredentialSource, Exception>> injector = amqService.getBridgeCredentialSourceSupplierInjector(name);
+
+            String[] modelFilter = { CommonAttributes.BRIDGE, name };
+
+            ModelNode filteredModelNode = model;
+            if (modelFilter != null && modelFilter.length > 0) {
+                for (String path : modelFilter) {
+                    if (filteredModelNode.get(path).isDefined())
+                        filteredModelNode = filteredModelNode.get(path);
+                    else
+                        break;
+                }
+            }
+            ModelNode value = credentialReferenceAttributeDefinition.resolveModelAttribute(context, filteredModelNode);
+            if (value.isDefined()) {
+                injector.inject(CredentialReference.getCredentialSourceSupplier(context, credentialReferenceAttributeDefinition, filteredModelNode, serviceBuilder));
+            }
+        }
+    }
+
+    private static void addClusterCredentialStoreReference(ActiveMQServerService amqService, ObjectTypeAttributeDefinition credentialReferenceAttributeDefinition, OperationContext context, ModelNode model, ServiceBuilder<?> serviceBuilder) throws OperationFailedException {
+        ModelNode value = credentialReferenceAttributeDefinition.resolveModelAttribute(context, model);
+        if (value.isDefined()) {
+            amqService.getClusterCredentialSourceSupplierInjector()
+                    .inject(CredentialReference.getCredentialSourceSupplier(context, credentialReferenceAttributeDefinition, model, serviceBuilder));
         }
     }
 }

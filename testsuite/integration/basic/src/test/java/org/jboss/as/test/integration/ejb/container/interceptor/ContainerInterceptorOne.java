@@ -31,7 +31,7 @@ import org.jboss.logging.Logger;
  * Simple interceptor, which adds its classname in front of the result of {@link InvocationContext#proceed()}. Result of the
  * proceed() stays untouched in case the {@link InvocationContext#getContextData()} contains classname of this interceptor under
  * the {@link FlowTrackingBean#CONTEXT_DATA_KEY} key.
- * 
+ *
  * @author Jaikiran Pai
  */
 public class ContainerInterceptorOne {
@@ -40,7 +40,7 @@ public class ContainerInterceptorOne {
 
     @AroundInvoke
     public Object aroundInvoke(final InvocationContext invocationContext) throws Exception {
-        logger.info("Container interceptor invoked!!!");
+        logger.trace("Container interceptor invoked!!!");
         final String skipInterceptor = (String) invocationContext.getContextData().get(FlowTrackingBean.CONTEXT_DATA_KEY);
         if (skipInterceptor != null && this.getClass().getName().equals(skipInterceptor)) {
             return invocationContext.proceed();

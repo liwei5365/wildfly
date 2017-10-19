@@ -49,9 +49,12 @@ import org.jboss.as.controller.SimpleOperationDefinitionBuilder;
 import org.jboss.as.controller.descriptions.ResourceDescriptionResolver;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.registry.Resource;
+import org.jboss.as.controller.services.path.PathResourceDefinition;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
 import org.wildfly.extension.messaging.activemq.logging.MessagingLogger;
+
+import static org.wildfly.extension.messaging.activemq.ExportJournalOperation.checkAllowedOnJournal;
 
 /**
  * Import a dump of Artemis journal in a running Artemis server.
@@ -63,10 +66,11 @@ import org.wildfly.extension.messaging.activemq.logging.MessagingLogger;
  */
 public class ImportJournalOperation extends AbstractRuntimeOnlyHandler {
 
-    private static AttributeDefinition FILE = SimpleAttributeDefinitionBuilder.create("file", ModelType.STRING)
+    private static AttributeDefinition FILE = SimpleAttributeDefinitionBuilder.create("file", PathResourceDefinition.PATH)
             .setAllowExpression(false)
-            .setAllowNull(false)
+            .setRequired(true)
             .build();
+    private static final String OPERATION_NAME = "import-journal";
 
     static final ImportJournalOperation INSTANCE = new ImportJournalOperation();
 
@@ -75,7 +79,7 @@ public class ImportJournalOperation extends AbstractRuntimeOnlyHandler {
     }
 
     static void registerOperation(final ManagementResourceRegistration registry, final ResourceDescriptionResolver resourceDescriptionResolver) {
-        registry.registerOperationHandler(new SimpleOperationDefinitionBuilder("import-journal", resourceDescriptionResolver)
+        registry.registerOperationHandler(new SimpleOperationDefinitionBuilder(OPERATION_NAME, resourceDescriptionResolver)
                         .addParameter(FILE)
                         .setRuntimeOnly()
                         .setReplyValueType(ModelType.BOOLEAN)
@@ -86,8 +90,9 @@ public class ImportJournalOperation extends AbstractRuntimeOnlyHandler {
     @Override
     protected void executeRuntimeStep(OperationContext context, ModelNode operation) throws OperationFailedException {
         if (context.getRunningMode() != NORMAL) {
-            throw MessagingLogger.ROOT_LOGGER.managementOperationAllowedOnlyInRunningMode("import-journal", NORMAL);
+            throw MessagingLogger.ROOT_LOGGER.managementOperationAllowedOnlyInRunningMode(OPERATION_NAME, NORMAL);
         }
+        checkAllowedOnJournal(context, OPERATION_NAME);
 
         String file = FILE.resolveModelAttribute(context, operation).asString();
 

@@ -21,35 +21,53 @@
  */
 package org.wildfly.clustering.web.infinispan.session.fine;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.infinispan.Cache;
 import org.infinispan.commons.marshall.NotSerializableException;
 import org.infinispan.context.Flag;
+import org.wildfly.clustering.ee.infinispan.CacheProperties;
+import org.wildfly.clustering.ee.Mutator;
 import org.wildfly.clustering.ee.infinispan.CacheEntryMutator;
-import org.wildfly.clustering.marshalling.jboss.Marshaller;
-import org.wildfly.clustering.marshalling.jboss.MarshallingContext;
-import org.wildfly.clustering.web.infinispan.session.MutableDetector;
-import org.wildfly.clustering.web.session.SessionAttributes;
+import org.wildfly.clustering.marshalling.spi.Marshaller;
+import org.wildfly.clustering.web.infinispan.session.SessionAttributes;
+import org.wildfly.clustering.web.session.SessionAttributeImmutability;
 
 /**
  * Exposes session attributes for fine granularity sessions.
  * @author Paul Ferraro
  */
 public class FineSessionAttributes<V> extends FineImmutableSessionAttributes<V> implements SessionAttributes {
+    private final AtomicInteger sequence;
+    private final ConcurrentMap<String, Integer> names;
+    private final Mutator namesMutator;
     private final Cache<SessionAttributeKey, V> cache;
-    private final Marshaller<Object, V, MarshallingContext> marshaller;
-    private final boolean requireMarshallable;
+    private final Map<String, Mutator> mutations = new ConcurrentHashMap<>();
+    private final Marshaller<Object, V> marshaller;
+    private final CacheProperties properties;
 
-    public FineSessionAttributes(String id, Cache<SessionAttributeKey, V> attributeCache, Marshaller<Object, V, MarshallingContext> marshaller, boolean requireMarshallable) {
-        super(id, attributeCache, marshaller);
-        this.cache = attributeCache;
+    public FineSessionAttributes(String id, AtomicInteger sequence, ConcurrentMap<String, Integer> names, Mutator namesMutator, Cache<SessionAttributeKey, V> cache, Marshaller<Object, V> marshaller, CacheProperties properties) {
+        super(id, names, cache, marshaller);
+        this.sequence = sequence;
+        this.names = names;
+        this.namesMutator = namesMutator;
+        this.cache = cache;
         this.marshaller = marshaller;
-        this.requireMarshallable = requireMarshallable;
+        this.properties = properties;
     }
 
     @Override
     public Object removeAttribute(String name) {
-        SessionAttributeKey key = this.createKey(name);
-        return this.read(name, this.cache.getAdvancedCache().withFlags(Flag.FORCE_SYNCHRONOUS).remove(key));
+        Integer attributeId = this.names.remove(name);
+        if (attributeId == null) return null;
+        this.namesMutator.mutate();
+        SessionAttributeKey key = this.createKey(attributeId);
+        Object result = this.read(name, this.cache.getAdvancedCache().withFlags(Flag.FORCE_SYNCHRONOUS).remove(key));
+        this.mutations.remove(name);
+        return result;
     }
 
     @Override
@@ -57,25 +75,46 @@ public class FineSessionAttributes<V> extends FineImmutableSessionAttributes<V> 
         if (attribute == null) {
             return this.removeAttribute(name);
         }
-        if (this.requireMarshallable && !this.marshaller.getContext().isMarshallable(attribute)) {
+        if (this.properties.isMarshalling() && !this.marshaller.isMarshallable(attribute)) {
             throw new IllegalArgumentException(new NotSerializableException(attribute.getClass().getName()));
         }
-        SessionAttributeKey key = this.createKey(name);
         V value = this.marshaller.write(attribute);
-        return this.read(name, this.cache.getAdvancedCache().withFlags(Flag.FORCE_SYNCHRONOUS).put(key, value));
+        int currentId = this.sequence.get();
+        int attributeId = this.names.computeIfAbsent(name, key -> this.sequence.incrementAndGet());
+        if (attributeId > currentId) {
+            this.namesMutator.mutate();
+        }
+        SessionAttributeKey key = this.createKey(attributeId);
+        Object result = this.read(name, this.cache.getAdvancedCache().withFlags(Flag.FORCE_SYNCHRONOUS).put(key, value));
+        this.mutations.remove(name);
+        return result;
     }
 
     @Override
     public Object getAttribute(String name) {
-        SessionAttributeKey key = this.createKey(name);
+        Integer attributeId = this.names.get(name);
+        if (attributeId == null) return null;
+        SessionAttributeKey key = this.createKey(attributeId);
         V value = this.cache.get(key);
         Object attribute = this.read(name, value);
         if (attribute != null) {
             // If the object is mutable, we need to indicate that the attribute should be replicated
-            if (MutableDetector.isMutable(attribute)) {
-                new CacheEntryMutator<>(this.cache, key, value).mutate();
+            if (!SessionAttributeImmutability.INSTANCE.test(attribute)) {
+                Mutator mutator = this.mutations.computeIfAbsent(name, k -> new CacheEntryMutator<>(this.cache, key, value));
+                // If cache is not transactional, mutate on close instead.
+                if (this.properties.isTransactional()) {
+                    mutator.mutate();
+                }
             }
         }
         return attribute;
+    }
+
+    @Override
+    public void close() {
+        if (!this.properties.isTransactional()) {
+            this.mutations.values().forEach(Mutator::mutate);
+        }
+        this.mutations.clear();
     }
 }

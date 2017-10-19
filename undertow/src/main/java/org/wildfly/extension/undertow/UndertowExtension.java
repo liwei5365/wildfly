@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -50,6 +50,7 @@ public class UndertowExtension implements Extension {
     public static final PathElement PATH_FILTERS = PathElement.pathElement(Constants.CONFIGURATION, Constants.FILTER);
     public static final PathElement PATH_JSP = PathElement.pathElement(Constants.SETTING, Constants.JSP);
     public static final PathElement PATH_SESSION_COOKIE = PathElement.pathElement(Constants.SETTING, Constants.SESSION_COOKIE);
+    public static final PathElement CRAWLER_SESSION_MANAGEMENT = PathElement.pathElement(Constants.SETTING, Constants.CRAWLER_SESSION_MANAGEMENT);
     public static final PathElement PATH_PERSISTENT_SESSIONS = PathElement.pathElement(Constants.SETTING, Constants.PERSISTENT_SESSIONS);
     public static final PathElement PATH_WEBSOCKETS = PathElement.pathElement(Constants.SETTING, Constants.WEBSOCKETS);
     public static final PathElement PATH_MIME_MAPPING = PathElement.pathElement(Constants.MIME_MAPPING);
@@ -66,14 +67,18 @@ public class UndertowExtension implements Extension {
     public static final PathElement PATH_SSO = PathElement.pathElement(Constants.SETTING, Constants.SINGLE_SIGN_ON);
     public static final PathElement BALANCER = PathElement.pathElement(Constants.BALANCER);
     public static final PathElement CONTEXT = PathElement.pathElement(Constants.CONTEXT);
+    public static final PathElement PATH_HTTP_INVOKER = PathElement.pathElement(Constants.SETTING,Constants.HTTP_INVOKER);
     public static final PathElement LOAD_BALANCING_GROUP = PathElement.pathElement(Constants.LOAD_BALANCING_GROUP);
     public static final PathElement NODE = PathElement.pathElement(Constants.NODE);
     public static final PathElement PATH_FILTER_REF = PathElement.pathElement(Constants.FILTER_REF);
+    static final PathElement PATH_APPLICATION_SECURITY_DOMAIN = PathElement.pathElement(Constants.APPLICATION_SECURITY_DOMAIN);
+
     private static final String RESOURCE_NAME = UndertowExtension.class.getPackage().getName() + ".LocalDescriptions";
     static final AccessConstraintDefinition LISTENER_CONSTRAINT = new SensitiveTargetAccessConstraintDefinition(
                     new SensitivityClassification(SUBSYSTEM_NAME, "web-connector", false, false, false));
 
-    private static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(3, 0, 0);
+    private static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(4, 0, 0);
+
 
     public static StandardResourceDescriptionResolver getResolver(final String... keyPrefix) {
         StringBuilder prefix = new StringBuilder(SUBSYSTEM_NAME);
@@ -85,11 +90,13 @@ public class UndertowExtension implements Extension {
 
     @Override
     public void initializeParsers(ExtensionParsingContext context) {
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_1_0.getUriString(), UndertowSubsystemParser_1_0.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_1_1.getUriString(), UndertowSubsystemParser_1_1.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_1_2.getUriString(), UndertowSubsystemParser_1_2.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_2_0.getUriString(), UndertowSubsystemParser_2_0.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_3_0.getUriString(), UndertowSubsystemParser_3_0.INSTANCE);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_1_0.getUriString(), UndertowSubsystemParser_1_0::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_1_1.getUriString(), UndertowSubsystemParser_1_1::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_1_2.getUriString(), UndertowSubsystemParser_1_2::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_2_0.getUriString(), UndertowSubsystemParser_2_0::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_3_0.getUriString(), UndertowSubsystemParser_3_0::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_3_1.getUriString(), UndertowSubsystemParser_3_1::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.UNDERTOW_4_0.getUriString(), UndertowSubsystemParser_4_0::new);
     }
 
     @Override
@@ -101,8 +108,8 @@ public class UndertowExtension implements Extension {
         final ManagementResourceRegistration deployments = subsystem.registerDeploymentModel(DeploymentDefinition.INSTANCE);
         deployments.registerSubModel(DeploymentServletDefinition.INSTANCE);
         deployments.registerSubModel(DeploymentWebSocketDefinition.INSTANCE);
-        subsystem.registerXMLElementWriter(UndertowSubsystemParser_3_0.INSTANCE);
-    }
 
+        subsystem.registerXMLElementWriter(new UndertowSubsystemParser_4_0());
+    }
 
 }

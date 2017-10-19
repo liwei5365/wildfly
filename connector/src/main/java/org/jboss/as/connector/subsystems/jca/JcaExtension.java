@@ -79,7 +79,7 @@ public class JcaExtension implements Extension {
 
     public static final String SUBSYSTEM_NAME = "jca";
 
-    private static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(4, 0, 0);
+    private static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(5, 0, 0);
 
     private static final String RESOURCE_NAME = JcaExtension.class.getPackage().getName() + ".LocalDescriptions";
 
@@ -103,18 +103,15 @@ public class JcaExtension implements Extension {
         subsystem.registerSubsystemModel(JcaSubsystemRootDefinition.createInstance(registerRuntimeOnly));
 
         subsystem.registerXMLElementWriter(ConnectorSubsystemParser.INSTANCE);
-
-        if (context.isRegisterTransformers()) {
-            JcaSubsystemRootDefinition.registerTransformers(subsystem);
-        }
     }
 
     @Override
     public void initializeParsers(final ExtensionParsingContext context) {
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JCA_1_1.getUriString(), ConnectorSubsystemParser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JCA_2_0.getUriString(), ConnectorSubsystemParser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JCA_3_0.getUriString(), ConnectorSubsystemParser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JCA_4_0.getUriString(), ConnectorSubsystemParser.INSTANCE);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JCA_1_1.getUriString(), () -> ConnectorSubsystemParser.INSTANCE);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JCA_2_0.getUriString(), () -> ConnectorSubsystemParser.INSTANCE);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JCA_3_0.getUriString(), () -> ConnectorSubsystemParser.INSTANCE);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JCA_4_0.getUriString(), () -> ConnectorSubsystemParser.INSTANCE);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, Namespace.JCA_5_0.getUriString(), () -> ConnectorSubsystemParser.INSTANCE);
     }
 
     static final class ConnectorSubsystemParser implements XMLStreamConstants, XMLElementReader<List<ModelNode>>,
@@ -200,6 +197,8 @@ public class JcaExtension implements Extension {
                     writer.writeStartElement(Element.DISTRIBUTED_WORKMANAGER.getLocalName());
                     ((SimpleAttributeDefinition) JcaDistributedWorkManagerDefinition.DWmParameters.NAME.getAttribute()).marshallAsAttribute(workManager, writer);
 
+                    JcaDistributedWorkManagerDefinition.DWmParameters.ELYTRON_ENABLED.getAttribute().marshallAsElement(workManager, writer);
+
                     for (Property prop : workManager.asPropertyList()) {
                         if (WORKMANAGER_LONG_RUNNING.equals(prop.getName()) && prop.getValue().isDefined() && prop.getValue().asPropertyList().size() != 0) {
                             ThreadsParser.getInstance().writeBoundedQueueThreadPool(writer, prop.getValue().asProperty(), Element.LONG_RUNNING_THREADS.getLocalName(), false);
@@ -208,9 +207,13 @@ public class JcaExtension implements Extension {
                             ThreadsParser.getInstance().writeBoundedQueueThreadPool(writer, prop.getValue().asProperty(), Element.SHORT_RUNNING_THREADS.getLocalName(), false);
                         }
 
-                        if (JcaDistributedWorkManagerDefinition.DWmParameters.POLICY.getAttribute().getName().equals(prop.getName()) && prop.getValue().isDefined()) {
+                        if ((JcaDistributedWorkManagerDefinition.DWmParameters.POLICY.getAttribute().getName().equals(prop.getName()) && prop.getValue().isDefined()) ||
+                                (JcaDistributedWorkManagerDefinition.DWmParameters.POLICY.getAttribute().getName().equals(prop.getName()) && workManager.hasDefined(JcaDistributedWorkManagerDefinition.DWmParameters.POLICY_OPTIONS.getAttribute().getName()))) {
                             writer.writeStartElement(Element.POLICY.getLocalName());
-                            writer.writeAttribute(JcaDistributedWorkManagerDefinition.DWmParameters.NAME.getAttribute().getXmlName(), prop.getValue().asString());
+                            if (prop.getValue().isDefined() )
+                                writer.writeAttribute(JcaDistributedWorkManagerDefinition.DWmParameters.NAME.getAttribute().getXmlName(), prop.getValue().asString());
+                            else
+                                writer.writeAttribute(JcaDistributedWorkManagerDefinition.DWmParameters.NAME.getAttribute().getXmlName(), JcaDistributedWorkManagerDefinition.DWmParameters.POLICY.getAttribute().getDefaultValue().asString());
                             if (workManager.hasDefined(JcaDistributedWorkManagerDefinition.DWmParameters.POLICY_OPTIONS.getAttribute().getName())) {
                                 for (Property option : workManager.get(JcaDistributedWorkManagerDefinition.DWmParameters.POLICY_OPTIONS.getAttribute().getName()).asPropertyList()) {
                                     writeProperty(writer, option.getName(), option
@@ -252,6 +255,7 @@ public class JcaExtension implements Extension {
                         JcaWorkManagerDefinition.WmParameters.NAME.getAttribute().marshallAsAttribute(workManager, writer);
 
                     }
+                    JcaWorkManagerDefinition.WmParameters.ELYTRON_ENABLED.getAttribute().marshallAsElement(workManager, writer);
                     for (String propName : workManager.keys()) {
                         ModelNode propVal = workManager.get(propName);
                         if (WORKMANAGER_LONG_RUNNING.equals(propName) && propVal.isDefined() && propVal.asPropertyList().size() != 0) {
@@ -313,6 +317,7 @@ public class JcaExtension implements Extension {
             while (reader.hasNext() && reader.nextTag() != END_ELEMENT) {
 
                 switch (Namespace.forUri(reader.getNamespaceURI())) {
+                    case JCA_5_0:
                     case JCA_4_0:
                     case JCA_3_0:
                     case JCA_2_0:
@@ -371,7 +376,8 @@ public class JcaExtension implements Extension {
                             }
                             case TRACER: {
                                 if (Namespace.forUri(reader.getNamespaceURI()).equals(Namespace.JCA_3_0) ||
-                                    Namespace.forUri(reader.getNamespaceURI()).equals(Namespace.JCA_4_0)) {
+                                    Namespace.forUri(reader.getNamespaceURI()).equals(Namespace.JCA_4_0) ||
+                                    Namespace.forUri(reader.getNamespaceURI()).equals(Namespace.JCA_5_0)) {
                                     list.add(parseTracer(reader, address));
                                 } else {
                                     throw unexpectedElement(reader);
@@ -399,6 +405,10 @@ public class JcaExtension implements Extension {
                 ccmAddress.protect();
 
                 ccmOperation.get(OP_ADDR).set(ccmAddress);
+                assert ccmOperation.keys().size() == 2; // prevent people adding params without considering special
+                                                        // WFLY-2640/WFLY-8141 logic. This assert can be changed once
+                                                        // you've made the necessary adjustments
+
                 list.add(ccmOperation);
             }
         }
@@ -504,6 +514,19 @@ public class JcaExtension implements Extension {
 
                         break;
                     }
+                    case ELYTRON_ENABLED: {
+                        switch (readerNS) {
+                            case JCA_5_0: {
+                                String value = rawElementText(reader);
+                                JcaWorkManagerDefinition.WmParameters.ELYTRON_ENABLED.getAttribute().parseAndSetParameter(value, workManagerOperation, reader);
+                                break;
+                            }
+                            default: {
+                                throw unexpectedElement(reader);
+                            }
+                        }
+                        break;
+                    }
                     default:
                         throw unexpectedElement(reader);
                 }
@@ -571,7 +594,8 @@ public class JcaExtension implements Extension {
                         switch (readerNS) {
                             case JCA_2_0:
                             case JCA_3_0:
-                            case JCA_4_0: {
+                            case JCA_4_0:
+                            case JCA_5_0: {
                                 parsePolicy(reader, distributedWorkManagerOperation);
                                 break;
                             }
@@ -585,8 +609,22 @@ public class JcaExtension implements Extension {
                         switch (readerNS) {
                             case JCA_2_0:
                             case JCA_3_0:
-                            case JCA_4_0: {
+                            case JCA_4_0:
+                            case JCA_5_0: {
                                 parseSelector(reader, distributedWorkManagerOperation);
+                                break;
+                            }
+                            default: {
+                                throw unexpectedElement(reader);
+                            }
+                        }
+                        break;
+                    }
+                    case ELYTRON_ENABLED: {
+                        switch (readerNS) {
+                            case JCA_5_0: {
+                                String value = rawElementText(reader);
+                                ((SimpleAttributeDefinition) JcaDistributedWorkManagerDefinition.DWmParameters.ELYTRON_ENABLED.getAttribute()).parseAndSetParameter(value, distributedWorkManagerOperation, reader);
                                 break;
                             }
                             default: {

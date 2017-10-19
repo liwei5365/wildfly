@@ -23,7 +23,6 @@ package org.jboss.as.test.integration.jca.deployment;
 
 import java.net.URL;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
@@ -45,18 +44,18 @@ import org.junit.runner.RunWith;
 
 /**
  * Test case for servlet activations
+ *
  * @author <a href="jpederse@redhat.com">Jesper Pedersen</a>
  */
 @RunWith(Arquillian.class)
 @RunAsClient
 public class EjbDeploymentTestCase {
-    private static final Logger log = Logger.getLogger(EjbDeploymentTestCase.class.getName());
 
-    final static String deploymentName = "raractivation.ear";
-    final static String rarDeploymentName = "eis.rar";
-    final static String insideRarDeploymentName = "inside-eis.rar";
-    final static String webDeploymentName = "web.war";
-    final static String ejbDeploymentName = "ejb.jar";
+    static final String deploymentName = "raractivation.ear";
+    static final String rarDeploymentName = "eis.rar";
+    static final String insideRarDeploymentName = "inside-eis.rar";
+    static final String webDeploymentName = "web.war";
+    static final String ejbDeploymentName = "ejb.jar";
 
     @Deployment(name = "rar", order = 1)
     public static Archive<?> deploytRar() {
@@ -68,7 +67,6 @@ public class EjbDeploymentTestCase {
 
         raa.addAsManifestResource(EjbDeploymentTestCase.class.getPackage(), "ra.xml", "ra.xml");
 
-        log.info(raa.toString(true));
         return raa;
     }
 
@@ -81,7 +79,6 @@ public class EjbDeploymentTestCase {
 
         raa.addAsManifestResource(EjbDeploymentTestCase.class.getPackage(), "ra.xml", "ra.xml");
 
-        log.info(raa.toString(true));
         return raa;
     }
 
@@ -93,7 +90,6 @@ public class EjbDeploymentTestCase {
 
         //jar.addAsManifestResource(new StringAsset("Dependencies: deployment." + rarDeploymentName + "\n"), "MANIFEST.MF");
 
-        log.info(jar.toString(true));
         return jar;
     }
 
@@ -119,7 +115,6 @@ public class EjbDeploymentTestCase {
         //ear.addAsManifestResource(EjbDeploymentTestCase.class.getPackage(), "application.xml", "application.xml");
         ear.addAsManifestResource(new StringAsset("Dependencies: deployment." + rarDeploymentName + "\n"), "MANIFEST.MF");
 
-        log.info(ear.toString(true));
         return ear;
     }
 
@@ -130,6 +125,7 @@ public class EjbDeploymentTestCase {
 
     /**
      * Test EAR
+     *
      * @throws Throwable Thrown if case of an error
      */
     @Test

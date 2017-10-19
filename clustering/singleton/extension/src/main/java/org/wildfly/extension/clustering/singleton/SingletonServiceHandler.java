@@ -22,24 +22,16 @@
 
 package org.wildfly.extension.clustering.singleton;
 
+import static org.wildfly.extension.clustering.singleton.SingletonResourceDefinition.Attribute.*;
+import static org.wildfly.extension.clustering.singleton.SingletonResourceDefinition.Capability.*;
+
 import org.jboss.as.clustering.controller.ResourceServiceHandler;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
-import org.jboss.as.controller.OperationStepHandler;
-import org.jboss.as.server.AbstractDeploymentChainStep;
-import org.jboss.as.server.DeploymentProcessorTarget;
-import org.jboss.as.server.deployment.Phase;
-import org.jboss.as.server.deployment.jbossallxml.JBossAllXmlParserRegisteringProcessor;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceName;
 import org.wildfly.clustering.service.AliasServiceBuilder;
 import org.wildfly.clustering.singleton.SingletonPolicy;
-import org.wildfly.extension.clustering.singleton.SingletonPolicyResourceDefinition.Capability;
-import org.wildfly.extension.clustering.singleton.deployment.SingletonDeploymentDependencyProcessor;
-import org.wildfly.extension.clustering.singleton.deployment.SingletonDeploymentParsingProcessor;
-import org.wildfly.extension.clustering.singleton.deployment.SingletonDeploymentProcessor;
-import org.wildfly.extension.clustering.singleton.deployment.SingletonDeploymentSchema;
-import org.wildfly.extension.clustering.singleton.deployment.SingletonDeploymentXMLReader;
 
 /**
  * @author Paul Ferraro
@@ -49,27 +41,14 @@ public class SingletonServiceHandler implements ResourceServiceHandler {
     @Override
     public void installServices(OperationContext context, ModelNode model) throws OperationFailedException {
 
-        OperationStepHandler step = new AbstractDeploymentChainStep() {
-            @Override
-            protected void execute(DeploymentProcessorTarget target) {
-                for (SingletonDeploymentSchema schema : SingletonDeploymentSchema.values()) {
-                    target.addDeploymentProcessor(SingletonExtension.SUBSYSTEM_NAME, Phase.STRUCTURE, Phase.STRUCTURE_REGISTER_JBOSS_ALL_SINGLETON_DEPLOYMENT, new JBossAllXmlParserRegisteringProcessor<>(schema.getRoot(), SingletonDeploymentDependencyProcessor.CONFIGURATION_KEY, new SingletonDeploymentXMLReader(schema)));
-                }
-                target.addDeploymentProcessor(SingletonExtension.SUBSYSTEM_NAME, Phase.PARSE, Phase.PARSE_SINGLETON_DEPLOYMENT, new SingletonDeploymentParsingProcessor());
-                target.addDeploymentProcessor(SingletonExtension.SUBSYSTEM_NAME, Phase.DEPENDENCIES, Phase.DEPENDENCIES_SINGLETON_DEPLOYMENT, new SingletonDeploymentDependencyProcessor());
-                target.addDeploymentProcessor(SingletonExtension.SUBSYSTEM_NAME, Phase.CONFIGURE_MODULE, Phase.CONFIGURE_SINGLETON_DEPLOYMENT, new SingletonDeploymentProcessor());
-            }
-        };
-        context.addStep(step, OperationContext.Stage.RUNTIME);
-
-        String defaultPolicy = SingletonResourceDefinition.Attribute.DEFAULT.getDefinition().resolveModelAttribute(context, model).asString();
-        ServiceName serviceName = Capability.POLICY.getDefinition().getCapabilityServiceName();
-        ServiceName targetServiceName = Capability.POLICY.getDefinition().getCapabilityServiceName(defaultPolicy);
+        String defaultPolicy = DEFAULT.resolveModelAttribute(context, model).asString();
+        ServiceName serviceName = DEFAULT_POLICY.getServiceName(context.getCurrentAddress());
+        ServiceName targetServiceName = SingletonServiceNameFactory.SINGLETON_POLICY.getServiceName(context, defaultPolicy);
         new AliasServiceBuilder<>(serviceName, targetServiceName, SingletonPolicy.class).build(context.getServiceTarget()).install();
     }
 
     @Override
     public void removeServices(OperationContext context, ModelNode model) {
-        context.removeService(Capability.POLICY.getDefinition().getCapabilityServiceName());
+        context.removeService(DEFAULT_POLICY.getServiceName(context.getCurrentAddress()));
     }
 }

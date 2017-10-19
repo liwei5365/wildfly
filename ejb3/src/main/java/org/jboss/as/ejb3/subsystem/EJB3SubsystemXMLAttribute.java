@@ -31,6 +31,7 @@ import java.util.Map;
 public enum EJB3SubsystemXMLAttribute {
     UNKNOWN(null),
 
+    ALIAS("alias"),
     ALIASES("aliases"),
     ALLOW_EXECUTION("allow-execution"),
 
@@ -87,6 +88,7 @@ public enum EJB3SubsystemXMLAttribute {
     RESOURCE_ADAPTER_NAME("resource-adapter-name"),
 
     @Deprecated SESSIONS_PATH("sessions-path"),
+    STATIC_URLS("static-urls"),
     @Deprecated SUBDIRECTORY_COUNT("subdirectory-count"),
 
     THREAD_POOL_NAME("thread-pool-name"),
@@ -97,6 +99,17 @@ public enum EJB3SubsystemXMLAttribute {
     VALUE("value"),
 
     ACTIVE("active"),
+
+    EXECUTE_IN_WORKER("execute-in-worker"),
+
+    // Elytron integration
+    OUTFLOW_SECURITY_DOMAINS("outflow-security-domains"),
+    SECURITY_DOMAIN("security-domain"),
+    ENABLE_JACC("enable-jacc"),
+    URI("uri"),
+    APP_NAME("app-name"),
+    MODULE_NAME("module-name"),
+    DISTINCT_NAME("distinct-name")
     ;
 
     private final String name;

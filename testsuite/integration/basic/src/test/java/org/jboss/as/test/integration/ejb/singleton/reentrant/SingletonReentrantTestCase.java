@@ -22,24 +22,25 @@
 
 package org.jboss.as.test.integration.ejb.singleton.reentrant;
 
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
+
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
 import javax.ejb.IllegalLoopbackException;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
-import org.junit.Assert;
+
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -50,9 +51,8 @@ import org.junit.runner.RunWith;
  */
 @RunWith(Arquillian.class)
 public class SingletonReentrantTestCase {
-    private static final Logger log = Logger.getLogger(SingletonReentrantTestCase.class);
     private static final String ARCHIVE_NAME = "reentrant-test";
-    private static final int WAITING_S = 5; 
+    private static final int WAITING_S = 5;
 
     @ArquillianResource
     private InitialContext ctx;
@@ -61,7 +61,8 @@ public class SingletonReentrantTestCase {
     public static Archive<?> deploy() {
         JavaArchive jar = ShrinkWrap.create(JavaArchive.class, ARCHIVE_NAME + ".jar");
         jar.addPackage(SingletonReentrantTestCase.class.getPackage());
-        log.info(jar.toString(true));
+        // Needed for ThreadPoolExecutor.shutdown()
+        jar.addAsManifestResource(createPermissionsXmlAsset(new RuntimePermission("modifyThread")), "permissions.xml");
         return jar;
     }
 
@@ -82,15 +83,15 @@ public class SingletonReentrantTestCase {
         letsWait.await(WAITING_S, TimeUnit.SECONDS); //first thread has to be first in singleton method
         letsWait = new CountDownLatch(1);
         Future<?> otherOne = pool2.submit(new SingletonCallableWrite(letsWait, null));
-                
+
         // first one could proceed - other one has to wait for end of work of first one
         waitForOtherOne.countDown();
-        Assert.assertEquals(new Integer(1), (Integer) firstOne.get(WAITING_S, TimeUnit.SECONDS));
-        Assert.assertEquals(new Integer(2), (Integer) otherOne.get(WAITING_S, TimeUnit.SECONDS));
+        Assert.assertEquals(new Integer(1), firstOne.get(WAITING_S, TimeUnit.SECONDS));
+        Assert.assertEquals(new Integer(2), otherOne.get(WAITING_S, TimeUnit.SECONDS));
         pool.shutdown();
         pool2.shutdown();
     }
-    
+
     @Test
     public void testReadCall() throws Exception {
         final SingletonBean singleton = lookup(SingletonBean.class.getSimpleName(), SingletonBean.class);
@@ -102,39 +103,40 @@ public class SingletonReentrantTestCase {
 
         Future<?> firstOne = pool.submit(new SingletonCallableRead(oneWaiting));
         Future<?> otherOne = pool2.submit(new SingletonCallableRead(twoWaiting));
-                
+
         // first one could proceed - other one has to wait for end of work of first one
         oneWaiting.countDown();
-        Assert.assertEquals(new Integer(1), (Integer) firstOne.get(WAITING_S, TimeUnit.SECONDS));
+        Assert.assertEquals(new Integer(1), firstOne.get(WAITING_S, TimeUnit.SECONDS));
         twoWaiting.countDown();
-        Assert.assertEquals(new Integer(2), (Integer) otherOne.get(WAITING_S, TimeUnit.SECONDS));
-               
-        // Expecting exception - calling reentrant write method with read lock        
+        Assert.assertEquals(new Integer(2), otherOne.get(WAITING_S, TimeUnit.SECONDS));
+
+        // Expecting exception - calling reentrant write method with read lock
         try {
             firstOne = pool.submit(new SingletonCallableRead(null));
             firstOne.get();
             Assert.fail("Supposing " + IllegalLoopbackException.class.getName());
-        } catch(IllegalLoopbackException ile) {
+        } catch (IllegalLoopbackException ile) {
             // OK - supposed
-        } catch(Exception e) {
-            if(!hasCause(e, IllegalLoopbackException.class)) {
+        } catch (Exception e) {
+            if (!hasCause(e, IllegalLoopbackException.class)) {
                 Assert.fail("Supposed caused exception is " + IllegalLoopbackException.class.getName());
             }
         }
-       
+
         pool.shutdown();
         pool2.shutdown();
     }
-     
-    
+
+
     private final class SingletonCallableWrite implements Callable<Integer> {
         private CountDownLatch latch;
         private CountDownLatch downMe;
-        public SingletonCallableWrite(CountDownLatch downMe, CountDownLatch latch) {
+
+        SingletonCallableWrite(CountDownLatch downMe, CountDownLatch latch) {
             this.latch = latch;
             this.downMe = downMe;
         }
-        
+
         @Override
         public Integer call() {
             try {
@@ -145,18 +147,19 @@ public class SingletonReentrantTestCase {
             }
         }
     }
-    
+
     private final class SingletonCallableRead implements Callable<Integer> {
         private CountDownLatch latch;
-        public SingletonCallableRead(CountDownLatch latch) {
+
+        SingletonCallableRead(CountDownLatch latch) {
             this.latch = latch;
         }
-        
+
         @Override
         public Integer call() {
             try {
                 final SingletonBean singleton = lookup(SingletonBean.class.getSimpleName(), SingletonBean.class);
-                if(latch != null) {
+                if (latch != null) {
                     return singleton.methodWithReadLock(latch);
                 } else {
                     return singleton.methodWithReadLockException();
@@ -166,15 +169,15 @@ public class SingletonReentrantTestCase {
             }
         }
     }
-    
+
     private boolean hasCause(Throwable causeException, Class<? extends Throwable> searchedException) {
         Throwable currentException = causeException;
-        do{
-            if(currentException.getClass() == searchedException) {
+        do {
+            if (currentException.getClass() == searchedException) {
                 return true;
             }
             currentException = currentException.getCause();
-        } while((currentException != null));
+        } while ((currentException != null));
         return false;
     }
 }

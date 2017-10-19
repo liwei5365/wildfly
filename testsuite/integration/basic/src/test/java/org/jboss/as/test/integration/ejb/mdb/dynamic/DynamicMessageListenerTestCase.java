@@ -48,7 +48,6 @@ import java.util.PropertyPermission;
 
 import static org.jboss.as.test.integration.ejb.mdb.dynamic.impl.TtyCodes.TTY_Bright;
 import static org.jboss.as.test.integration.ejb.mdb.dynamic.impl.TtyCodes.TTY_Reset;
-import org.jboss.as.test.integration.security.common.Utils;
 import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.junit.Assert.assertEquals;
@@ -83,12 +82,8 @@ public class DynamicMessageListenerTestCase {
         ear.addAsManifestResource(createPermissionsXmlAsset(
                 // Cmd (TelnetServer package) uses PropertyEditorManager#registerEditor during static initialization
                 new PropertyPermission("*", "read,write"),
-                // TelnetResourceAdapter#endpointActivation instantiates new end point using reflection
-                new RuntimePermission("accessDeclaredMembers"),
-                new RuntimePermission("defineClassInPackage." + MyMdb.class.getPackage().getName()),
-                new RuntimePermission("getClassLoader"),
                 // TelnetServer binds socket and accepts connections
-                new SocketPermission(Utils.getDefaultHost(true), "accept,listen,resolve")),
+                new SocketPermission("*", "accept,listen")),
                 "permissions.xml");
         return ear;
     }

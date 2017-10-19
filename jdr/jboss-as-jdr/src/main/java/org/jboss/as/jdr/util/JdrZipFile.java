@@ -135,10 +135,37 @@ public class JdrZipFile {
      * @throws Exception
      */
     public void add(String content, String path) throws Exception {
-        String name = "sos_strings/as7/" + path;
-        this.add(new ByteArrayInputStream(content.getBytes()), name);
+        StringBuilder name = new StringBuilder("sos_strings/");
+
+        name.append(this.env.getProductName().replace(" ", "_").toLowerCase());
+        name.append("-");
+        name.append(this.env.getProductVersion().split("\\.")[0]);
+        name.append("/");
+        name.append(path);
+
+        this.add(new ByteArrayInputStream(content.getBytes()), name.toString());
     }
 
+    /**
+     * Adds content to the zipfile at path
+     *
+     * path is prepended with the directory reserved for generated text files in JDR
+     *
+     * @param stream
+     * @param path
+     * @throws Exception
+     */
+    public void addAsString(InputStream stream, String path) throws Exception {
+        StringBuilder name = new StringBuilder("sos_strings/");
+
+        name.append(this.env.getProductName().replace(" ", "_").toLowerCase());
+        name.append("-");
+        name.append(this.env.getProductVersion().split("\\.")[0]);
+        name.append("/");
+        name.append(path);
+
+        this.add(stream, name.toString());
+    }
 
     /**
      * Adds content to the zipfile in a file named logName

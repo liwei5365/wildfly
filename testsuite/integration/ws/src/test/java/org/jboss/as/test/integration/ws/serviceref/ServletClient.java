@@ -29,10 +29,10 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.xml.ws.Service;
 import javax.xml.ws.WebServiceRef;
+
 import org.jboss.logging.Logger;
 
 /**
- *
  * @author <a href="mailto:rsvoboda@redhat.com">Rostislav Svoboda</a>
  */
 public class ServletClient extends HttpServlet {
@@ -41,7 +41,7 @@ public class ServletClient extends HttpServlet {
 
     @WebServiceRef(value = EndpointService.class, mappedName = "jbossws-client/service/TestService", wsdlLocation = "WEB-INF/wsdl/TestService.wsdl")
     EndpointInterface endpoint1;
-    
+
     EndpointInterface _endpoint2;
 
     @WebServiceRef(value = EndpointService.class, mappedName = "jbossws-client/service/TestService", wsdlLocation = "WEB-INF/wsdl/TestService.wsdl")
@@ -98,15 +98,15 @@ public class ServletClient extends HttpServlet {
 
         try {
             if (typeStr.equals("echo1")) {
-                log.info("Echo1: " + echo1(echoStr));
+                log.trace("Echo1: " + echo1(echoStr));
             } else if (typeStr.equals("echo2")) {
-                log.info("Echo2: " + echo2(echoStr));
+                log.trace("Echo2: " + echo2(echoStr));
             } else if (typeStr.equals("echo3")) {
-                log.info("Echo3: " + echo3(echoStr));
+                log.trace("Echo3: " + echo3(echoStr));
             } else if (typeStr.equals("echo4")) {
-                log.info("Echo4: " + echo4(echoStr));
+                log.trace("Echo4: " + echo4(echoStr));
             } else if (typeStr.equals("echo5")) {
-                log.info("Echo5: " + echo5(echoStr));
+                log.trace("Echo5: " + echo5(echoStr));
             }
         } catch (Exception ex) {
             resp.getWriter().println(ex.toString());

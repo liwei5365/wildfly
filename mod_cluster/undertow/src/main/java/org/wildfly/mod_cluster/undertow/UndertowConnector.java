@@ -25,16 +25,16 @@ package org.wildfly.mod_cluster.undertow;
 import java.net.InetAddress;
 
 import org.jboss.modcluster.container.Connector;
-import org.wildfly.extension.undertow.ListenerService;
 import org.wildfly.extension.undertow.AjpListenerService;
 import org.wildfly.extension.undertow.HttpListenerService;
+import org.wildfly.extension.undertow.UndertowListener;
 import org.wildfly.mod_cluster.undertow.metric.BytesReceivedStreamSourceConduit;
 import org.wildfly.mod_cluster.undertow.metric.BytesSentStreamSinkConduit;
 import org.wildfly.mod_cluster.undertow.metric.RequestCountHttpHandler;
 import org.wildfly.mod_cluster.undertow.metric.RunningRequestsHttpHandler;
 
 /**
- * Adapts {@link org.wildfly.extension.undertow.ListenerService} to a {@link Connector}.
+ * Adapts {@link UndertowListener} to a {@link Connector}.
  *
  * @author Radoslav Husar
  * @version Aug 2013
@@ -42,9 +42,10 @@ import org.wildfly.mod_cluster.undertow.metric.RunningRequestsHttpHandler;
  */
 public class UndertowConnector implements Connector {
 
-    private final ListenerService<?> listener;
+    private final UndertowListener listener;
+    private InetAddress address;
 
-    public UndertowConnector(ListenerService<?> listener) {
+    public UndertowConnector(UndertowListener listener) {
         this.listener = listener;
     }
 
@@ -69,22 +70,22 @@ public class UndertowConnector implements Connector {
 
     @Override
     public InetAddress getAddress() {
-        return this.listener.getBinding().getValue().getAddress();
+        return address == null ? this.listener.getSocketBinding().getAddress() : address;
     }
 
     @Override
     public void setAddress(InetAddress address) {
-        // Do nothing
+        this.address = address;
     }
 
     @Override
     public int getPort() {
-        return this.listener.getBinding().getValue().getAbsolutePort();
+        return this.listener.getSocketBinding().getAbsolutePort();
     }
 
     @Override
     public boolean isAvailable() {
-        return !this.listener.getWorker().getValue().isShutdown();
+        return !this.listener.isShutdown();
     }
 
     /**

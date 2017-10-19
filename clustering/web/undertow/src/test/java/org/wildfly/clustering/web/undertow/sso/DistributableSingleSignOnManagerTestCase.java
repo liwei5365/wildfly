@@ -22,30 +22,37 @@
 
 package org.wildfly.clustering.web.undertow.sso;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.same;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.when;
 
 import javax.servlet.http.HttpServletRequest;
 
 import io.undertow.security.api.AuthenticatedSessionManager.AuthenticatedSession;
 import io.undertow.security.idm.Account;
 import io.undertow.security.impl.SingleSignOn;
-
+import io.undertow.security.impl.SingleSignOnManager;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.wildfly.clustering.ee.Batch;
 import org.wildfly.clustering.ee.Batcher;
 import org.wildfly.clustering.web.sso.SSO;
 import org.wildfly.clustering.web.sso.SSOManager;
-import org.wildfly.extension.undertow.security.sso.SingleSignOnManager;
 
 /**
  * Unit test for {@link DistributableSingleSignOnManager}
+ *
  * @author Paul Ferraro
  */
 public class DistributableSingleSignOnManagerTestCase {
 
-    private final SSOManager<AuthenticatedSession, String, Void, Batch> manager = mock(SSOManager.class);
+    private final SSOManager<AuthenticatedSession, String, String, Void, Batch> manager = mock(SSOManager.class);
     private final SessionManagerRegistry registry = mock(SessionManagerRegistry.class);
 
     private final SingleSignOnManager subject = new DistributableSingleSignOnManager(this.manager, this.registry);
@@ -57,14 +64,13 @@ public class DistributableSingleSignOnManagerTestCase {
         Batch batch = mock(Batch.class);
         Account account = mock(Account.class);
         String mechanism = HttpServletRequest.BASIC_AUTH;
-        SSO<AuthenticatedSession, String, Void> sso = mock(SSO.class);
+        SSO<AuthenticatedSession, String, String, Void> sso = mock(SSO.class);
         ArgumentCaptor<AuthenticatedSession> authenticationCaptor = ArgumentCaptor.forClass(AuthenticatedSession.class);
 
         when(this.manager.createIdentifier()).thenReturn(id);
         when(this.manager.getBatcher()).thenReturn(batcher);
         when(batcher.createBatch()).thenReturn(batch);
         when(this.manager.createSSO(same(id), authenticationCaptor.capture())).thenReturn(sso);
-        when(batch.isActive()).thenReturn(true);
 
         SingleSignOn result = this.subject.createSingleSignOn(account, mechanism);
 
@@ -79,7 +85,7 @@ public class DistributableSingleSignOnManagerTestCase {
     }
 
     @Test
-    public void findSingleSignOn() {
+    public void findSingleSignOnNotExists() {
         String id = "sso";
         Batcher<Batch> batcher = mock(Batcher.class);
         Batch batch = mock(Batch.class);
@@ -87,23 +93,38 @@ public class DistributableSingleSignOnManagerTestCase {
         when(this.manager.getBatcher()).thenReturn(batcher);
         when(batcher.createBatch()).thenReturn(batch);
         when(this.manager.findSSO(id)).thenReturn(null);
-        when(batch.isActive()).thenReturn(false);
 
         SingleSignOn result = this.subject.findSingleSignOn(id);
 
         assertNull(result);
 
-        verify(batch).discard();
+        verify(batch).close();
         verify(batcher, never()).suspendBatch();
+    }
 
-        reset(batch);
+    @Test
+    public void findSingleSignOnInvalidCharacters() {
+        String id = "sso+";
 
-        SSO<AuthenticatedSession, String, Void> sso = mock(SSO.class);
+        SingleSignOn result = this.subject.findSingleSignOn(id);
 
+        assertNull(result);
+
+        verifyZeroInteractions(this.manager);
+    }
+
+    @Test
+    public void findSingleSignOn() {
+        String id = "sso";
+        Batcher<Batch> batcher = mock(Batcher.class);
+        Batch batch = mock(Batch.class);
+        SSO<AuthenticatedSession, String, String, Void> sso = mock(SSO.class);
+
+        when(this.manager.getBatcher()).thenReturn(batcher);
+        when(batcher.createBatch()).thenReturn(batch);
         when(this.manager.findSSO(id)).thenReturn(sso);
-        when(batch.isActive()).thenReturn(true);
 
-        result = this.subject.findSingleSignOn(id);
+        SingleSignOn result = this.subject.findSingleSignOn(id);
 
         assertNotNull(result);
 

@@ -25,12 +25,15 @@ import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.COR
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.RESULT;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.VAULT;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.VAULT_OPTIONS;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -54,7 +57,6 @@ import org.jboss.security.util.StringPropertyReplacer;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -62,13 +64,13 @@ import org.junit.runner.RunWith;
  * Tests for Security Vault external passwords, obtained from external command
  * or class. Each test case initialize a test vault with different password
  * type.
- * 
+ *
  * @author Filip Bogyai
  */
 @RunWith(Arquillian.class)
 @RunAsClient
 @ServerSetup({ExternalPasswordModuleSetupTask.class,
-    ExternalPasswordCommandsTestCase.ExternalVaultPasswordSetup.class})
+        ExternalPasswordCommandsTestCase.ExternalVaultPasswordSetup.class})
 public class ExternalPasswordCommandsTestCase {
 
     private static Logger LOGGER = Logger.getLogger(ExternalPasswordCommandsTestCase.class);
@@ -93,23 +95,19 @@ public class ExternalPasswordCommandsTestCase {
     public static final int ITER_COUNT = 47;
 
     private static final ExternalPasswordProvider passwordProvider = new ExternalPasswordProvider(System.getProperty("java.io.tmpdir")
-                    + File.separator + "tmp.counter");
+            + File.separator + "tmp.counter");
     public static final PathAddress VAULT_PATH = PathAddress.pathAddress().append(CORE_SERVICE, VAULT);
 
     /**
      * Test deployment used for checking if vaulted password can be loaded from
      * vault configured in server config.
-     * 
      */
     @Deployment(name = "vault")
     public static WebArchive appDeploymentCahce() {
-        LOGGER.info("start vault deployment");
-
         WebArchive war = ShrinkWrap.create(WebArchive.class, "vault" + ".war");
         war.addClass(CheckVaultedPassServlet.class);
         war.addAsManifestResource(Utils.getJBossDeploymentStructure("org.picketbox"), "jboss-deployment-structure.xml");
-        LOGGER.debug(war.toString(true));
-
+        war.addAsManifestResource(createPermissionsXmlAsset(new RuntimePermission("org.jboss.security.vault.SecurityVaultFactory.get")), "permissions.xml");
         return war;
     }
 
@@ -148,7 +146,6 @@ public class ExternalPasswordCommandsTestCase {
      * method return password.
      */
     @Test
-    @Ignore("BZ-1146006")    // fix for this should be in next PicketBox update
     public void testCustomModuleClassPassword() throws Exception {
 
         createVault("{CLASS@" + ExternalPasswordModuleSetupTask.getModuleName() + "}" + ExternalPassword.class.getName());
@@ -166,7 +163,6 @@ public class ExternalPasswordCommandsTestCase {
      * arguments, which will be used to construct the password.
      */
     @Test
-    @Ignore("BZ-1146006")    // fix for this should be in next PicketBox update
     public void testCustomModuleClassWithArguments() throws Exception {
 
         createVault("{CLASS@" + ExternalPasswordModuleSetupTask.getModuleName() + "}"
@@ -178,16 +174,16 @@ public class ExternalPasswordCommandsTestCase {
 
     }
 
-    
+
     /**
      * TestingTesting {CLASS[@module_name]}classname[:ctorargs]' option password
      * where the '[:ctorargs]' is an optional string delimited by the ':' from
-     * the classname that will be passed to the class constructor. The class     
+     * the classname that will be passed to the class constructor. The class
+     *
      * @TmpFilePassword constructor takes one argument with file, in which the password
      * is stored password.
      */
     @Test
-    @Ignore("BZ-1146006")    // fix for this should be in next PicketBox update
     public void testPicketboxClassPassword() throws Exception {
 
         File tmpPassword = new File(System.getProperty("java.io.tmpdir"), "tmp.password");
@@ -248,18 +244,15 @@ public class ExternalPasswordCommandsTestCase {
     }
 
     public void removeVault() throws Exception {
-
-        ModelNode op = new ModelNode();
-
-        op = Util.createRemoveOperation(VAULT_PATH);
+        ModelNode op = Util.createRemoveOperation(VAULT_PATH);
         Utils.applyUpdate(op, managementClient.getControllerClient());
     }
 
     /**
      * Creates runnable command for vault to retrieve password from external
      * source
-     * 
-     * @param option as command type EXT or CMD
+     *
+     * @param option    as command type EXT or CMD
      * @param delimiter to split argument from command
      * @return command to run a class which will return password
      */
@@ -268,10 +261,7 @@ public class ExternalPasswordCommandsTestCase {
         File java = new File(System.getProperty("java.home"), "/bin/java");
         File javaExe = new File(System.getProperty("java.home"), "/bin/java.exe");
         String jre;
-        if (java.exists())
-            jre = java.getAbsolutePath();
-        else
-            jre = javaExe.getAbsolutePath();
+        if (java.exists()) { jre = java.getAbsolutePath(); } else { jre = javaExe.getAbsolutePath(); }
         // Build the command to run this jre
         String cmd = jre + delimiter + "-cp" + delimiter
                 + ExternalPasswordProvider.class.getProtectionDomain().getCodeSource().getLocation().getPath() + delimiter
@@ -295,7 +285,7 @@ public class ExternalPasswordCommandsTestCase {
             ModelNode op = new ModelNode();
 
             // save original vault setting
-            LOGGER.info("Saving original vault setting");
+            LOGGER.trace("Saving original vault setting");
             op = Util.getReadAttributeOperation(VAULT_PATH, VAULT_OPTIONS);
             originalVault = (managementClient.getControllerClient().execute(new OperationBuilder(op).build())).get(RESULT);
 
@@ -306,7 +296,7 @@ public class ExternalPasswordCommandsTestCase {
             }
 
             // create new vault
-            LOGGER.info("Creating new vault");
+            LOGGER.trace("Creating new vault");
             clean();
             vaultHandler = new VaultHandler(KEYSTORE_URL, VAULT_PASSWORD, null, RESOURCE_LOCATION, 128, VAULT_ALIAS, SALT, ITER_COUNT);
 
@@ -317,7 +307,7 @@ public class ExternalPasswordCommandsTestCase {
             nonInteractiveSession.startVaultSession(VAULT_ALIAS);
 
             // create security attributes
-            LOGGER.info("Inserting attribute " + VAULT_ATTRIBUTE + " to vault");
+            LOGGER.trace("Inserting attribute " + VAULT_ATTRIBUTE + " to vault");
             nonInteractiveSession.addSecuredAttribute(VAULT_BLOCK, ATTRIBUTE_NAME, VAULT_ATTRIBUTE.toCharArray());
 
         }
@@ -334,7 +324,7 @@ public class ExternalPasswordCommandsTestCase {
                 op = Util.createAddOperation(VAULT_PATH);
                 ModelNode vaultOption = op.get(VAULT_OPTIONS);
                 while (it.hasNext()) {
-                    String param = (String) it.next();
+                    String param = it.next();
                     vaultOption.get(param).set(originalVault.get(param));
                 }
                 Utils.applyUpdate(op, managementClient.getControllerClient());
@@ -346,11 +336,11 @@ public class ExternalPasswordCommandsTestCase {
             passwordProvider.cleanup();
         }
 
-        private void clean() {
+        private void clean() throws IOException{
 
             File datFile = new File(VAULT_DAT_FILE);
             if (datFile.exists()) {
-                datFile.delete();
+                Files.delete(datFile.toPath());
             }
         }
     }

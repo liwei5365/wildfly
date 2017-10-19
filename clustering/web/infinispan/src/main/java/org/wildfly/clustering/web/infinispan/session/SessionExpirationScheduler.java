@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit;
 import org.jboss.threads.JBossThreadFactory;
 import org.wildfly.clustering.ee.Batch;
 import org.wildfly.clustering.ee.Batcher;
-import org.wildfly.clustering.ee.infinispan.Remover;
+import org.wildfly.clustering.ee.Remover;
 import org.wildfly.clustering.ee.infinispan.TransactionBatch;
 import org.wildfly.clustering.infinispan.spi.distribution.Locality;
 import org.wildfly.clustering.web.infinispan.logging.InfinispanWebLogger;
@@ -106,7 +106,12 @@ public class SessionExpirationScheduler implements Scheduler {
 
     @Override
     public void cancel(Locality locality) {
-        this.expirationFutures.keySet().stream().filter(sessionId -> !locality.isLocal(sessionId)).forEach(sessionId -> this.cancel(sessionId));
+        for (String sessionId : this.expirationFutures.keySet()) {
+            if (Thread.currentThread().isInterrupted()) break;
+            if (!locality.isLocal(sessionId)) {
+                this.cancel(sessionId);
+            }
+        }
     }
 
     @Override
@@ -128,27 +133,19 @@ public class SessionExpirationScheduler implements Scheduler {
     private class ExpirationTask implements Runnable {
         private final String id;
 
-        public ExpirationTask(String id) {
+        ExpirationTask(String id) {
             this.id = id;
         }
 
         @Override
         public void run() {
             InfinispanWebLogger.ROOT_LOGGER.tracef("Expiring session %s", this.id);
-            try {
-                Batch batch = SessionExpirationScheduler.this.batcher.createBatch();
-                boolean success = false;
+            try (Batch batch = SessionExpirationScheduler.this.batcher.createBatch()) {
                 try {
                     SessionExpirationScheduler.this.remover.remove(this.id);
-                    success = true;
                 } catch (Throwable e) {
                     InfinispanWebLogger.ROOT_LOGGER.failedToExpireSession(e, this.id);
-                } finally {
-                    if (success) {
-                        batch.close();
-                    } else {
-                        batch.discard();
-                    }
+                    batch.discard();
                 }
             } finally {
                 synchronized (this) {

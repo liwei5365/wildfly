@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -57,8 +57,8 @@ public class DeploymentServletDefinition extends SimpleResourceDefinition {
     static final SimpleAttributeDefinition MIN_REQUEST_TIME = new SimpleAttributeDefinitionBuilder("min-request-time", ModelType.LONG, true).setStorageRuntime().build();
     static final SimpleAttributeDefinition TOTAL_REQUEST_TIME = new SimpleAttributeDefinitionBuilder("total-request-time", ModelType.LONG, true).setStorageRuntime().build();
     static final SimpleAttributeDefinition REQUEST_COUNT = new SimpleAttributeDefinitionBuilder("request-count", ModelType.LONG, true).setStorageRuntime().build();
-    static final SimpleListAttributeDefinition SERVLET_MAPPINGS = new SimpleListAttributeDefinition.Builder("mappings", new SimpleAttributeDefinitionBuilder("mapping", ModelType.STRING).setAllowNull(true).build())
-            .setAllowNull(true)
+    static final SimpleListAttributeDefinition SERVLET_MAPPINGS = new SimpleListAttributeDefinition.Builder("mappings", new SimpleAttributeDefinitionBuilder("mapping", ModelType.STRING).setRequired(false).build())
+            .setRequired(false)
             .setStorageRuntime()
             .build();
 
@@ -121,30 +121,29 @@ public class DeploymentServletDefinition extends SimpleResourceDefinition {
             final String path = DeploymentDefinition.CONTEXT_ROOT.resolveModelAttribute(context, subModel).asString();
             final String server = DeploymentDefinition.SERVER.resolveModelAttribute(context, subModel).asString();
 
-            final ServiceController<?> controller = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, path));
-            final UndertowDeploymentService deploymentService = (UndertowDeploymentService) controller.getService();
-            final DeploymentInfo deploymentInfo = deploymentService.getDeploymentInfoInjectedValue().getValue();
-            final UndertowMetricsCollector collector = (UndertowMetricsCollector)deploymentInfo.getMetricsCollector();
             context.addStep(new OperationStepHandler() {
                 @Override
                 public void execute(final OperationContext context, final ModelNode operation) throws OperationFailedException {
-
-                    if (controller != null) {
-                        final String name = address.getLastElement().getValue();
-                        final ServletInfo servlet = deploymentInfo.getServlets().get(name);
-                        final ModelNode response = new ModelNode();
-                        MetricsHandler.MetricResult result = collector != null ? collector.getMetrics(name) : null;
-                        if (result == null) {
-                            response.set(0);
-                        } else {
-                            handle(response, name, result, servlet);
-                        }
-                        context.getResult().set(response);
+                    final ServiceController<?> deploymentServiceController = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, path));
+                    if (deploymentServiceController == null) {
+                        return;
                     }
-                    context.stepCompleted();
+                    final UndertowDeploymentService deploymentService = (UndertowDeploymentService) deploymentServiceController.getService();
+                    final DeploymentInfo deploymentInfo = deploymentService.getDeploymentInfoInjectedValue().getValue();
+                    final UndertowMetricsCollector collector = (UndertowMetricsCollector)deploymentInfo.getMetricsCollector();
+
+                    final String name = address.getLastElement().getValue();
+                    final ServletInfo servlet = deploymentInfo.getServlets().get(name);
+                    final ModelNode response = new ModelNode();
+                    MetricsHandler.MetricResult result = collector != null ? collector.getMetrics(name) : null;
+                    if (result == null) {
+                        response.set(0);
+                    } else {
+                        handle(response, name, result, servlet);
+                    }
+                    context.getResult().set(response);
                 }
             }, OperationContext.Stage.RUNTIME);
-            context.stepCompleted();
         }
     }
 

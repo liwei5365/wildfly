@@ -68,7 +68,7 @@ public class VaultInteractiveSession {
 
             String ic = console.readLine(SecurityLogger.ROOT_LOGGER.enterIterationCount() + " ");
             iterationCount = Integer.parseInt(ic);
-            vaultNISession = new VaultSession(keystoreURL, new String(keystorePasswd), encDir, salt, iterationCount);
+            vaultNISession = new VaultSession(keystoreURL, new String(keystorePasswd), encDir, salt, iterationCount, true);
 
             while (keystoreAlias == null || keystoreAlias.length() == 0) {
                 keystoreAlias = console.readLine(SecurityLogger.ROOT_LOGGER.enterKeyStoreAlias() + " ");
@@ -84,7 +84,8 @@ public class VaultInteractiveSession {
             VaultInteraction vaultInteraction = new VaultInteraction(vaultNISession);
             vaultInteraction.start();
         } catch (Exception e) {
-            System.out.println(SecurityLogger.ROOT_LOGGER.exceptionEncountered() + e.getLocalizedMessage());
+            System.out.println(SecurityLogger.ROOT_LOGGER.exceptionEncountered());
+            e.printStackTrace(System.err);
         }
     }
 

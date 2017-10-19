@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 
-<domain xmlns="urn:jboss:domain:4.0">
+<domain xmlns="urn:jboss:domain:5.0">
 
     <extensions>
         <?EXTENSIONS?>
@@ -24,18 +24,21 @@
     </management>
 
     <profiles>
-       <profile name="default">
-           <?SUBSYSTEMS socket-binding-group="standard-sockets"?>
-       </profile>
-       <profile name="ha">
-           <?SUBSYSTEMS socket-binding-group="ha-sockets"?>
-       </profile>
-       <profile name="full">
-           <?SUBSYSTEMS socket-binding-group="full-sockets"?>
-       </profile>
-       <profile name="full-ha">
-           <?SUBSYSTEMS socket-binding-group="full-ha-sockets"?>
-       </profile>
+        <profile name="default">
+            <?SUBSYSTEMS socket-binding-group="standard-sockets"?>
+        </profile>
+        <profile name="ha">
+            <?SUBSYSTEMS socket-binding-group="ha-sockets"?>
+        </profile>
+        <profile name="full">
+            <?SUBSYSTEMS socket-binding-group="full-sockets"?>
+        </profile>
+        <profile name="full-ha">
+            <?SUBSYSTEMS socket-binding-group="full-ha-sockets"?>
+        </profile>
+        <profile name="load-balancer">
+            <?SUBSYSTEMS socket-binding-group="load-balancer-sockets"?>
+        </profile>
     </profiles>
 
     <!--
@@ -68,6 +71,10 @@
             <!-- Needed for server groups using the 'full-ha' profile  -->
             <?SOCKET-BINDINGS?>
         </socket-binding-group>
+        <socket-binding-group name="load-balancer-sockets" default-interface="public">
+            <!-- Needed for server groups using the 'load-balancer' profile  -->
+            <?SOCKET-BINDINGS?>
+        </socket-binding-group>
     </socket-binding-groups>
 
     <server-groups>
@@ -84,5 +91,24 @@
             <socket-binding-group ref="full-ha-sockets"/>
         </server-group>
     </server-groups>
+
+    <host-excludes>
+        <host-exclude name="WildFly10.0">
+            <host-release id="WildFly10.0"/>
+            <excluded-extensions>
+                <extension module="org.wildfly.extension.core-management"/>
+                <extension module="org.wildfly.extension.discovery"/>
+                <extension module="org.wildfly.extension.elytron"/>
+            </excluded-extensions>
+        </host-exclude>
+        <host-exclude name="WildFly10.1">
+            <host-release id="WildFly10.1"/>
+            <excluded-extensions>
+                <extension module="org.wildfly.extension.core-management"/>
+                <extension module="org.wildfly.extension.discovery"/>
+                <extension module="org.wildfly.extension.elytron"/>
+            </excluded-extensions>
+        </host-exclude>
+    </host-excludes>
 
 </domain>

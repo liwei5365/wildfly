@@ -34,15 +34,18 @@ import org.mockito.ArgumentCaptor;
 import org.wildfly.clustering.dispatcher.Command;
 import org.wildfly.clustering.dispatcher.CommandDispatcher;
 import org.wildfly.clustering.dispatcher.CommandDispatcherFactory;
+import org.wildfly.clustering.ee.Batcher;
 import org.wildfly.clustering.ee.infinispan.Evictor;
+import org.wildfly.clustering.ee.infinispan.TransactionBatch;
 import org.wildfly.clustering.web.session.ImmutableSessionMetaData;
 
 /**
  * Unit test for {@link SessionEvictionScheduler}.
+ *
  * @author Paul Ferraro
  */
 public class SessionEvictionSchedulerTestCase {
-    @SuppressWarnings({ "rawtypes", "unchecked" })
+    @SuppressWarnings({"rawtypes", "unchecked"})
     @Test
     public void test() throws Exception {
         String name = "cache";
@@ -53,16 +56,18 @@ public class SessionEvictionSchedulerTestCase {
         CommandDispatcherFactory dispatcherFactory = mock(CommandDispatcherFactory.class);
         CommandDispatcher<SessionEvictionContext> dispatcher = mock(CommandDispatcher.class);
         Evictor<String> evictor = mock(Evictor.class);
+        Batcher<TransactionBatch> batcher = mock(Batcher.class);
+        TransactionBatch batch = mock(TransactionBatch.class);
         ArgumentCaptor<Command> capturedCommand = ArgumentCaptor.forClass(Command.class);
         ArgumentCaptor<SessionEvictionContext> capturedContext = ArgumentCaptor.forClass(SessionEvictionContext.class);
 
         when(dispatcherFactory.createCommandDispatcher(same(name), capturedContext.capture())).thenReturn(dispatcher);
 
-        try (Scheduler scheduler = new SessionEvictionScheduler(name, evictor, dispatcherFactory, 1)) {
+        try (Scheduler scheduler = new SessionEvictionScheduler(name, evictor, batcher, dispatcherFactory, 1)) {
             SessionEvictionContext context = capturedContext.getValue();
-            
+
             assertSame(scheduler, context);
-            
+
             scheduler.schedule(evictedSessionId, evictedSessionMetaData);
 
             verifyZeroInteractions(dispatcher);
@@ -70,10 +75,13 @@ public class SessionEvictionSchedulerTestCase {
             scheduler.schedule(activeSessionId, activeSessionMetaData);
 
             verify(dispatcher).submitOnCluster(capturedCommand.capture());
-            
+
+            when(batcher.createBatch()).thenReturn(batch);
+
             capturedCommand.getValue().execute(context);
-            
+
             verify(evictor).evict(evictedSessionId);
+            verify(batch).close();
             verify(evictor, never()).evict(activeSessionId);
         }
 

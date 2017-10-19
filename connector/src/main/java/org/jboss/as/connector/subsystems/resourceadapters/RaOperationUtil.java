@@ -21,6 +21,8 @@
  */
 package org.jboss.as.connector.subsystems.resourceadapters;
 
+import static org.jboss.as.connector._private.Capabilities.AUTHENTICATION_CONTEXT_CAPABILITY;
+import static org.jboss.as.connector._private.Capabilities.ELYTRON_SECURITY_DOMAIN_CAPABILITY;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.BACKGROUNDVALIDATION;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.BACKGROUNDVALIDATIONMILLIS;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.BLOCKING_TIMEOUT_WAIT_MILLIS;
@@ -32,6 +34,7 @@ import static org.jboss.as.connector.subsystems.common.pool.Constants.IDLETIMEOU
 import static org.jboss.as.connector.subsystems.common.pool.Constants.INITIAL_POOL_SIZE;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.MAX_POOL_SIZE;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.MIN_POOL_SIZE;
+import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_FAIR;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_FLUSH_STRATEGY;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_PREFILL;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_USE_STRICT_MIN;
@@ -40,10 +43,13 @@ import static org.jboss.as.connector.subsystems.common.pool.Constants.VALIDATE_O
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.ALLOCATION_RETRY;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.ALLOCATION_RETRY_WAIT_MILLIS;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.APPLICATION;
+import static org.jboss.as.connector.subsystems.resourceadapters.Constants.AUTHENTICATION_CONTEXT;
+import static org.jboss.as.connector.subsystems.resourceadapters.Constants.AUTHENTICATION_CONTEXT_AND_APPLICATION;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.BEANVALIDATION_GROUPS;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.BOOTSTRAP_CONTEXT;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.CLASS_NAME;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.CONNECTABLE;
+import static org.jboss.as.connector.subsystems.resourceadapters.Constants.ELYTRON_ENABLED;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.ENABLED;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.ENLISTMENT;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.ENLISTMENT_TRACE;
@@ -55,6 +61,8 @@ import static org.jboss.as.connector.subsystems.resourceadapters.Constants.NO_RE
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.PAD_XID;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.RECOVERLUGIN_CLASSNAME;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.RECOVERLUGIN_PROPERTIES;
+import static org.jboss.as.connector.subsystems.resourceadapters.Constants.RECOVERY_AUTHENTICATION_CONTEXT;
+import static org.jboss.as.connector.subsystems.resourceadapters.Constants.RECOVERY_ELYTRON_ENABLED;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.RECOVERY_PASSWORD;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.RECOVERY_SECURITY_DOMAIN;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.RECOVERY_USERNAME;
@@ -66,6 +74,7 @@ import static org.jboss.as.connector.subsystems.resourceadapters.Constants.TRACK
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.TRANSACTION_SUPPORT;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.USE_CCM;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.USE_JAVA_CONTEXT;
+import static org.jboss.as.connector.subsystems.resourceadapters.Constants.WM_ELYTRON_SECURITY_DOMAIN;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.WM_SECURITY;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.WM_SECURITY_DEFAULT_GROUPS;
 import static org.jboss.as.connector.subsystems.resourceadapters.Constants.WM_SECURITY_DEFAULT_PRINCIPAL;
@@ -92,6 +101,11 @@ import org.jboss.as.connector.deployers.ra.processors.ParsedRaDeploymentProcesso
 import org.jboss.as.connector.deployers.ra.processors.RaDeploymentParsingProcessor;
 import org.jboss.as.connector.deployers.ra.processors.RaNativeProcessor;
 import org.jboss.as.connector.logging.ConnectorLogger;
+import org.jboss.as.connector.metadata.api.common.Credential;
+import org.jboss.as.connector.metadata.api.common.SecurityMetadata;
+import org.jboss.as.connector.metadata.common.CredentialImpl;
+import org.jboss.as.connector.metadata.common.SecurityImpl;
+import org.jboss.as.connector.metadata.resourceadapter.WorkManagerSecurityImpl;
 import org.jboss.as.connector.metadata.xmldescriptors.ConnectorXmlDescriptor;
 import org.jboss.as.connector.metadata.xmldescriptors.IronJacamarXmlDescriptor;
 import org.jboss.as.connector.services.resourceadapters.deployment.InactiveResourceAdapterDeploymentService;
@@ -110,7 +124,6 @@ import org.jboss.as.server.deployment.module.ResourceRoot;
 import org.jboss.dmr.ModelNode;
 import org.jboss.jandex.Index;
 import org.jboss.jca.common.api.metadata.common.Capacity;
-import org.jboss.jca.common.api.metadata.common.Credential;
 import org.jboss.jca.common.api.metadata.common.Extension;
 import org.jboss.jca.common.api.metadata.common.FlushStrategy;
 import org.jboss.jca.common.api.metadata.common.Pool;
@@ -125,14 +138,11 @@ import org.jboss.jca.common.api.metadata.resourceadapter.ConnectionDefinition;
 import org.jboss.jca.common.api.metadata.resourceadapter.WorkManager;
 import org.jboss.jca.common.api.metadata.resourceadapter.WorkManagerSecurity;
 import org.jboss.jca.common.api.validator.ValidateException;
-import org.jboss.jca.common.metadata.common.CredentialImpl;
 import org.jboss.jca.common.metadata.common.PoolImpl;
-import org.jboss.jca.common.metadata.common.SecurityImpl;
 import org.jboss.jca.common.metadata.common.TimeOutImpl;
 import org.jboss.jca.common.metadata.common.ValidationImpl;
 import org.jboss.jca.common.metadata.common.XaPoolImpl;
 import org.jboss.jca.common.metadata.resourceadapter.WorkManagerImpl;
-import org.jboss.jca.common.metadata.resourceadapter.WorkManagerSecurityImpl;
 import org.jboss.modules.Module;
 import org.jboss.modules.ModuleIdentifier;
 import org.jboss.modules.ModuleLoadException;
@@ -144,6 +154,10 @@ import org.jboss.msc.service.ServiceRegistry;
 import org.jboss.msc.service.ServiceTarget;
 import org.jboss.vfs.VFS;
 import org.jboss.vfs.VirtualFile;
+import org.wildfly.common.function.ExceptionSupplier;
+import org.wildfly.security.auth.client.AuthenticationContext;
+import org.wildfly.security.auth.server.SecurityDomain;
+import org.wildfly.security.credential.source.CredentialSource;
 
 
 public class RaOperationUtil {
@@ -163,12 +177,18 @@ public class RaOperationUtil {
 
         if (wmSecurity) {
             final boolean mappingRequired = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, operation, WM_SECURITY_MAPPING_REQUIRED);
-            final String domain = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, operation, WM_SECURITY_DOMAIN);
+            String domain;
+            final String elytronDomain = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, operation, WM_ELYTRON_SECURITY_DOMAIN);
+            if (elytronDomain != null) {
+                domain = elytronDomain;
+            } else {
+                domain = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, operation, WM_SECURITY_DOMAIN);
+            }
             final String defaultPrincipal = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, operation, WM_SECURITY_DEFAULT_PRINCIPAL);
             final List<String> defaultGroups = WM_SECURITY_DEFAULT_GROUPS.unwrap(context, operation);
             final Map<String, String> groups = ModelNodeUtil.extractMap(operation, WM_SECURITY_MAPPING_GROUPS, WM_SECURITY_MAPPING_FROM, WM_SECURITY_MAPPING_TO);
             final Map<String, String> users = ModelNodeUtil.extractMap(operation, WM_SECURITY_MAPPING_USERS, WM_SECURITY_MAPPING_FROM, WM_SECURITY_MAPPING_TO);
-            workManager = new WorkManagerImpl(new WorkManagerSecurityImpl(mappingRequired, domain, defaultPrincipal, defaultGroups, users, groups));
+            workManager = new WorkManagerImpl(new WorkManagerSecurityImpl(mappingRequired, domain, elytronDomain != null, defaultPrincipal, defaultGroups, users, groups));
         }
 
         ModifiableResourceAdapter ra;
@@ -180,9 +200,8 @@ public class RaOperationUtil {
     }
 
 
-
     public static ModifiableConnDef buildConnectionDefinitionObject(final OperationContext context, final ModelNode connDefModel, final String poolName,
-                                                                    final boolean isXa) throws OperationFailedException, ValidateException {
+                                                                    final boolean isXa, ExceptionSupplier<CredentialSource, Exception> recoveryCredentialSourceSupplier) throws OperationFailedException, ValidateException {
         Map<String, String> configProperties = new HashMap<String, String>(0);
         String className = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, CLASS_NAME);
         String jndiName = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, JNDINAME);
@@ -202,6 +221,7 @@ public class RaOperationUtil {
         int minPoolSize = ModelNodeUtil.getIntIfSetOrGetDefault(context, connDefModel, MIN_POOL_SIZE);
         Integer initialPoolSize = ModelNodeUtil.getIntIfSetOrGetDefault(context, connDefModel, INITIAL_POOL_SIZE);
         boolean prefill = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, POOL_PREFILL);
+        boolean fair = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, POOL_FAIR);
         boolean useStrictMin = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, POOL_USE_STRICT_MIN);
         String flushStrategyString = POOL_FLUSH_STRATEGY.resolveModelAttribute(context, connDefModel).asString();
         final FlushStrategy flushStrategy = FlushStrategy.forName(flushStrategyString);
@@ -228,17 +248,23 @@ public class RaOperationUtil {
 
         Pool pool;
         if (isXa) {
-            pool = new XaPoolImpl(minPoolSize, initialPoolSize, maxPoolSize, prefill, useStrictMin, flushStrategy, capacity, isSameRM, interlivng, padXid, wrapXaResource, noTxSeparatePool);
+            pool = new XaPoolImpl(minPoolSize, initialPoolSize, maxPoolSize, prefill, useStrictMin, flushStrategy, capacity, fair, isSameRM, interlivng, padXid, wrapXaResource, noTxSeparatePool);
         } else {
-            pool = new PoolImpl(minPoolSize, initialPoolSize, maxPoolSize, prefill, useStrictMin, flushStrategy, capacity);
+            pool = new PoolImpl(minPoolSize, initialPoolSize, maxPoolSize, prefill, useStrictMin, flushStrategy, capacity, fair);
         }
         String securityDomain = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, SECURITY_DOMAIN);
         String securityDomainAndApplication = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, SECURITY_DOMAIN_AND_APPLICATION);
+        boolean elytronEnabled = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, ELYTRON_ENABLED);
+        String authenticationContext = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, AUTHENTICATION_CONTEXT);
+        String authenticationContextAndApplication = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, AUTHENTICATION_CONTEXT_AND_APPLICATION);
+
 
         boolean application = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, APPLICATION);
         Security security = null;
         if (securityDomain != null || securityDomainAndApplication != null || application) {
-            security = new SecurityImpl(securityDomain, securityDomainAndApplication, application);
+            security = new SecurityImpl(elytronEnabled? authenticationContext: securityDomain,
+                    elytronEnabled? authenticationContextAndApplication: securityDomainAndApplication, application,
+                    elytronEnabled);
         }
         Long backgroundValidationMillis = ModelNodeUtil.getLongIfSetOrGetDefault(context, connDefModel, BACKGROUNDVALIDATIONMILLIS);
         Boolean backgroundValidation = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, BACKGROUNDVALIDATION);
@@ -248,16 +274,20 @@ public class RaOperationUtil {
 
         final String recoveryUsername = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, RECOVERY_USERNAME);
         final String recoveryPassword =  ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, RECOVERY_PASSWORD);
+
         final String recoverySecurityDomain = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, RECOVERY_SECURITY_DOMAIN);
+        final boolean recoveryElytronEnabled = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, RECOVERY_ELYTRON_ENABLED);
+        final String recoveryAuthenticationContext = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, RECOVERY_AUTHENTICATION_CONTEXT);
         Boolean noRecovery = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, NO_RECOVERY);
 
 
         Recovery recovery = null;
-        if ((recoveryUsername != null && recoveryPassword != null) || recoverySecurityDomain != null || noRecovery != null) {
+        if ((recoveryUsername != null && (recoveryPassword != null || recoveryCredentialSourceSupplier != null)) || recoverySecurityDomain != null || noRecovery != null) {
             Credential credential = null;
 
-            if ((recoveryUsername != null && recoveryPassword != null) || recoverySecurityDomain != null)
-               credential = new CredentialImpl(recoveryUsername, recoveryPassword, recoverySecurityDomain);
+            if ((recoveryUsername != null && (recoveryPassword != null || recoveryCredentialSourceSupplier != null)) || recoverySecurityDomain != null)
+                credential = new CredentialImpl(recoveryUsername, recoveryPassword,
+                        recoveryElytronEnabled ? recoveryAuthenticationContext : recoverySecurityDomain, recoveryElytronEnabled, recoveryCredentialSourceSupplier);
 
             Extension recoverPlugin = ModelNodeUtil.extractExtension(context, connDefModel, RECOVERLUGIN_CLASSNAME, RECOVERLUGIN_PROPERTIES);
 
@@ -358,7 +388,7 @@ public class RaOperationUtil {
         final ServiceController<?> RaxmlController = registry.getService(ServiceName.of(ConnectorServices.RA_SERVICE, raName));
         Activation raxml = (Activation) RaxmlController.getValue();
         RaServicesFactory.createDeploymentService(inactive.getRegistration(), inactive.getConnectorXmlDescriptor(), inactive.getModule(), inactive.getServiceTarget(),
-                archiveName, inactive.getDeploymentUnitServiceName(), inactive.getDeployment(), raxml, inactive.getResource());
+                archiveName, inactive.getDeploymentUnitServiceName(), inactive.getDeployment(), raxml, inactive.getResource(), registry);
     }
 
     public static ServiceName installRaServices(OperationContext context, String name, ModifiableResourceAdapter resourceAdapter, final List<ServiceController<?>> newControllers) {
@@ -383,23 +413,42 @@ public class RaOperationUtil {
             for (ConnectionDefinition cd : resourceAdapter.getConnectionDefinitions()) {
                 Security security = cd.getSecurity();
                 if (security != null) {
+                    final boolean elytronEnabled = (security instanceof SecurityMetadata && ((SecurityMetadata) security).isElytronEnabled());
                     if (security.getSecurityDomain() != null) {
-                        builder.addDependency(SecurityDomainService.SERVICE_NAME.append(security.getSecurityDomain()));
+                        if (!elytronEnabled) {
+                            builder.addDependency(SecurityDomainService.SERVICE_NAME.append(security.getSecurityDomain()));
+                        } else {
+                            builder.addDependency(context.getCapabilityServiceName(AUTHENTICATION_CONTEXT_CAPABILITY, security.getSecurityDomain(), AuthenticationContext.class));
+                        }
                     }
                     if (security.getSecurityDomainAndApplication() != null) {
-                        builder.addDependency(SecurityDomainService.SERVICE_NAME.append(security.getSecurityDomainAndApplication()));
+                        if (!elytronEnabled) {
+                            builder.addDependency(SecurityDomainService.SERVICE_NAME.append(security.getSecurityDomainAndApplication()));
+                        } else {
+                            builder.addDependency(context.getCapabilityServiceName(AUTHENTICATION_CONTEXT_CAPABILITY, security.getSecurityDomainAndApplication(), AuthenticationContext.class));
+                        }
                     }
                     if (cd.getRecovery() != null && cd.getRecovery().getCredential() != null && cd.getRecovery().getCredential().getSecurityDomain() != null) {
-                        builder.addDependency(SecurityDomainService.SERVICE_NAME.append(cd.getRecovery().getCredential().getSecurityDomain()));
+                        if (!elytronEnabled) {
+                            builder.addDependency(SecurityDomainService.SERVICE_NAME.append(cd.getRecovery().getCredential().getSecurityDomain()));
+                        } else {
+                            builder.addDependency(context.getCapabilityServiceName(AUTHENTICATION_CONTEXT_CAPABILITY, cd.getRecovery().getCredential().getSecurityDomain(), AuthenticationContext.class));
+                        }
                     }
                 }
             }
             if (resourceAdapter.getWorkManager() != null) {
                 final WorkManagerSecurity workManagerSecurity = resourceAdapter.getWorkManager().getSecurity();
                 if (workManagerSecurity != null) {
+                    final boolean elytronEnabled = (workManagerSecurity instanceof org.jboss.as.connector.metadata.api.resourceadapter.WorkManagerSecurity)
+                            && ((org.jboss.as.connector.metadata.api.resourceadapter.WorkManagerSecurity) workManagerSecurity).isElytronEnabled();
                     final String securityDomainName = workManagerSecurity.getDomain();
                     if (securityDomainName != null) {
-                        builder.addDependency(SecurityDomainService.SERVICE_NAME.append(securityDomainName));
+                        if (!elytronEnabled) {
+                            builder.addDependency(SecurityDomainService.SERVICE_NAME.append(securityDomainName));
+                        } else {
+                            builder.addDependency(context.getCapabilityServiceName(ELYTRON_SECURITY_DOMAIN_CAPABILITY, securityDomainName, SecurityDomain.class));
+                        }
                     }
                 }
             }

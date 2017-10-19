@@ -28,7 +28,7 @@ import org.jboss.logging.Logger;
 
 /**
  * Simple interceptor, which throws an {@link IllegalArgumentException}.
- * 
+ *
  * @author Josef Cacek
  */
 public class FailingContainerInterceptor {
@@ -39,7 +39,7 @@ public class FailingContainerInterceptor {
 
     @AroundInvoke
     Object throwException(final InvocationContext invocationContext) throws Exception {
-        LOGGER.info("Throwing exception");
+        LOGGER.trace("Throwing exception");
         throw new IllegalArgumentException("Blocking access to the bean.");
     }
 }

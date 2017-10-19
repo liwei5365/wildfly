@@ -21,6 +21,7 @@
  */
 package org.wildfly.clustering.web.infinispan.logging;
 
+import static org.jboss.logging.Logger.Level.DEBUG;
 import static org.jboss.logging.Logger.Level.WARN;
 
 import org.jboss.logging.BasicLogger;
@@ -58,11 +59,11 @@ public interface InfinispanWebLogger extends BasicLogger {
     @Message(id = 4, value = "Failed to expire session %s")
     void failedToExpireSession(@Cause Throwable cause, String sessionId);
 
-    @LogMessage(level = WARN)
+    @LogMessage(level = DEBUG)
     @Message(id = 5, value = "Failed to cancel expiration/passivation of session %s on primary owner.")
     void failedToCancelSession(@Cause Throwable cause, String sessionId);
 
-    @LogMessage(level = WARN)
+    @LogMessage(level = DEBUG)
     @Message(id = 6, value = "Failed to schedule expiration/passivation of session %s on primary owner.")
     void failedToScheduleSession(@Cause Throwable cause, String sessionId);
 
@@ -80,4 +81,16 @@ public interface InfinispanWebLogger extends BasicLogger {
     @LogMessage(level = WARN)
     @Message(id = 10, value = "Failed to activate authentication for single sign on %s")
     void failedToActivateAuthentication(@Cause Throwable cause, String ssoId);
+
+    @LogMessage(level = WARN)
+    @Message(id = 11, value = "Session %s is missing cache entry for attribute %s")
+    void missingSessionAttributeCacheEntry(String sessionId, String attribute);
+
+    @LogMessage(level = WARN)
+    @Message(id = 12, value = "Disabling eviction for cache '%s'. Web session passivation should be configured via <max-active-sessions/> in jboss-web.xml.")
+    void evictionDisabled(String cacheName);
+
+    @LogMessage(level = WARN)
+    @Message(id = 13, value = "Disabling expiration for cache '%s'. Web session expiration should be configured per \u00A77.5 of the servlet specification.")
+    void expirationDisabled(String cacheName);
 }

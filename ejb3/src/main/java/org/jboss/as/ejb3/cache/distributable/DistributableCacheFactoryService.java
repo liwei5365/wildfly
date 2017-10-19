@@ -4,13 +4,14 @@
  */
 package org.jboss.as.ejb3.cache.distributable;
 
-import java.util.UUID;
+import javax.transaction.TransactionSynchronizationRegistry;
 
 import org.jboss.as.ejb3.cache.Cache;
 import org.jboss.as.ejb3.cache.CacheFactory;
 import org.jboss.as.ejb3.cache.Contextual;
 import org.jboss.as.ejb3.cache.Identifiable;
 import org.jboss.as.ejb3.cache.StatefulObjectFactory;
+import org.jboss.as.txn.service.TxnServices;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceTarget;
@@ -34,11 +35,12 @@ import org.wildfly.clustering.service.Builder;
 public class DistributableCacheFactoryService<K, V extends Identifiable<K> & Contextual<Batch>> implements Builder<CacheFactory<K, V>>, Value<CacheFactory<K, V>>, CacheFactory<K, V> {
 
     private final ServiceName name;
-    private final Builder<? extends BeanManagerFactory<UUID, K, V, Batch>> builder;
+    private final Builder<? extends BeanManagerFactory<K, V, Batch>> builder;
     @SuppressWarnings("rawtypes")
     private final InjectedValue<BeanManagerFactory> factory = new InjectedValue<>();
+    private final InjectedValue<TransactionSynchronizationRegistry> tsr = new InjectedValue<>();
 
-    public DistributableCacheFactoryService(ServiceName name, Builder<? extends BeanManagerFactory<UUID, K, V, Batch>> builder) {
+    public DistributableCacheFactoryService(ServiceName name, Builder<? extends BeanManagerFactory<K, V, Batch>> builder) {
         this.name = name;
         this.builder = builder;
     }
@@ -53,6 +55,7 @@ public class DistributableCacheFactoryService<K, V extends Identifiable<K> & Con
         this.builder.build(target).install();
         return target.addService(this.name, new ValueService<>(this))
                 .addDependency(this.builder.getServiceName(), BeanManagerFactory.class, this.factory)
+                .addDependency(TxnServices.JBOSS_TXN_SYNCHRONIZATION_REGISTRY, TransactionSynchronizationRegistry.class, this.tsr)
         ;
     }
 
@@ -63,7 +66,7 @@ public class DistributableCacheFactoryService<K, V extends Identifiable<K> & Con
 
     @Override
     public Cache<K, V> createCache(IdentifierFactory<K> identifierFactory, StatefulObjectFactory<V> factory, PassivationListener<V> passivationListener) {
-        BeanManager<UUID, K, V, Batch> manager = this.factory.getValue().createBeanManager(new GroupIdentifierFactory(), identifierFactory, passivationListener, new RemoveListenerAdapter<>(factory));
-        return new DistributableCache<>(manager, factory);
+        BeanManager<K, V, Batch> manager = this.factory.getValue().createBeanManager(identifierFactory, passivationListener, new RemoveListenerAdapter<>(factory));
+        return new DistributableCache<>(manager, factory, this.tsr.getValue());
     }
 }

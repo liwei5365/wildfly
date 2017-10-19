@@ -22,8 +22,6 @@
 
 package org.jboss.as.test.integration.messaging.mgmt;
 
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.ADD;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.REMOVE;
 import static org.jboss.as.controller.operations.common.Util.getEmptyOperation;
 
 import java.io.IOException;
@@ -161,8 +159,7 @@ public class AddressControlManagementTestCase {
             if (getQueueName().equals(node.asString())) {
                 Assert.assertFalse(foundMain);
                 foundMain = true;
-            }
-            else if (getOtherQueueName().equals(node.asString())) {
+            } else if (getOtherQueueName().equals(node.asString())) {
                 Assert.assertFalse(foundOther);
                 foundOther = true;
             }
@@ -186,15 +183,15 @@ public class AddressControlManagementTestCase {
         ModelNode response = managementClient.getControllerClient().execute(op);
         final String outcome = response.get("outcome").asString();
         if (expectSuccess) {
-            if (!"success".equals(outcome)) {
+            /*if (!"success".equals(outcome)) {
                 System.out.println(response);
-            }
+            }*/
             Assert.assertEquals("success", outcome);
             return response.get("result");
         } else {
-            if ("success".equals(outcome)) {
-                System.out.println(response);
-            }
+            /*if ("success".equals(outcome)) {
+               System.out.println(response);
+            }*/
             Assert.assertEquals("failed", outcome);
             return response.get("failure-description");
         }

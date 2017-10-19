@@ -55,6 +55,7 @@ public interface Constants {
     String FLAG = "flag";
     String IDENTITY_TRUST = "identity-trust";
     String IDENTITY_TRUST_MANAGER_CLASS_NAME = "identity-trust-manager-class-name";
+    String INITIALIZE_JACC = "initialize-jacc";
     String JASPI = "jaspi";
     String JSSE = "jsse";
     String KEY_MANAGER = "key-manager";
@@ -117,4 +118,17 @@ public interface Constants {
     String LIST_CACHED_PRINCIPALS = "list-cached-principals";
     String FLUSH_CACHE = "flush-cache";
     String PRINCIPAL_ARGUMENT = "principal";
+    // ELYTRON INTEGRATION CONSTANTS
+    String ELYTRON_INTEGRATION = "elytron-integration";
+    String SECURITY_REALMS = "security-realms";
+    String ELYTRON_REALM = "elytron-realm";
+    String LEGACY_JAAS_CONFIG = "legacy-jaas-config";
+    String TLS = "tls";
+    String ELYTRON_KEY_STORE = "elytron-key-store";
+    String ELYTRON_TRUST_STORE = "elytron-trust-store";
+    String ELYTRON_KEY_MANAGER = "elytron-key-manager";
+    String ELYTRON_TRUST_MANAGER = "elytron-trust-manager";
+    String LEGACY_JSSE_CONFIG = "legacy-jsse-config";
+    String APPLY_ROLE_MAPPERS = "apply-role-mappers";
+    String ELYTRON_SECURITY = "elytron-security";
 }

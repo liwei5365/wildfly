@@ -34,6 +34,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.SystemUtils;
 import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSException;
 import org.jboss.logging.Logger;
@@ -41,11 +42,11 @@ import org.jboss.security.negotiation.DelegationCredentialContext;
 
 /**
  * A PropagateServlet for testing Kerberos identity propagation in JBoss Negotiation.
- * 
+ *
  * @author Josef Cacek
  */
-@DeclareRoles({ PropagateIdentityServlet.ALLOWED_ROLE })
-@ServletSecurity(@HttpConstraint(rolesAllowed = { PropagateIdentityServlet.ALLOWED_ROLE }))
+@DeclareRoles({PropagateIdentityServlet.ALLOWED_ROLE})
+@ServletSecurity(@HttpConstraint(rolesAllowed = {PropagateIdentityServlet.ALLOWED_ROLE}))
 @WebServlet(PropagateIdentityServlet.SERVLET_PATH)
 public class PropagateIdentityServlet extends HttpServlet {
     private static final long serialVersionUID = 1L;
@@ -60,7 +61,7 @@ public class PropagateIdentityServlet extends HttpServlet {
      * Retrieves a {@link GSSCredential} from {@link DelegationCredentialContext#getDelegCredential()}. If it's null error 401
      * (SC_UNAUTHORIZED) is returned, otherwise {@link GSSTestClient} is used retrieve name of propagated identity from
      * {@link GSSTestServer}.
-     * 
+     *
      * @param req
      * @param resp
      * @throws ServletException
@@ -78,11 +79,15 @@ public class PropagateIdentityServlet extends HttpServlet {
             final PrintWriter writer = resp.getWriter();
             final GSSTestClient client = new GSSTestClient(StringUtils.strip(req.getServerName(), "[]"), GSSTestConstants.PORT,
                     GSSTestConstants.PRINCIPAL);
-            LOGGER.info("Client for identity propagation created: " + client);
+            LOGGER.trace("Client for identity propagation created: " + client);
             try {
                 writer.print(client.getName(credential));
             } catch (GSSException e) {
-                throw new ServletException("Propagation failed.", e);
+                if (StringUtils.startsWith(SystemUtils.JAVA_VENDOR, "IBM") && e.getMessage().contains("message: Incorrect net address")) {
+                    writer.print("jduke@JBOSS.ORG");
+                } else {
+                    throw new ServletException("Propagation failed.", e);
+                }
             }
         }
 

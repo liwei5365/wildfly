@@ -30,7 +30,6 @@ import javax.jms.Message;
 import javax.jms.MessageListener;
 
 import org.jboss.as.test.integration.ejb.mdb.JMSMessagingUtil;
-import org.jboss.ejb3.annotation.ResourceAdapter;
 import org.jboss.logging.Logger;
 
 /**
@@ -51,10 +50,10 @@ public class OverriddenResourceAdapterNameMDB implements MessageListener {
 
     @Override
     public void onMessage(Message message) {
-        logger.info("Received message " + message);
+        logger.trace("Received message " + message);
         try {
             if (message.getJMSReplyTo() != null) {
-                logger.info("Replying to " + message.getJMSReplyTo());
+                logger.trace("Replying to " + message.getJMSReplyTo());
                 // send a reply
                 this.jmsMessagingUtil.sendTextMessage(REPLY, message.getJMSReplyTo(), null);
             }

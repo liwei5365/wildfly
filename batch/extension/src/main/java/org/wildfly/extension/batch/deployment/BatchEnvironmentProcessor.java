@@ -25,26 +25,36 @@ package org.wildfly.extension.batch.deployment;
 import javax.enterprise.inject.spi.BeanManager;
 import javax.transaction.TransactionManager;
 
-import org.jberet.spi.BatchEnvironment;
-import org.jberet.spi.JobExecutor;
+import org.jberet.spi.ArtifactFactory;
+import org.jberet.spi.ContextClassLoaderJobOperatorContextSelector;
+import org.jberet.spi.JobOperatorContext;
 import org.jboss.as.controller.capability.CapabilityServiceSupport;
 import org.jboss.as.ee.component.EEModuleDescription;
 import org.jboss.as.ee.weld.WeldDeploymentMarker;
+import org.jboss.as.server.Services;
 import org.jboss.as.server.deployment.Attachments;
 import org.jboss.as.server.deployment.DeploymentPhaseContext;
 import org.jboss.as.server.deployment.DeploymentUnit;
 import org.jboss.as.server.deployment.DeploymentUnitProcessingException;
 import org.jboss.as.server.deployment.DeploymentUnitProcessor;
+import org.jboss.as.server.suspend.SuspendController;
 import org.jboss.as.txn.service.TxnServices;
 import org.jboss.modules.Module;
 import org.jboss.msc.service.ServiceBuilder;
+import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceTarget;
 import org.jboss.msc.value.ImmediateValue;
 import org.wildfly.extension.batch.BatchServiceNames;
 import org.wildfly.extension.batch._private.BatchLogger;
 import org.wildfly.extension.batch._private.Capabilities;
+import org.wildfly.extension.batch.jberet.BatchConfiguration;
+import org.wildfly.extension.batch.jberet.deployment.ArtifactFactoryService;
+import org.wildfly.extension.batch.jberet.deployment.BatchAttachments;
+import org.wildfly.extension.batch.jberet.deployment.BatchEnvironmentService;
+import org.wildfly.extension.batch.jberet.deployment.JobOperatorService;
+import org.wildfly.extension.batch.jberet.deployment.SecurityAwareBatchEnvironment;
+import org.wildfly.extension.batch.jberet.deployment.WildFlyArtifactFactory;
 import org.wildfly.extension.batch.jberet.deployment.WildFlyJobXmlResolver;
-import org.wildfly.extension.batch.jberet.impl.BatchEnvironmentService;
 import org.wildfly.extension.batch.job.repository.JobRepositoryFactory;
 import org.wildfly.extension.requestcontroller.RequestController;
 
@@ -54,9 +64,11 @@ import org.wildfly.extension.requestcontroller.RequestController;
 public class BatchEnvironmentProcessor implements DeploymentUnitProcessor {
 
     private final boolean rcPresent;
+    private final ContextClassLoaderJobOperatorContextSelector selector;
 
-    public BatchEnvironmentProcessor(final boolean rcPresent) {
+    public BatchEnvironmentProcessor(final boolean rcPresent, final ContextClassLoaderJobOperatorContextSelector selector) {
         this.rcPresent = rcPresent;
+        this.selector = selector;
     }
 
     @Override
@@ -75,30 +87,59 @@ public class BatchEnvironmentProcessor implements DeploymentUnitProcessor {
             final CapabilityServiceSupport support = deploymentUnit.getAttachment(Attachments.CAPABILITY_SERVICE_SUPPORT);
 
             // Create the batch environment
-            final BatchEnvironmentService service = new BatchEnvironmentService(moduleClassLoader, WildFlyJobXmlResolver.of(moduleClassLoader, deploymentUnit), deploymentUnit.getName());
+            final WildFlyJobXmlResolver jobXmlResolver = WildFlyJobXmlResolver.forDeployment(deploymentUnit);
+            final BatchEnvironmentService service = new BatchEnvironmentService(moduleClassLoader, jobXmlResolver, deploymentUnit.getName());
             // Set the value for the job-repository, this can't be a capability as the JDBC job repository cannot be constructed
             // until deployment time because the default JNDI data-source name is only known during DUP processing
             service.getJobRepositoryInjector().setValue(new ImmediateValue<>(JobRepositoryFactory.getInstance().getJobRepository(moduleDescription)));
-            final ServiceBuilder<BatchEnvironment> serviceBuilder = serviceTarget.addService(BatchServiceNames.batchEnvironmentServiceName(deploymentUnit), service);
+
+            final ServiceBuilder<SecurityAwareBatchEnvironment> serviceBuilder = serviceTarget.addService(BatchServiceNames.batchEnvironmentServiceName(deploymentUnit), service);
             // Register the required services
-            serviceBuilder.addDependency(support.getCapabilityServiceName(Capabilities.DEFAULT_THREAD_POOL_CAPABILITY.getName()), JobExecutor.class, service.getJobExecutorInjector());
+            serviceBuilder.addDependency(support.getCapabilityServiceName(Capabilities.BATCH_CONFIGURATION_CAPABILITY.getName()), BatchConfiguration.class, service.getBatchConfigurationInjector());
             serviceBuilder.addDependency(TxnServices.JBOSS_TXN_TRANSACTION_MANAGER, TransactionManager.class, service.getTransactionManagerInjector());
+
+            final ServiceName artifactFactoryServiceName = BatchServiceNames.batchArtifactFactoryServiceName(deploymentUnit);
+            final ArtifactFactoryService artifactFactoryService = new ArtifactFactoryService();
+            final ServiceBuilder<ArtifactFactory> artifactFactoryServiceBuilder = serviceTarget.addService(artifactFactoryServiceName, artifactFactoryService);
 
             // Register the bean manager if this is a CDI deployment
             if (WeldDeploymentMarker.isPartOfWeldDeployment(deploymentUnit)) {
                 BatchLogger.LOGGER.tracef("Adding BeanManager service dependency for deployment %s", deploymentUnit.getName());
-                serviceBuilder.addDependency(BatchServiceNames.beanManagerServiceName(deploymentUnit), BeanManager.class, service.getBeanManagerInjector());
+                artifactFactoryServiceBuilder.addDependency(BatchServiceNames.beanManagerServiceName(deploymentUnit), BeanManager.class,
+                        artifactFactoryService.getBeanManagerInjector());
             }
+            artifactFactoryServiceBuilder.install();
+            serviceBuilder.addDependency(artifactFactoryServiceName, WildFlyArtifactFactory.class, service.getArtifactFactoryInjector());
 
             if (rcPresent) {
                 serviceBuilder.addDependency(RequestController.SERVICE_NAME, RequestController.class, service.getRequestControllerInjector());
             }
 
+            // Install the batch environment service
             serviceBuilder.install();
+            // Create the job operator service used interact with a deployments batch job
+            final JobOperatorService jobOperatorService = new JobOperatorService(Boolean.FALSE, deploymentUnit.getName(), jobXmlResolver);
+
+            // Install the JobOperatorService
+            Services.addServerExecutorDependency(serviceTarget.addService(org.wildfly.extension.batch.jberet.BatchServiceNames.jobOperatorServiceName(deploymentUnit), jobOperatorService)
+                            .addDependency(support.getCapabilityServiceName(Capabilities.BATCH_CONFIGURATION_CAPABILITY.getName()), BatchConfiguration.class, jobOperatorService.getBatchConfigurationInjector())
+                            .addDependency(SuspendController.SERVICE_NAME, SuspendController.class, jobOperatorService.getSuspendControllerInjector())
+                            .addDependency(org.wildfly.extension.batch.jberet.BatchServiceNames.batchEnvironmentServiceName(deploymentUnit), SecurityAwareBatchEnvironment.class, jobOperatorService.getBatchEnvironmentInjector()),
+                    jobOperatorService.getExecutorServiceInjector())
+                    .install();
+
+            // Add the JobOperatorService to the deployment unit
+            deploymentUnit.putAttachment(BatchAttachments.JOB_OPERATOR, jobOperatorService);
+
+            // Add the JobOperator to the context selector
+            selector.registerContext(moduleClassLoader, JobOperatorContext.create(jobOperatorService));
         }
     }
 
     @Override
     public void undeploy(DeploymentUnit context) {
+        if (context.hasAttachment(Attachments.MODULE)) {
+            selector.unregisterContext(context.getAttachment(Attachments.MODULE).getClassLoader());
+        }
     }
 }

@@ -34,10 +34,10 @@ import org.wildfly.clustering.web.session.ImmutableSession;
 import org.wildfly.clustering.web.session.ImmutableSessionAttributes;
 import org.wildfly.clustering.web.session.ImmutableSessionMetaData;
 import org.wildfly.clustering.web.session.Session;
-import org.wildfly.clustering.web.session.SessionAttributes;
-import org.wildfly.clustering.web.session.SessionMetaData;
 
 /**
+ * Unit test for {@link InfinispanSessionFactory}.
+ *
  * @author Paul Ferraro
  */
 public class InfinispanSessionFactoryTestCase {
@@ -92,21 +92,19 @@ public class InfinispanSessionFactoryTestCase {
         assertNotNull(existingSessionResult);
         assertSame(metaData, existingSessionResult.getKey());
         assertSame(attributes, existingSessionResult.getValue());
-
-        verify(this.metaDataFactory).remove(missingAttributesSessionId);
     }
 
     @Test
     public void remove() {
         String id = "id";
 
-        when (this.metaDataFactory.remove(id)).thenReturn(false);
+        when(this.metaDataFactory.remove(id)).thenReturn(false);
 
         this.factory.remove(id);
 
         verify(this.attributesFactory, never()).remove(id);
 
-        when (this.metaDataFactory.remove(id)).thenReturn(true);
+        when(this.metaDataFactory.remove(id)).thenReturn(true);
 
         this.factory.remove(id);
 
@@ -117,10 +115,17 @@ public class InfinispanSessionFactoryTestCase {
     public void evict() {
         String id = "id";
 
+        when(this.metaDataFactory.evict(id)).thenReturn(true, false);
+
         this.factory.evict(id);
 
-        verify(this.metaDataFactory).evict(id);
         verify(this.attributesFactory).evict(id);
+
+        reset(this.attributesFactory);
+
+        this.factory.evict(id);
+
+        verify(this.attributesFactory, never()).evict(id);
     }
 
     @Test
@@ -136,7 +141,7 @@ public class InfinispanSessionFactoryTestCase {
         Object localContext = new Object();
         InfinispanSessionMetaData<Object> metaDataValue = new InfinispanSessionMetaData<>(creationMetaData, accessMetaData, new AtomicReference<>(localContext));
         Object attributesValue = new Object();
-        SessionMetaData metaData = mock(SessionMetaData.class);
+        InvalidatableSessionMetaData metaData = mock(InvalidatableSessionMetaData.class);
         SessionAttributes attributes = mock(SessionAttributes.class);
         String id = "id";
 

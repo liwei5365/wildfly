@@ -1,20 +1,24 @@
 package org.jboss.as.test.integration.sar;
 
-import org.jboss.arquillian.container.test.api.Deployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
-import org.jboss.arquillian.junit.Arquillian;
-import org.jboss.as.arquillian.api.ContainerResource;
-import org.jboss.as.arquillian.container.ManagementClient;
-import org.jboss.shrinkwrap.api.ShrinkWrap;
-import org.jboss.shrinkwrap.api.spec.JavaArchive;
-import org.junit.Assert;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
+
+import org.jboss.arquillian.container.test.api.Deployment;
+import org.jboss.arquillian.container.test.api.RunAsClient;
+import org.jboss.arquillian.junit.Arquillian;
+import org.jboss.as.arquillian.api.ContainerResource;
+import org.jboss.as.arquillian.container.ManagementClient;
+import org.jboss.as.test.integration.common.DefaultConfiguration;
+import org.jboss.shrinkwrap.api.ShrinkWrap;
+import org.jboss.shrinkwrap.api.spec.JavaArchive;
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.wildfly.naming.java.permission.JndiPermission;
 
 /**
  * Tests that MBean(s) binding to JNDI in their <code>start</code> lifecycle method do not hang up the deployment.
@@ -34,6 +38,7 @@ public class JNDIBindingMBeanTestCase {
         final JavaArchive sar = ShrinkWrap.create(JavaArchive.class, "multiple-jndi-binding-mbeans.sar");
         sar.addClasses(JNDIBindingService.class, JNDIBindingMBeanTestCase.class, JNDIBindingServiceMBean.class);
         sar.addAsManifestResource(JNDIBindingMBeanTestCase.class.getPackage(), "multiple-jndi-binding-mbeans-jboss-service.xml", "jboss-service.xml");
+        sar.addAsManifestResource(createPermissionsXmlAsset(new JndiPermission("global/env/foo/-", "bind,unbind")), "permissions.xml");
         return sar;
     }
 
@@ -46,7 +51,7 @@ public class JNDIBindingMBeanTestCase {
     @Test
     public void testMBeanStartup() throws Exception {
         // get mbean server
-        final JMXConnector connector = JMXConnectorFactory.connect(managementClient.getRemoteJMXURL());
+        final JMXConnector connector = JMXConnectorFactory.connect(managementClient.getRemoteJMXURL(), DefaultConfiguration.credentials());
         try {
             final MBeanServerConnection mBeanServerConnection = connector.getMBeanServerConnection();
             // check the deployed MBeans
@@ -59,6 +64,5 @@ public class JNDIBindingMBeanTestCase {
             connector.close();
         }
     }
-
 
 }

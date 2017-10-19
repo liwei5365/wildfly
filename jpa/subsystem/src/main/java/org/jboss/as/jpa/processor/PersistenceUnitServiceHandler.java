@@ -48,6 +48,7 @@ import javax.validation.ValidatorFactory;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
+import org.jboss.as.controller.capability.CapabilityServiceSupport;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.registry.Resource;
 import org.jboss.as.ee.beanvalidation.BeanValidationAttachments;
@@ -56,6 +57,7 @@ import org.jboss.as.ee.component.EEModuleDescription;
 import org.jboss.as.ee.structure.DeploymentType;
 import org.jboss.as.ee.structure.DeploymentTypeMarker;
 import org.jboss.as.ee.weld.WeldDeploymentMarker;
+import org.jboss.as.jpa.beanmanager.BeanManagerAfterDeploymentValidation;
 import org.jboss.as.jpa.beanmanager.ProxyBeanManager;
 import org.jboss.as.jpa.config.Configuration;
 import org.jboss.as.jpa.config.PersistenceProviderDeploymentHolder;
@@ -90,6 +92,7 @@ import org.jboss.as.server.deployment.DeploymentUtils;
 import org.jboss.as.server.deployment.JPADeploymentMarker;
 import org.jboss.as.server.deployment.SubDeploymentMarker;
 import org.jboss.as.server.deployment.module.ResourceRoot;
+import org.jboss.as.weld.deployment.WeldPortableExtensions;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
 import org.jboss.jandex.Index;
@@ -138,6 +141,7 @@ public class PersistenceUnitServiceHandler {
     }
 
     public static void undeploy(DeploymentUnit context) {
+
         List<PersistenceAdaptorRemoval> removals = context.getAttachmentList(REMOVAL_KEY);
         if (removals != null) {
             for (PersistenceAdaptorRemoval removal : removals) {
@@ -337,6 +341,7 @@ public class PersistenceUnitServiceHandler {
         pu.setClassLoader(classLoader);
         TransactionManager transactionManager = deploymentUnit.getAttachment(JpaAttachments.TRANSACTION_MANAGER);
         TransactionSynchronizationRegistry transactionSynchronizationRegistry = deploymentUnit.getAttachment(JpaAttachments.TRANSACTION_SYNCHRONIZATION_REGISTRY);
+        CapabilityServiceSupport capabilitySupport = deploymentUnit.getAttachment(Attachments.CAPABILITY_SERVICE_SUPPORT);
         try {
             ValidatorFactory validatorFactory = null;
             final HashMap<String, ValidatorFactory> properties = new HashMap<>();
@@ -344,10 +349,15 @@ public class PersistenceUnitServiceHandler {
                 // Get the CDI-enabled ValidatorFactory
                 validatorFactory = deploymentUnit.getAttachment(BeanValidationAttachments.VALIDATOR_FACTORY);
             }
+            BeanManagerAfterDeploymentValidation beanManagerAfterDeploymentValidation = registerJPAEntityListenerRegister(deploymentUnit);
 
-            final PersistenceUnitServiceImpl service = new PersistenceUnitServiceImpl(classLoader, pu, adaptor, provider, PersistenceUnitRegistryImpl.INSTANCE, deploymentUnit.getServiceName(), validatorFactory);
+            final PersistenceUnitServiceImpl service =
+                    new PersistenceUnitServiceImpl(classLoader, pu, adaptor, provider, PersistenceUnitRegistryImpl.INSTANCE,
+                            deploymentUnit.getServiceName(), validatorFactory, deploymentUnit.getAttachment(org.jboss.as.ee.naming.Attachments.JAVA_NAMESPACE_SETUP_ACTION),
+                            beanManagerAfterDeploymentValidation );
 
-            deploymentUnit.addToAttachmentList(REMOVAL_KEY, new PersistenceAdaptorRemoval(pu, adaptor));
+            final PersistenceAdaptorRemoval persistenceAdaptorRemoval = new PersistenceAdaptorRemoval(pu, adaptor);
+            deploymentUnit.addToAttachmentList(REMOVAL_KEY, persistenceAdaptorRemoval);
 
             // add persistence provider specific properties
             adaptor.addProviderProperties(properties, pu);
@@ -405,11 +415,11 @@ public class PersistenceUnitServiceHandler {
 
             try {
                 // save a thread local reference to the builder for setting up the second level cache dependencies
-                CacheDeploymentListener.setInternalDeploymentServiceBuilder(builder);
+                CacheDeploymentListener.setInternalDeploymentSupport(builder, capabilitySupport);
                 adaptor.addProviderDependencies(pu);
             }
             finally {
-                CacheDeploymentListener.clearInternalDeploymentServiceBuilder();
+                CacheDeploymentListener.clearInternalDeploymentSupport();
             }
 
             /**
@@ -426,12 +436,12 @@ public class PersistenceUnitServiceHandler {
                 .addInjection(service.getPropertiesInjector(), properties);
 
             // get async executor from Services.addServerExecutorDependency
-            addServerExecutorDependency(builder, service.getExecutorInjector(), false);
+            addServerExecutorDependency(builder, service.getExecutorInjector());
 
             builder.install();
 
             ROOT_LOGGER.tracef("added PersistenceUnitService for '%s'.  PU is ready for injector action.", puServiceName);
-            addManagementConsole(deploymentUnit, pu, adaptor);
+            addManagementConsole(deploymentUnit, pu, adaptor, persistenceAdaptorRemoval);
 
         } catch (ServiceRegistryException e) {
             throw JpaLogger.ROOT_LOGGER.failedToAddPersistenceUnit(e, pu.getPersistenceUnitName());
@@ -460,6 +470,7 @@ public class PersistenceUnitServiceHandler {
             final ModuleClassLoader classLoader,
             final PersistenceUnitMetadata pu,
             final PersistenceProviderAdaptor adaptor) throws DeploymentUnitProcessingException {
+        CapabilityServiceSupport capabilitySupport = deploymentUnit.getAttachment(Attachments.CAPABILITY_SERVICE_SUPPORT);
         pu.setClassLoader(classLoader);
         try {
             final HashMap<String, ValidatorFactory> properties = new HashMap<>();
@@ -469,6 +480,8 @@ public class PersistenceUnitServiceHandler {
             // if the persistence unit is contained in a deployment that is a CDI bean archive (has beans.xml).
             if (WeldDeploymentMarker.isPartOfWeldDeployment(deploymentUnit)) {
                 proxyBeanManager = new ProxyBeanManager();
+                registerJPAEntityListenerRegister(deploymentUnit); // register CDI extension before WeldDeploymentProcessor, which is important for
+                                                                   // EAR deployments that contain a WAR that has persistence units defined.
             }
 
             final PhaseOnePersistenceUnitServiceImpl service = new PhaseOnePersistenceUnitServiceImpl(classLoader, pu, adaptor, deploymentUnit.getServiceName(), proxyBeanManager);
@@ -527,18 +540,18 @@ public class PersistenceUnitServiceHandler {
 
             try {
                 // save a thread local reference to the builder for setting up the second level cache dependencies
-                CacheDeploymentListener.setInternalDeploymentServiceBuilder(builder);
+                CacheDeploymentListener.setInternalDeploymentSupport(builder, capabilitySupport);
                 adaptor.addProviderDependencies(pu);
             }
             finally {
-                CacheDeploymentListener.clearInternalDeploymentServiceBuilder();
+                CacheDeploymentListener.clearInternalDeploymentSupport();
             }
 
             builder.setInitialMode(ServiceController.Mode.ACTIVE)
                 .addInjection(service.getPropertiesInjector(), properties);
 
             // get async executor from Services.addServerExecutorDependency
-            addServerExecutorDependency(builder, service.getExecutorInjector(), false);
+            addServerExecutorDependency(builder, service.getExecutorInjector());
 
             builder.install();
 
@@ -574,6 +587,7 @@ public class PersistenceUnitServiceHandler {
             final PersistenceProviderAdaptor adaptor) throws DeploymentUnitProcessingException {
         TransactionManager transactionManager = deploymentUnit.getAttachment(JpaAttachments.TRANSACTION_MANAGER);
         TransactionSynchronizationRegistry transactionSynchronizationRegistry = deploymentUnit.getAttachment(JpaAttachments.TRANSACTION_SYNCHRONIZATION_REGISTRY);
+        CapabilityServiceSupport capabilitySupport = deploymentUnit.getAttachment(Attachments.CAPABILITY_SERVICE_SUPPORT);
         pu.setClassLoader(classLoader);
         try {
             ValidatorFactory validatorFactory = null;
@@ -582,10 +596,10 @@ public class PersistenceUnitServiceHandler {
                 // Get the CDI-enabled ValidatorFactory
                 validatorFactory = deploymentUnit.getAttachment(BeanValidationAttachments.VALIDATOR_FACTORY);
             }
-
-            final PersistenceUnitServiceImpl service = new PersistenceUnitServiceImpl(classLoader, pu, adaptor, provider, PersistenceUnitRegistryImpl.INSTANCE, deploymentUnit.getServiceName(), validatorFactory);
-
-            deploymentUnit.addToAttachmentList(REMOVAL_KEY, new PersistenceAdaptorRemoval(pu, adaptor));
+            BeanManagerAfterDeploymentValidation beanManagerAfterDeploymentValidation = registerJPAEntityListenerRegister(deploymentUnit);
+            final PersistenceUnitServiceImpl service = new PersistenceUnitServiceImpl(classLoader, pu, adaptor, provider, PersistenceUnitRegistryImpl.INSTANCE, deploymentUnit.getServiceName(), validatorFactory, deploymentUnit.getAttachment(org.jboss.as.ee.naming.Attachments.JAVA_NAMESPACE_SETUP_ACTION), beanManagerAfterDeploymentValidation);
+            final PersistenceAdaptorRemoval persistenceAdaptorRemoval =  new PersistenceAdaptorRemoval(pu, adaptor);
+            deploymentUnit.addToAttachmentList(REMOVAL_KEY, persistenceAdaptorRemoval);
 
             // add persistence provider specific properties
             adaptor.addProviderProperties(properties, pu);
@@ -650,11 +664,11 @@ public class PersistenceUnitServiceHandler {
 
             try {
                 // save a thread local reference to the builder for setting up the second level cache dependencies
-                CacheDeploymentListener.setInternalDeploymentServiceBuilder(builder);
+                CacheDeploymentListener.setInternalDeploymentSupport(builder, capabilitySupport);
                 adaptor.addProviderDependencies(pu);
             }
             finally {
-                CacheDeploymentListener.clearInternalDeploymentServiceBuilder();
+                CacheDeploymentListener.clearInternalDeploymentSupport();
             }
 
 
@@ -672,12 +686,12 @@ public class PersistenceUnitServiceHandler {
                 .addInjection(service.getPropertiesInjector(), properties);
 
             // get async executor from Services.addServerExecutorDependency
-            addServerExecutorDependency(builder, service.getExecutorInjector(), false);
+            addServerExecutorDependency(builder, service.getExecutorInjector());
 
             builder.install();
 
             ROOT_LOGGER.tracef("added PersistenceUnitService (phase 2 of 2) for '%s'.  PU is ready for injector action.", puServiceName);
-            addManagementConsole(deploymentUnit, pu, adaptor);
+            addManagementConsole(deploymentUnit, pu, adaptor, persistenceAdaptorRemoval);
 
         } catch (ServiceRegistryException e) {
             throw JpaLogger.ROOT_LOGGER.failedToAddPersistenceUnit(e, pu.getPersistenceUnitName());
@@ -1103,13 +1117,13 @@ public class PersistenceUnitServiceHandler {
      * <p/>
      * /deployment=jpa_SecondLevelCacheTestCase.jar/subsystem=jpa/hibernate-persistence-unit=jpa_SecondLevelCacheTestCase.jar#mypc/
      * cache=org.jboss.as.test.integration.jpa.hibernate.Employee
-     *
-     * @param deploymentUnit
+     *  @param deploymentUnit
      * @param pu
      * @param adaptor
+     * @param persistenceAdaptorRemoval
      */
     private static void addManagementConsole(final DeploymentUnit deploymentUnit, final PersistenceUnitMetadata pu,
-                                      final PersistenceProviderAdaptor adaptor) {
+                                             final PersistenceProviderAdaptor adaptor, PersistenceAdaptorRemoval persistenceAdaptorRemoval) {
         ManagementAdaptor managementAdaptor = adaptor.getManagementAdaptor();
         // workaround for AS7-4441, if a custom hibernate.cache.region_prefix is specified, don't show the persistence
         // unit in management console.
@@ -1130,6 +1144,8 @@ public class PersistenceUnitServiceHandler {
             }
             synchronized (subsystemResource) {
                 subsystemResource.registerChild(PathElement.pathElement(providerLabel, scopedPersistenceUnitName), providerResource);
+                // save the subsystemResource reference + path to scoped pu, so we can remove it during undeploy
+                persistenceAdaptorRemoval.registerManagementConsoleChild(subsystemResource, PathElement.pathElement(providerLabel, scopedPersistenceUnitName));
             }
         }
     }
@@ -1154,9 +1170,30 @@ public class PersistenceUnitServiceHandler {
         return deploymentUnit.getAttachment(JpaAttachments.DEPLOYED_PERSISTENCE_PROVIDER);
     }
 
+    private static BeanManagerAfterDeploymentValidation registerJPAEntityListenerRegister(DeploymentUnit deploymentUnit) {
+        deploymentUnit = DeploymentUtils.getTopDeploymentUnit(deploymentUnit);
+        if (WeldDeploymentMarker.isPartOfWeldDeployment(deploymentUnit)) {
+            synchronized (deploymentUnit) {
+                BeanManagerAfterDeploymentValidation beanManagerAfterDeploymentValidation = deploymentUnit.getAttachment(JpaAttachments.BEAN_MANAGER_AFTER_DEPLOYMENT_VALIDATION_ATTACHMENT_KEY);
+                if (null == beanManagerAfterDeploymentValidation) {
+                    beanManagerAfterDeploymentValidation = new BeanManagerAfterDeploymentValidation();
+                    deploymentUnit.putAttachment(JpaAttachments.BEAN_MANAGER_AFTER_DEPLOYMENT_VALIDATION_ATTACHMENT_KEY, beanManagerAfterDeploymentValidation);
+                    WeldPortableExtensions extensions = WeldPortableExtensions.getPortableExtensions(deploymentUnit);
+                    extensions.registerExtensionInstance(beanManagerAfterDeploymentValidation, deploymentUnit);
+                }
+                return beanManagerAfterDeploymentValidation;
+            }
+        }
+        else {
+            return new BeanManagerAfterDeploymentValidation(true);
+        }
+    }
+
     private static class PersistenceAdaptorRemoval {
         final PersistenceUnitMetadata pu;
         final PersistenceProviderAdaptor adaptor;
+        volatile Resource subsystemResource;
+        volatile PathElement pathToScopedPu;
 
         public PersistenceAdaptorRemoval(PersistenceUnitMetadata pu, PersistenceProviderAdaptor adaptor) {
             this.pu = pu;
@@ -1165,6 +1202,14 @@ public class PersistenceUnitServiceHandler {
 
         private void cleanup() {
             adaptor.cleanup(pu);
+            if(subsystemResource != null && pathToScopedPu != null) {
+                subsystemResource.removeChild(pathToScopedPu);
+            }
+        }
+
+        public void registerManagementConsoleChild(Resource subsystemResource, PathElement pathElement) {
+            this.subsystemResource = subsystemResource;
+            this.pathToScopedPu = pathElement;
         }
     }
 

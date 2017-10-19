@@ -62,11 +62,11 @@ import org.junit.runner.RunWith;
 
 /**
  * Tests, which checks JACC permissions generated for enterprise applications.
- * 
+ *
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ JACCForEarModulesTestCase.SecurityDomainsSetup.class })
+@ServerSetup({JACCForEarModulesTestCase.SecurityDomainsSetup.class})
 @RunAsClient
 @Category(CommonCriteria.class)
 @Ignore("See WFLY-4990")
@@ -82,7 +82,7 @@ public class JACCForEarModulesTestCase {
      */
     @Deployment(name = "war")
     public static WebArchive warDeployment() {
-        LOGGER.info("Start WAR deployment");
+        LOGGER.trace("Create WAR deployment");
         return createWar(SECURITY_DOMAIN_NAME);
     }
 
@@ -91,7 +91,7 @@ public class JACCForEarModulesTestCase {
      */
     @Deployment(name = "ear")
     public static EnterpriseArchive earDeployment() {
-        LOGGER.info("Start EAR deployment");
+        LOGGER.trace("Create EAR deployment");
         final String earName = "ear-" + SECURITY_DOMAIN_NAME;
 
         final EnterpriseArchive ear = ShrinkWrap.create(EnterpriseArchive.class, earName + ".ear");
@@ -100,9 +100,6 @@ public class JACCForEarModulesTestCase {
         ear.addAsModule(war);
         ear.addAsModule(jar);
 
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(ear.toString(true));
-        }
         return ear;
     }
 
@@ -111,13 +108,13 @@ public class JACCForEarModulesTestCase {
      */
     @Deployment(name = "jar", testable = false)
     public static JavaArchive jarDeployment() {
-        LOGGER.info("Start JAR deployment");
+        LOGGER.trace("Start JAR deployment");
         return createJar("jar-" + SECURITY_DOMAIN_NAME);
     }
 
     /**
      * Tests web permissions (war directly and war in ear).
-     * 
+     *
      * @param webAppURL
      * @throws Exception
      */
@@ -133,7 +130,7 @@ public class JACCForEarModulesTestCase {
 
     /**
      * Tests EJB permissions (jar directly and jar in ear).
-     * 
+     *
      * @param webAppURL
      * @throws Exception
      */
@@ -151,7 +148,7 @@ public class JACCForEarModulesTestCase {
 
     /**
      * Creates EJB JAR module with the given name.
-     * 
+     *
      * @param jarName
      * @return
      */
@@ -166,7 +163,7 @@ public class JACCForEarModulesTestCase {
 
     /**
      * Creates WAR module with the given name.
-     * 
+     *
      * @param warName
      * @return
      */
@@ -175,15 +172,12 @@ public class JACCForEarModulesTestCase {
         war.addClass(ListJACCPoliciesServlet.class);
         war.addAsWebInfResource(JACCForEarModulesTestCase.class.getPackage(), "web.xml", "web.xml");
         war.addAsWebInfResource(Utils.getJBossWebXmlAsset(SECURITY_DOMAIN_NAME), "jboss-web.xml");
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(war.toString(true));
-        }
         return war;
     }
 
     /**
      * Tests web-app permissions in given ContextPolicy Node.
-     * 
+     *
      * @param contextPolicyNode
      * @throws Exception
      */
@@ -198,7 +192,7 @@ public class JACCForEarModulesTestCase {
 
     /**
      * Tests EJB permissions in the given ContextPolicy Node.
-     * 
+     *
      * @param contextPolicyNode
      * @throws Exception
      */
@@ -210,22 +204,19 @@ public class JACCForEarModulesTestCase {
 
     /**
      * Returns Dom4j XML Document representation of the JACC policies retrieved from the {@link ListJACCPoliciesServlet}.
-     * 
+     *
      * @param webAppURL
      * @return
      * @throws MalformedURLException
      * @throws IOException
      * @throws DocumentException
      */
-    private Document getPermissionDocument(final URL webAppURL) throws MalformedURLException, IOException, DocumentException {
+    private Document getPermissionDocument(final URL webAppURL) throws IOException, DocumentException {
         final URL servletURL = new URL(webAppURL.toExternalForm() + ListJACCPoliciesServlet.SERVLET_PATH.substring(1));
-        LOGGER.info("Testing JACC permissions: " + servletURL);
+        LOGGER.trace("Testing JACC permissions: " + servletURL);
         final InputStream is = servletURL.openStream();
         try {
             final Document document = new SAXReader().read(is);
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(document.getRootElement().asXML());
-            }
             return document;
         } finally {
             is.close();
@@ -236,7 +227,7 @@ public class JACCForEarModulesTestCase {
 
     /**
      * A {@link ServerSetupTask} instance which creates security domains for this test case.
-     * 
+     *
      * @author Josef Cacek
      */
     static class SecurityDomainsSetup extends AbstractSecurityDomainsServerSetupTask {
@@ -246,8 +237,8 @@ public class JACCForEarModulesTestCase {
          */
         @Override
         protected SecurityDomain[] getSecurityDomains() {
-            return new SecurityDomain[] { new SecurityDomain.Builder().name(SECURITY_DOMAIN_NAME)
-                    .authorizationModules(new SecurityModule.Builder().name("JACC").flag(Constants.REQUIRED).build()).build() };
+            return new SecurityDomain[]{new SecurityDomain.Builder().name(SECURITY_DOMAIN_NAME)
+                    .authorizationModules(new SecurityModule.Builder().name("JACC").flag(Constants.REQUIRED).build()).build()};
         }
     }
 }

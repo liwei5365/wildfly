@@ -31,8 +31,6 @@ import org.wildfly.clustering.web.session.ImmutableSession;
 import org.wildfly.clustering.web.session.ImmutableSessionAttributes;
 import org.wildfly.clustering.web.session.ImmutableSessionMetaData;
 import org.wildfly.clustering.web.session.Session;
-import org.wildfly.clustering.web.session.SessionAttributes;
-import org.wildfly.clustering.web.session.SessionMetaData;
 
 /**
  * @author Paul Ferraro
@@ -52,6 +50,7 @@ public class InfinispanSessionFactory<V, L> implements SessionFactory<Infinispan
     @Override
     public Map.Entry<InfinispanSessionMetaData<L>, V> createValue(String id, Void context) {
         InfinispanSessionMetaData<L> metaDataValue = this.metaDataFactory.createValue(id, context);
+        if (metaDataValue == null) return null;
         V attributesValue = this.attributesFactory.createValue(id, context);
         return new SimpleImmutableEntry<>(metaDataValue, attributesValue);
     }
@@ -65,7 +64,7 @@ public class InfinispanSessionFactory<V, L> implements SessionFactory<Infinispan
                 return new SimpleImmutableEntry<>(metaDataValue, attributesValue);
             }
             // Purge obsolete meta data
-            this.metaDataFactory.remove(id);
+            this.metaDataFactory.purge(id);
         }
         return null;
     }
@@ -79,7 +78,7 @@ public class InfinispanSessionFactory<V, L> implements SessionFactory<Infinispan
                 return new SimpleImmutableEntry<>(metaDataValue, attributesValue);
             }
             // Purge obsolete meta data
-            this.metaDataFactory.remove(id);
+            this.metaDataFactory.purge(id);
         }
         return null;
     }
@@ -94,12 +93,16 @@ public class InfinispanSessionFactory<V, L> implements SessionFactory<Infinispan
     }
 
     @Override
-    public void evict(String id) {
+    public boolean evict(String id) {
         try {
-            this.metaDataFactory.evict(id);
-            this.attributesFactory.evict(id);
+            boolean evicted = this.metaDataFactory.evict(id);
+            if (evicted) {
+                this.attributesFactory.evict(id);
+            }
+            return evicted;
         } catch (Throwable e) {
             InfinispanWebLogger.ROOT_LOGGER.failedToPassivateSession(e, id);
+            return false;
         }
     }
 
@@ -116,15 +119,13 @@ public class InfinispanSessionFactory<V, L> implements SessionFactory<Infinispan
     @Override
     public Session<L> createSession(String id, Map.Entry<InfinispanSessionMetaData<L>, V> entry) {
         InfinispanSessionMetaData<L> key = entry.getKey();
-        SessionMetaData metaData = this.metaDataFactory.createSessionMetaData(id, key);
+        InvalidatableSessionMetaData metaData = this.metaDataFactory.createSessionMetaData(id, key);
         SessionAttributes attributes = this.attributesFactory.createSessionAttributes(id, entry.getValue());
         return new InfinispanSession<>(id, metaData, attributes, key.getLocalContext(), this.localContextFactory, this);
     }
 
     @Override
-    public ImmutableSession createImmutableSession(String id, Map.Entry<InfinispanSessionMetaData<L>, V> entry) {
-        ImmutableSessionMetaData metaData = this.metaDataFactory.createImmutableSessionMetaData(id, entry.getKey());
-        ImmutableSessionAttributes attributes = this.attributesFactory.createImmutableSessionAttributes(id, entry.getValue());
+    public ImmutableSession createImmutableSession(String id, ImmutableSessionMetaData metaData, ImmutableSessionAttributes attributes) {
         return new InfinispanImmutableSession(id, metaData, attributes);
     }
 }

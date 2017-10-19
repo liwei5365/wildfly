@@ -26,6 +26,7 @@ import java.io.OutputStream;
 import java.util.Iterator;
 import java.util.Set;
 import javax.xml.namespace.QName;
+import javax.xml.soap.Node;
 import javax.xml.soap.SOAPElement;
 import javax.xml.soap.SOAPException;
 import javax.xml.soap.SOAPMessage;
@@ -33,11 +34,11 @@ import javax.xml.ws.WebServiceException;
 import javax.xml.ws.handler.MessageContext;
 import javax.xml.ws.handler.soap.SOAPHandler;
 import javax.xml.ws.handler.soap.SOAPMessageContext;
+
 import org.jboss.logging.Logger;
 import org.jboss.logging.Logger.Level;
 
 /**
- * 
  * @author <a href="mailto:rsvoboda@redhat.com">Rostislav Svoboda</a>
  */
 public class ReliableCheckHandler implements SOAPHandler<SOAPMessageContext> {
@@ -91,9 +92,9 @@ public class ReliableCheckHandler implements SOAPHandler<SOAPMessageContext> {
             switch (status % 4) {
                 case 0:
                     @SuppressWarnings("unchecked")
-                    Iterator<SOAPElement> it = (Iterator<SOAPElement>) message.getSOAPBody().getChildElements();
+                    Iterator<Node> it = (Iterator<Node>) message.getSOAPBody().getChildElements();
                     if (it.hasNext()) {
-                        firstBodyElement = it.next();
+                        firstBodyElement = (SOAPElement) it.next();
                         final QName createSequenceQName = new QName("http://schemas.xmlsoap.org/ws/2005/02/rm", "CreateSequence");
                         if (!createSequenceQName.equals(firstBodyElement.getElementQName())) {
                             throw new WebServiceException("CreateSequence in soap body was expected, but it contains '"
@@ -139,7 +140,7 @@ public class ReliableCheckHandler implements SOAPHandler<SOAPMessageContext> {
             throw new WebServiceException(ex.getMessage(), ex);
         }
     }
-    
+
     private boolean verifySequenceAcknowledgement(SOAPMessage message) throws SOAPException {
         Iterator headerElements = message.getSOAPHeader().getChildElements();
         boolean found = false;
@@ -174,7 +175,7 @@ public class ReliableCheckHandler implements SOAPHandler<SOAPMessageContext> {
         protected Logger logger;
         protected Level level;
 
-        public JBossLoggingOutputStream(Logger log, Level level) throws IllegalArgumentException {
+        JBossLoggingOutputStream(Logger log, Level level) throws IllegalArgumentException {
             if (log == null) {
                 throw new IllegalArgumentException("Null category!");
             }

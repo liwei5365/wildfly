@@ -22,17 +22,19 @@
 
 package org.wildfly.extension.batch.jberet.deployment;
 
-import javax.batch.operations.JobOperator;
-
 import java.util.Properties;
+import javax.batch.operations.JobOperator;
 
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.OperationStepHandler;
 import org.jboss.as.controller.PathAddress;
+import org.jboss.as.controller.PathElement;
+import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceController;
+import org.jboss.msc.service.ServiceName;
 import org.wildfly.extension.batch.jberet.BatchServiceNames;
 import org.wildfly.extension.batch.jberet._private.BatchLogger;
 
@@ -42,11 +44,33 @@ import org.wildfly.extension.batch.jberet._private.BatchLogger;
  * @author <a href="mailto:jperkins@redhat.com">James R. Perkins</a>
  */
 abstract class JobOperationStepHandler implements OperationStepHandler {
+    private final boolean modify;
+
+    /**
+     * Creates a new step handler with a modifiable {@link JobOperator}.
+     */
+    JobOperationStepHandler() {
+        this(true);
+    }
+
+    /**
+     * Creates a new step handler.
+     *
+     * @param modify {@code true} if the {@link #execute(OperationContext, ModelNode, WildFlyJobOperator)} will modify a job
+     *               repository, {@code false} for a read-only service
+     */
+    JobOperationStepHandler(final boolean modify) {
+        this.modify = modify;
+    }
+
     @Override
     public final void execute(final OperationContext context, final ModelNode operation) throws OperationFailedException {
-        final PathAddress address = context.getCurrentAddress();
-        final ServiceController<?> controller = context.getServiceRegistry(true).getService(BatchServiceNames.jobOperatorServiceName(address));
-        final JobOperator jobOperator = (JobOperator) controller.getService();
+        context.addStep(this::executeRuntime, OperationContext.Stage.RUNTIME);
+    }
+
+    private void executeRuntime(final OperationContext context, final ModelNode operation) throws OperationFailedException {
+        final ServiceController<?> controller = context.getServiceRegistry(modify).getService(getServiceName(context));
+        final WildFlyJobOperator jobOperator = (WildFlyJobOperator) controller.getService();
         execute(context, operation, jobOperator);
     }
 
@@ -59,7 +83,7 @@ abstract class JobOperationStepHandler implements OperationStepHandler {
      *
      * @throws OperationFailedException if there is a step failure
      */
-    protected abstract void execute(OperationContext context, ModelNode operation, JobOperator jobOperator) throws OperationFailedException;
+    protected abstract void execute(OperationContext context, ModelNode operation, WildFlyJobOperator jobOperator) throws OperationFailedException;
 
     static ModelNode resolveValue(final OperationContext context, final ModelNode operation, final AttributeDefinition attribute) throws OperationFailedException {
         final ModelNode value = new ModelNode();
@@ -84,5 +108,34 @@ abstract class JobOperationStepHandler implements OperationStepHandler {
         // OperationFailedException's don't log the cause, for debug purposes logging the failure could be useful
         BatchLogger.LOGGER.debugf(cause, "Failed to process batch operation: %s", msg);
         return new OperationFailedException(msg, cause);
+    }
+
+
+    private static ServiceName getServiceName(final OperationContext context) {
+        final PathAddress address = context.getCurrentAddress();
+        String deploymentName = null;
+        String subdeploymentName = null;
+        for (PathElement element : address) {
+            if (ModelDescriptionConstants.DEPLOYMENT.equals(element.getKey())) {
+                deploymentName = getRuntimeName(context, element);
+            } else if (ModelDescriptionConstants.SUBDEPLOYMENT.endsWith(element.getKey())) {
+                subdeploymentName = element.getValue();
+            }
+        }
+        if (deploymentName == null) {
+            throw BatchLogger.LOGGER.couldNotFindDeploymentName(address.toString());
+        }
+        if (subdeploymentName == null) {
+            return BatchServiceNames.jobOperatorServiceName(deploymentName);
+        }
+        return BatchServiceNames.jobOperatorServiceName(deploymentName, subdeploymentName);
+    }
+
+    private static String getRuntimeName(final OperationContext context, final PathElement element) {
+        final ModelNode deploymentModel = context.readResourceFromRoot(PathAddress.pathAddress(element), false).getModel();
+        if (!deploymentModel.hasDefined(ModelDescriptionConstants.RUNTIME_NAME)) {
+            throw BatchLogger.LOGGER.couldNotFindDeploymentName(context.getCurrentAddress().toString());
+        }
+        return deploymentModel.get(ModelDescriptionConstants.RUNTIME_NAME).asString();
     }
 }

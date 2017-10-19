@@ -22,6 +22,10 @@
 
 package org.jboss.as.test.integration.naming.local.simple;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
+import static org.junit.Assert.assertNotNull;
+
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 
@@ -31,14 +35,15 @@ import org.jboss.arquillian.junit.InSequence;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.arquillian.container.ManagementClient;
 import org.jboss.as.test.integration.common.HttpRequest;
+import org.jboss.as.test.shared.TestSuiteEnvironment;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.wildfly.naming.java.permission.JndiPermission;
 
-import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.junit.Assert.assertNotNull;
+import java.net.SocketPermission;
 
 /**
  * @author John Bailey
@@ -50,6 +55,18 @@ public class DeploymentWithBindTestCase {
     public static Archive<?> deploy() {
         final WebArchive war = ShrinkWrap.create(WebArchive.class, "test.war");
         war.addClasses(HttpRequest.class, BeanWithBind.class, ServletWithBind.class);
+        war.addAsManifestResource(createPermissionsXmlAsset(
+                new JndiPermission("global", "listBindings"),
+                new JndiPermission("jboss", "listBindings"),
+                new JndiPermission("jboss/exported", "listBindings"),
+                new JndiPermission("/test", "bind"),
+                new JndiPermission("/web-test", "bind"),
+                new JndiPermission("jboss/test", "bind"),
+                new JndiPermission("jboss/web-test", "bind"),
+                // org.jboss.as.test.integration.common.HttpRequest needs the following permissions
+                new RuntimePermission("modifyThread"),
+                new SocketPermission(TestSuiteEnvironment.getHttpAddress() + ":" + TestSuiteEnvironment.getHttpPort(), "connect,resolve")),
+                "permissions.xml");
         return war;
     }
 
@@ -87,14 +104,14 @@ public class DeploymentWithBindTestCase {
     @Test
     @InSequence(3)
     public void testBasicsNamespaces() throws Exception {
-    	iniCtx.lookup("java:global");
-    	iniCtx.listBindings("java:global");
+        iniCtx.lookup("java:global");
+        iniCtx.listBindings("java:global");
 
-    	iniCtx.lookup("java:jboss");
-    	iniCtx.listBindings("java:jboss");
+        iniCtx.lookup("java:jboss");
+        iniCtx.listBindings("java:jboss");
 
-    	iniCtx.lookup("java:jboss/exported");
-    	iniCtx.listBindings("java:jboss/exported");
+        iniCtx.lookup("java:jboss/exported");
+        iniCtx.listBindings("java:jboss/exported");
 
     }
 }

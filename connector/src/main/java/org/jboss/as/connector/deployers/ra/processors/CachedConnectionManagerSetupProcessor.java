@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+
 import javax.resource.ResourceException;
 
 import org.jboss.as.connector.util.ConnectorServices;
@@ -62,6 +63,7 @@ public class CachedConnectionManagerSetupProcessor implements DeploymentUnitProc
 
         phaseContext.getServiceTarget().addService(serviceName, action)
                 .addDependency(ConnectorServices.CCM_SERVICE, CachedConnectionManager.class, action.cachedConnectionManager)
+                .addDependency(ConnectorServices.NON_TX_CCM_SERVICE, CachedConnectionManager.class, action.noTxCcmValue)
                 .install();
         deploymentUnit.addToAttachmentList(Attachments.WEB_SETUP_ACTIONS, action);
         deploymentUnit.addToAttachmentList(Attachments.OTHER_EE_SETUP_ACTIONS, action);
@@ -69,14 +71,15 @@ public class CachedConnectionManagerSetupProcessor implements DeploymentUnitProc
     }
 
     @Override
-    public void undeploy(final DeploymentUnit context) {
-
+    public void undeploy(final DeploymentUnit deploymentUnit) {
+        deploymentUnit.getAttachmentList(Attachments.OTHER_EE_SETUP_ACTIONS).removeIf(setupAction -> setupAction instanceof CachedConnectionManagerSetupAction);
+        deploymentUnit.getAttachmentList(Attachments.WEB_SETUP_ACTIONS).removeIf(setupAction -> setupAction instanceof CachedConnectionManagerSetupAction);
     }
 
     private static class CachedConnectionManagerSetupAction implements SetupAction, Service<Void> {
 
         private final InjectedValue<CachedConnectionManager> cachedConnectionManager = new InjectedValue<CachedConnectionManager>();
-
+        private final InjectedValue<CachedConnectionManager> noTxCcmValue = new InjectedValue<CachedConnectionManager>();
 
         private final ServiceName serviceName;
 
@@ -90,6 +93,10 @@ public class CachedConnectionManagerSetupProcessor implements DeploymentUnitProc
         @Override
         public void setup(final Map<String, Object> properties) {
             try {
+                final CachedConnectionManager noTxCcm = noTxCcmValue.getOptionalValue();
+                if (noTxCcm != null) {
+                    noTxCcm.pushMetaAwareObject(this, unsharable);
+                }
                 final CachedConnectionManager connectionManager = cachedConnectionManager.getOptionalValue();
                 if (connectionManager != null) {
                     connectionManager.pushMetaAwareObject(this, unsharable);
@@ -105,6 +112,10 @@ public class CachedConnectionManagerSetupProcessor implements DeploymentUnitProc
                 final CachedConnectionManager connectionManager = cachedConnectionManager.getOptionalValue();
                 if (connectionManager != null) {
                     connectionManager.popMetaAwareObject(unsharable);
+                }
+                final CachedConnectionManager noTxCcm = noTxCcmValue.getOptionalValue();
+                if (noTxCcm != null) {
+                    noTxCcm.popMetaAwareObject(unsharable);
                 }
             } catch (ResourceException e) {
                 throw new RuntimeException(e);

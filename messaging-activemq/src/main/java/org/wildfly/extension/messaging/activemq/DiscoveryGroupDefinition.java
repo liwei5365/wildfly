@@ -25,7 +25,6 @@ package org.wildfly.extension.messaging.activemq;
 import static org.jboss.as.controller.SimpleAttributeDefinitionBuilder.create;
 import static org.jboss.as.controller.client.helpers.MeasurementUnit.MILLISECONDS;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.JGROUPS_CHANNEL;
-import static org.wildfly.extension.messaging.activemq.CommonAttributes.JGROUPS_STACK;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.SOCKET_BINDING;
 
 import java.util.Arrays;
@@ -36,11 +35,14 @@ import org.apache.activemq.artemis.api.core.client.ActiveMQClient;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.PersistentResourceDefinition;
+import org.jboss.as.controller.ReloadRequiredWriteAttributeHandler;
 import org.jboss.as.controller.SimpleAttributeDefinition;
+import org.jboss.as.controller.capability.RuntimeCapability;
 import org.jboss.as.controller.registry.AttributeAccess;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
 
 
 /**
@@ -50,12 +52,14 @@ import org.jboss.dmr.ModelType;
 */
 public class DiscoveryGroupDefinition extends PersistentResourceDefinition {
 
-   public static final PathElement PATH = PathElement.pathElement(CommonAttributes.DISCOVERY_GROUP);
+    public static final PathElement PATH = PathElement.pathElement(CommonAttributes.DISCOVERY_GROUP);
+
+    public static final RuntimeCapability<Void> CHANNEL_FACTORY_CAPABILITY = RuntimeCapability.Builder.of("org.wildfly.messaging.activemq.discovery-group.channel-factory", true).build();
 
     public static final SimpleAttributeDefinition REFRESH_TIMEOUT = create("refresh-timeout", ModelType.LONG)
             .setDefaultValue(new ModelNode(ActiveMQDefaultConfiguration.getDefaultBroadcastRefreshTimeout()))
             .setMeasurementUnit(MILLISECONDS)
-            .setAllowNull(true)
+            .setRequired(false)
             .setAllowExpression(true)
             .setRestartAllServices()
             .build();
@@ -63,9 +67,13 @@ public class DiscoveryGroupDefinition extends PersistentResourceDefinition {
     public static final SimpleAttributeDefinition INITIAL_WAIT_TIMEOUT = create("initial-wait-timeout", ModelType.LONG)
             .setDefaultValue(new ModelNode(ActiveMQClient.DEFAULT_DISCOVERY_INITIAL_WAIT_TIMEOUT))
             .setMeasurementUnit(MILLISECONDS)
-            .setAllowNull(true)
+            .setRequired(false)
             .setAllowExpression(true)
             .setRestartAllServices()
+            .build();
+
+    public static final SimpleAttributeDefinition JGROUPS_STACK = create(CommonAttributes.JGROUPS_STACK)
+            .setCapabilityReference(JGroupsRequirement.CHANNEL_FACTORY.getName(), CHANNEL_FACTORY_CAPABILITY)
             .build();
 
     public static final AttributeDefinition[] ATTRIBUTES = { JGROUPS_STACK, JGROUPS_CHANNEL, SOCKET_BINDING,
@@ -91,10 +99,16 @@ public class DiscoveryGroupDefinition extends PersistentResourceDefinition {
 
     @Override
     public void registerAttributes(ManagementResourceRegistration registry) {
+        ReloadRequiredWriteAttributeHandler reloadRequiredWriteAttributeHandler = new ReloadRequiredWriteAttributeHandler(ATTRIBUTES);
         for (AttributeDefinition attr : ATTRIBUTES) {
             if (registerRuntimeOnly || !attr.getFlags().contains(AttributeAccess.Flag.STORAGE_RUNTIME)) {
-                registry.registerReadWriteAttribute(attr, null, DiscoveryGroupWriteAttributeHandler.INSTANCE);
+                registry.registerReadWriteAttribute(attr, null, reloadRequiredWriteAttributeHandler);
             }
         }
+    }
+
+    @Override
+    public void registerCapabilities(ManagementResourceRegistration registration) {
+        registration.registerCapability(CHANNEL_FACTORY_CAPABILITY);
     }
 }

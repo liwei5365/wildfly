@@ -7,13 +7,13 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-testsuite</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Final-SNAPSHOT</version>
     </parent>
 
     <artifactId>wildfly-ts-integ</artifactId>
     <packaging>pom</packaging>
 
-    <name>WildFly Test Suite: Integration</name>
+    <name>WildFly Test Suite: Integration (parent)</name>
 
     <properties>
         <!-- Current module's directory. Will automatically pick up sub-module's basedir. -->
@@ -30,6 +30,7 @@
             -Djbossas.ts.dir=${jbossas.ts.dir}
             -Djbossas.project.dir=${jbossas.project.dir}
             -Djboss.dist=${jboss.dist}
+            -Djava.io.tmpdir=${basedir}/target
         </jvm.args.dirs>
 
         <!-- Used to provide an absolute location for the distribution under test. -->
@@ -41,6 +42,8 @@
 
         <ts.skipTests>${skipTests}</ts.skipTests>
         <enforcer.skip>true</enforcer.skip>
+
+        <ts.elytron.cli>../../shared/enable-elytron.cli</ts.elytron.cli>
     </properties>
 
     <profiles>
@@ -63,6 +66,9 @@
                 <module>manualmode</module>
                 <module>picketlink</module>
                 <module>secman</module>
+                <module>legacy</module>
+                <module>legacy-ejb-client</module>
+                <module>elytron</module>
             </modules>
         </profile>
         <!-- Define ts.integration uber-group. -->
@@ -83,6 +89,9 @@
                 <module>manualmode</module>
                 <module>picketlink</module>
                 <module>secman</module>
+                <module>legacy</module>
+                <module>legacy-ejb-client</module>
+                <module>elytron</module>
             </modules>
         </profile>
 
@@ -195,6 +204,77 @@
                 <module>secman</module>
             </modules>
         </profile>
+
+        <!-- -Dts.legacy -->
+        <profile>
+            <id>ts.integ.group.legacy</id>
+            <activation><property><name>ts.legacy</name></property></activation>
+            <modules>
+                <module>legacy</module>
+            </modules>
+        </profile>
+
+        <!-- -Dts.legacy.ejb.client -->
+        <profile>
+            <id>ts.integ.group.legacy.ejb.client</id>
+            <activation><property><name>ts.legacy.ejb.client</name></property></activation>
+            <modules>
+                <module>legacy-ejb-client</module>
+            </modules>
+        </profile>
+
+        <!-- -Dts.elytron -->
+        <profile>
+            <id>ts.integ.group.elytron</id>
+            <activation><property><name>ts.elytron</name></property></activation>
+            <modules>
+                <module>elytron</module>
+            </modules>
+        </profile>
+
+        <!-- profile to configure WildFly to use Elytron instead of legacy security: -Delytron -->
+        <profile>
+            <id>elytron.profile</id>
+            <activation>
+                <property>
+                    <name>elytron</name>
+                </property>
+                <file>
+                    <exists>${ts.elytron.cli}</exists>
+                </file>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.wildfly.plugins</groupId>
+                        <artifactId>wildfly-maven-plugin</artifactId>
+                        <version>${version.org.wildfly.plugin}</version>
+                        <executions>
+                            <execution>
+                                <phase>process-test-resources</phase>
+                                <goals>
+                                    <goal>execute-commands</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <offline>true</offline>
+                            <scripts>
+                                <script>${ts.elytron.cli}</script>
+                            </scripts>
+                            <jboss-home>${project.build.directory}/jbossas</jboss-home>
+                            <stdout>${project.build.directory}/wildfly-plugin.log</stdout>
+                            <java-opts>${modular.jdk.args}</java-opts>
+                            <system-properties>
+                                <maven.repo.local>${settings.localRepository}</maven.repo.local>
+                                <module.path>${jboss.dist}/modules</module.path>
+                            </system-properties>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
     </profiles>
 
 
@@ -260,14 +340,13 @@
                     <!--<basedir>${jbossas.ts.integ.dir}</basedir>  <!- - "The base directory of the project being tested." Sets ${basedir}. -->
                     <workingDirectory>${basedir}/target/workdir</workingDirectory> <!-- Work in submodule's own dir. -->
 
-                    <!-- Forked process timeout -->
-                    <forkedProcessTimeoutInSeconds>${surefire.forked.process.timeout}</forkedProcessTimeoutInSeconds>
                     <!-- System properties to forked surefire JVM which runs clients. -->
-                    <argLine>${surefire.memory.args} ${jvm.args.ip.client} ${jvm.args.timeouts}</argLine>
+                    <argLine>${surefire.system.args} ${surefire.memory.args} ${jvm.args.ip.client} ${jvm.args.timeouts}</argLine>
 
                     <!-- System properties passed to test cases -->
                     <systemPropertyVariables combine.children="append">
                         <node0>${node0}</node0>
+                        <node0.escaped>${node0.escaped}</node0.escaped>
                         <node1>${node1}</node1>
                         <mcast>${mcast}</mcast>
                         <mcast.ttl>${mcast.ttl}</mcast.ttl>
@@ -285,7 +364,8 @@
                             Used in arquillian.xml - arguments for all JBoss AS instances.
                             System properties are duplicated here until ARQ-647 is implemented.
                         -->
-                        <server.jvm.args>${surefire.system.args} ${jvm.args.ip.server} ${jvm.args.jacoco} ${jvm.args.other} ${jvm.args.timeouts} -Dnode0=${node0} -Dnode1=${node1} -Dmcast=${mcast} -Dmcast.ttl=${mcast.ttl} ${jvm.args.dirs}</server.jvm.args>
+                        <server.jvm.args>${surefire.system.args} ${jvm.args.ip.server} ${jvm.args.other} ${jvm.args.timeouts} -Dnode0=${node0} -Dnode1=${node1} -Dmcast=${mcast} -Dmcast.ttl=${mcast.ttl} ${jvm.args.dirs}</server.jvm.args>
+                        <modular.jdk.args>${modular.jdk.args}</modular.jdk.args>
                     </systemPropertyVariables>
 
                 </configuration>
@@ -295,6 +375,21 @@
 
     <dependencies>
         <!-- Dependencies specific to the integration tests. -->
+        <dependency>
+            <groupId>org.wildfly</groupId>
+            <artifactId>wildfly-naming-client</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wildfly.transaction</groupId>
+            <artifactId>wildfly-transaction-client</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wildfly.wildfly-http-client</groupId>
+            <artifactId>wildfly-http-ejb-client</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.wildfly</groupId>
             <artifactId>wildfly-webservices-tests-integration</artifactId>
@@ -316,6 +411,31 @@
             <type>pom</type>
             <scope>test</scope>
         </dependency>
+
+        <dependency>
+            <groupId>org.wildfly</groupId>
+            <artifactId>wildfly-testsuite-shared</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.jboss.arquillian.junit</groupId>
+            <artifactId>arquillian-junit-container</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.arquillian.testenricher</groupId>
+            <artifactId>arquillian-testenricher-initialcontext</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wildfly.arquillian</groupId>
+            <artifactId>wildfly-arquillian-container-managed</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wildfly.arquillian</groupId>
+            <artifactId>wildfly-arquillian-protocol-jmx</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
 </project>

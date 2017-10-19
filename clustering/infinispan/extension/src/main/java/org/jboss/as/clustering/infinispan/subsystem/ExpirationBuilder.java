@@ -28,34 +28,39 @@ import static org.jboss.as.clustering.infinispan.subsystem.ExpirationResourceDef
 
 import org.infinispan.configuration.cache.ConfigurationBuilder;
 import org.infinispan.configuration.cache.ExpirationConfiguration;
-import org.infinispan.configuration.cache.ExpirationConfigurationBuilder;
-import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.wildfly.clustering.service.Builder;
 
 /**
  * @author Paul Ferraro
  */
-public class ExpirationBuilder extends CacheComponentBuilder<ExpirationConfiguration> implements ResourceServiceBuilder<ExpirationConfiguration> {
+public class ExpirationBuilder extends ComponentBuilder<ExpirationConfiguration> {
 
-    private final ExpirationConfigurationBuilder builder = new ConfigurationBuilder().expiration();
+    private volatile long interval;
+    private volatile long lifespan;
+    private volatile long maxIdle;
 
-    ExpirationBuilder(String containerName, String cacheName) {
-        super(CacheComponent.EXPIRATION, containerName, cacheName);
+    ExpirationBuilder(PathAddress cacheAddress) {
+        super(CacheComponent.EXPIRATION, cacheAddress);
     }
 
     @Override
     public Builder<ExpirationConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.builder.wakeUpInterval(INTERVAL.getDefinition().resolveModelAttribute(context, model).asLong());
-        this.builder.lifespan(LIFESPAN.getDefinition().resolveModelAttribute(context, model).asLong());
-        this.builder.maxIdle(MAX_IDLE.getDefinition().resolveModelAttribute(context, model).asLong());
+        this.interval = INTERVAL.resolveModelAttribute(context, model).asLong();
+        this.lifespan = LIFESPAN.resolveModelAttribute(context, model).asLong();
+        this.maxIdle = MAX_IDLE.resolveModelAttribute(context, model).asLong();
         return this;
     }
 
     @Override
     public ExpirationConfiguration getValue() {
-        return this.builder.create();
+        return new ConfigurationBuilder().expiration()
+                .wakeUpInterval(this.interval)
+                .lifespan(this.lifespan)
+                .maxIdle(this.maxIdle)
+                .create();
     }
 }

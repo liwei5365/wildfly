@@ -22,9 +22,7 @@
 
 package org.jboss.as.test.integration.hibernate.secondlevelcache;
 
-import java.io.File;
 import java.util.Properties;
-
 import javax.annotation.Resource;
 import javax.ejb.Stateful;
 import javax.ejb.TransactionAttribute;
@@ -42,7 +40,6 @@ import org.hibernate.internal.util.config.ConfigurationHelper;
 import org.infinispan.manager.CacheContainer;
 
 /**
- *
  * @author Madhumita Sadhukhan
  */
 @Stateful
@@ -53,11 +50,11 @@ public class SFSB {
 
     /**
      * Lookup the Infinispan cache container to start it.
-     *
+     * <p>
      * We also could of changed the following line in standalone.xml:
-     *   <cache-container name="hibernate" default-cache="local-query">
+     * <cache-container name="hibernate" default-cache="local-query">
      * To:
-     *   <cache-container name="hibernate" default-cache="local-query" start="EAGER">
+     * <cache-container name="hibernate" default-cache="local-query" start="EAGER">
      */
     private static final String CONTAINER_JNDI_NAME = "java:jboss/infinispan/container/hibernate";
     @Resource(lookup = CONTAINER_JNDI_NAME)
@@ -72,12 +69,10 @@ public class SFSB {
         // static {
         try {
 
-            //System.out.println("setupConfig:  Current dir = " + (new File(".")).getCanonicalPath());
-
             // prepare the configuration
-            Configuration configuration = new Configuration().setProperty(AvailableSettings.USE_NEW_ID_GENERATOR_MAPPINGS,
-                    "true");
+            Configuration configuration = new Configuration().setProperty(AvailableSettings.USE_NEW_ID_GENERATOR_MAPPINGS, "true");
             configuration.getProperties().put(AvailableSettings.JTA_PLATFORM, JBossAppServerJtaPlatform.class);
+            configuration.getProperties().put(AvailableSettings.TRANSACTION_COORDINATOR_STRATEGY, "jta");
             configuration.setProperty(Environment.HBM2DDL_AUTO, "create-drop");
             configuration.setProperty(Environment.DATASOURCE, "java:jboss/datasources/ExampleDS");
             // fetch the properties
@@ -90,7 +85,7 @@ public class SFSB {
             sessionFactory = configuration.buildSessionFactory();
 
         } catch (Throwable ex) { // Make sure you log the exception, as it might be swallowed
-            System.err.println("Initial SessionFactory creation failed." + ex);
+            ex.printStackTrace();
             throw new ExceptionInInitializerError(ex);
         }
     }
@@ -126,7 +121,7 @@ public class SFSB {
 
         try {
             Session session = sessionFactory.openSession();
-            student = (Student) session.load(Student.class, id);
+            student = session.load(Student.class, id);
             session.close();
 
         } catch (Exception e) {

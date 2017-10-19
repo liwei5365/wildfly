@@ -41,7 +41,8 @@ public class PooledConnectionFactoryAttributesTestCase extends AttributesTestBas
         KNOWN_ATTRIBUTES.add(Pooled.SETUP_ATTEMPTS_PROP_NAME);
         KNOWN_ATTRIBUTES.add(Pooled.SETUP_INTERVAL_PROP_NAME);
         KNOWN_ATTRIBUTES.add(Pooled.USE_JNDI_PROP_NAME);
-
+        KNOWN_ATTRIBUTES.add(Pooled.REBALANCE_CONNECTIONS_PROP_NAME);
+        KNOWN_ATTRIBUTES.add(Pooled.ALLOW_LOCAL_TRANSACTIONS_PROP_NAME);
     }
 
     @Test
@@ -56,7 +57,7 @@ public class PooledConnectionFactoryAttributesTestCase extends AttributesTestBas
                 "ActiveMQ Resource Adapter", activemqRAProperties);
     }
 
-    private static final SortedSet<String> findAllResourceAdapterProperties(ConnectionFactoryAttribute... attrs) {
+    private static SortedSet<String> findAllResourceAdapterProperties(ConnectionFactoryAttribute... attrs) {
         SortedSet<String> names = new TreeSet<String>();
         for (ConnectionFactoryAttribute attr : attrs) {
             if (attr.isResourceAdapterProperty()) {

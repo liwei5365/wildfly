@@ -38,7 +38,6 @@ import org.jboss.arquillian.container.test.api.OperateOnDeployment;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.as.network.NetworkUtils;
-import org.jboss.as.test.iiop.basic.BasicIIOPInvocationTestCase;
 import org.jboss.as.test.shared.FileUtils;
 import org.jboss.as.test.shared.PropertiesValueResolver;
 import org.jboss.shrinkwrap.api.Archive;
@@ -53,7 +52,6 @@ import org.junit.runner.RunWith;
  */
 @RunWith(Arquillian.class)
 public class TransactionIIOPInvocationTestCase {
-
 
     @Deployment(name = "server", testable = false)
     @TargetsContainer("iiop-server")

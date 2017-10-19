@@ -25,7 +25,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -36,7 +35,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import javax.naming.Context;
 import javax.security.auth.login.LoginException;
 
@@ -71,7 +69,6 @@ import org.apache.directory.server.ldap.handlers.sasl.gssapi.GssapiMechanismHand
 import org.apache.directory.server.ldap.handlers.sasl.ntlm.NtlmMechanismHandler;
 import org.apache.directory.server.ldap.handlers.sasl.plain.PlainMechanismHandler;
 import org.apache.http.NameValuePair;
-import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.http.message.BasicNameValuePair;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -102,7 +99,7 @@ import org.jboss.security.SecurityConstants;
 import org.jboss.security.negotiation.AdvancedLdapLoginModule;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -113,18 +110,22 @@ import org.junit.runner.RunWith;
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ Krb5ConfServerSetupTask.class, //
+@ServerSetup({Krb5ConfServerSetupTask.class, //
         AdvancedLdapLoginModuleTestCase.KerberosSystemPropertiesSetupTask.class, //
         AdvancedLdapLoginModuleTestCase.DirectoryServerSetupTask.class, //
-        AdvancedLdapLoginModuleTestCase.SecurityDomainsSetup.class })
+        AdvancedLdapLoginModuleTestCase.SecurityDomainsSetup.class})
 @RunAsClient
 public class AdvancedLdapLoginModuleTestCase {
     private static Logger LOGGER = Logger.getLogger(AdvancedLdapLoginModuleTestCase.class);
 
-    /** The SECURITY_DOMAIN_NAME_PREFIX */
+    /**
+     * The SECURITY_DOMAIN_NAME_PREFIX
+     */
     public static final String SECURITY_DOMAIN_NAME_PREFIX = "ldap-test-";
 
-    /** The TRUE */
+    /**
+     * The TRUE
+     */
     private static final String TRUE = Boolean.TRUE.toString();
 
     private static final int LDAP_PORT = 10389;
@@ -134,10 +135,11 @@ public class AdvancedLdapLoginModuleTestCase {
     private static final String DEP3 = "DEP3";
     private static final String DEP4 = "DEP4";
 
-    private static final String[] ROLE_NAMES = { "TheDuke", "Echo", "TheDuke2", "Echo2", "JBossAdmin", "jduke", "jduke2",
-            "RG1", "RG2", "RG3", "R1", "R2", "R3", "R4", "R5", "Roles" };
+    private static final String[] ROLE_NAMES = {"TheDuke", "Echo", "TheDuke2", "Echo2", "JBossAdmin", "jduke", "jduke2",
+            "RG1", "RG2", "RG3", "R1", "R2", "R3", "R4", "R5", "Roles"};
 
     private static final String QUERY_ROLES;
+
     static {
         final List<NameValuePair> qparams = new ArrayList<NameValuePair>();
         for (final String role : ROLE_NAMES) {
@@ -151,9 +153,9 @@ public class AdvancedLdapLoginModuleTestCase {
 
     // Public methods --------------------------------------------------------
 
-    @BeforeClass
-    public static void beforeClass() {
-        KerberosTestUtils.assumeKerberosAuthenticationSupported(null);
+    @Before
+    public void before() {
+        KerberosTestUtils.assumeKerberosAuthenticationSupported();
     }
 
     /**
@@ -253,26 +255,21 @@ public class AdvancedLdapLoginModuleTestCase {
      * @return
      */
     private static WebArchive createWar(final String deploymentName) {
-        LOGGER.info("Starting deployment " + deploymentName);
-
         final WebArchive war = ShrinkWrap.create(WebArchive.class, deploymentName + ".war");
         war.addClasses(SimpleSecuredServlet.class, SimpleServlet.class, RolePrintingServlet.class,
                 PrincipalPrintingServlet.class);
         war.addAsWebInfResource(AdvancedLdapLoginModuleTestCase.class.getPackage(),
                 AdvancedLdapLoginModuleTestCase.class.getSimpleName() + "-web.xml", "web.xml");
-        war.addAsWebInfResource(Utils.getJBossWebXmlAsset(deploymentName),  "jboss-web.xml");
+        war.addAsWebInfResource(Utils.getJBossWebXmlAsset(deploymentName), "jboss-web.xml");
         war.addAsManifestResource(Utils.getJBossDeploymentStructure("org.jboss.security.negotiation"),
                 "jboss-deployment-structure.xml");
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(war.toString(true));
-        }
         return war;
     }
 
     /**
      * Tests role assignment for given deployment (web-app URL).
      */
-    private void testDeployment(URL webAppURL, String... assignedRoles) throws MalformedURLException, ClientProtocolException,
+    private void testDeployment(URL webAppURL, String... assignedRoles) throws
             IOException, URISyntaxException, LoginException, PrivilegedActionException {
         final URI rolesPrintingURI = getServletURI(webAppURL, RolePrintingServlet.SERVLET_PATH + "?" + QUERY_ROLES);
 
@@ -334,50 +331,50 @@ public class AdvancedLdapLoginModuleTestCase {
      */
     //@formatter:off
     @CreateDS(
-        name = "JBossDS-AdvancedLdapLoginModuleTestCase",
-        factory = org.jboss.as.test.integration.ldap.InMemoryDirectoryServiceFactory.class,
-        partitions =
-        {
-            @CreatePartition(
-                name = "jboss",
-                suffix = "dc=jboss,dc=org",
-                contextEntry = @ContextEntry(
-                    entryLdif =
-                        "dn: dc=jboss,dc=org\n" +
-                        "dc: jboss\n" +
-                        "objectClass: top\n" +
-                        "objectClass: domain\n\n" ),
-                indexes =
-                {
-                    @CreateIndex( attribute = "objectClass" ),
-                    @CreateIndex( attribute = "dc" ),
-                    @CreateIndex( attribute = "ou" )
-                })
-        },
-        additionalInterceptors = { KeyDerivationInterceptor.class })
-    @CreateLdapServer (
+            name = "JBossDS-AdvancedLdapLoginModuleTestCase",
+            factory = org.jboss.as.test.integration.ldap.InMemoryDirectoryServiceFactory.class,
+            partitions =
+                    {
+                            @CreatePartition(
+                                    name = "jboss",
+                                    suffix = "dc=jboss,dc=org",
+                                    contextEntry = @ContextEntry(
+                                            entryLdif =
+                                                    "dn: dc=jboss,dc=org\n" +
+                                                            "dc: jboss\n" +
+                                                            "objectClass: top\n" +
+                                                            "objectClass: domain\n\n"),
+                                    indexes =
+                                            {
+                                                    @CreateIndex(attribute = "objectClass"),
+                                                    @CreateIndex(attribute = "dc"),
+                                                    @CreateIndex(attribute = "ou")
+                                            })
+                    },
+            additionalInterceptors = {KeyDerivationInterceptor.class})
+    @CreateLdapServer(
             transports =
-            {
-                @CreateTransport( protocol = "LDAP",  port = LDAP_PORT)
-            },
-            saslHost="localhost",
-            saslPrincipal="ldap/localhost@JBOSS.ORG",
+                    {
+                            @CreateTransport(protocol = "LDAP", port = LDAP_PORT)
+                    },
+            saslHost = "localhost",
+            saslPrincipal = "ldap/localhost@JBOSS.ORG",
             saslMechanisms =
-            {
-                @SaslMechanism( name= SupportedSaslMechanisms.PLAIN, implClass=PlainMechanismHandler.class ),
-                @SaslMechanism( name=SupportedSaslMechanisms.CRAM_MD5, implClass=CramMd5MechanismHandler.class),
-                @SaslMechanism( name= SupportedSaslMechanisms.DIGEST_MD5, implClass=DigestMd5MechanismHandler.class),
-                @SaslMechanism( name=SupportedSaslMechanisms.GSSAPI, implClass=GssapiMechanismHandler.class),
-                @SaslMechanism( name=SupportedSaslMechanisms.NTLM, implClass=NtlmMechanismHandler.class),
-                @SaslMechanism( name=SupportedSaslMechanisms.GSS_SPNEGO, implClass=NtlmMechanismHandler.class)
-            })
+                    {
+                            @SaslMechanism(name = SupportedSaslMechanisms.PLAIN, implClass = PlainMechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.CRAM_MD5, implClass = CramMd5MechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.DIGEST_MD5, implClass = DigestMd5MechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.GSSAPI, implClass = GssapiMechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.NTLM, implClass = NtlmMechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.GSS_SPNEGO, implClass = NtlmMechanismHandler.class)
+                    })
     @CreateKdcServer(primaryRealm = "JBOSS.ORG",
-        kdcPrincipal = "krbtgt/JBOSS.ORG@JBOSS.ORG",
-        searchBaseDn = "dc=jboss,dc=org",
-        transports =
-        {
-            @CreateTransport(protocol = "UDP", port = 6088)
-        })
+            kdcPrincipal = "krbtgt/JBOSS.ORG@JBOSS.ORG",
+            searchBaseDn = "dc=jboss,dc=org",
+            transports =
+                    {
+                            @CreateTransport(protocol = "UDP", port = 6088)
+                    })
     //@formatter:on
     static class DirectoryServerSetupTask implements ServerSetupTask {
 
@@ -393,7 +390,7 @@ public class AdvancedLdapLoginModuleTestCase {
          * @param containerId
          * @throws Exception
          * @see org.jboss.as.arquillian.api.ServerSetupTask#setup(org.jboss.as.arquillian.container.ManagementClient,
-         *      java.lang.String)
+         * java.lang.String)
          */
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
@@ -415,7 +412,7 @@ public class AdvancedLdapLoginModuleTestCase {
                     IOUtils.toString(
                             AdvancedLdapLoginModuleTestCase.class.getResourceAsStream(AdvancedLdapLoginModuleTestCase.class
                                     .getSimpleName() + ".ldif"), "UTF-8"), map);
-            LOGGER.info(ldifContent);
+            LOGGER.trace(ldifContent);
             final SchemaManager schemaManager = directoryService.getSchemaManager();
             try {
                 for (LdifEntry ldifEntry : new LdifReader(IOUtils.toInputStream(ldifContent))) {
@@ -458,7 +455,7 @@ public class AdvancedLdapLoginModuleTestCase {
          * @param containerId
          * @throws Exception
          * @see org.jboss.as.arquillian.api.ServerSetupTask#tearDown(org.jboss.as.arquillian.container.ManagementClient,
-         *      java.lang.String)
+         * java.lang.String)
          */
         @Override
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
@@ -575,7 +572,7 @@ public class AdvancedLdapLoginModuleTestCase {
                                     .putOption("recurseRoles", TRUE) //
                                     .build()) //
                     .build();
-            return new SecurityDomain[] { hostDomain, sd1, sd2, sd3, sd4 };
+            return new SecurityDomain[]{hostDomain, sd1, sd2, sd3, sd4};
         }
 
         private Map<String, String> getCommonOptions() {

@@ -29,7 +29,8 @@ import java.net.URL;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
@@ -52,8 +53,8 @@ import org.junit.runner.RunWith;
 public class CustomErrorsUnitTestCase {
 
     private static Logger log = Logger.getLogger(CustomErrorsUnitTestCase.class);
- 
-    @Deployment (name = "custom-errors.war", testable = false)
+
+    @Deployment(name = "custom-errors.war", testable = false)
     public static WebArchive errorDeployment() {
         ClassLoader tccl = Thread.currentThread().getContextClassLoader();
         String resourcesLocation = "org/jboss/as/test/integration/web/customerrors/resources/";
@@ -73,7 +74,7 @@ public class CustomErrorsUnitTestCase {
     public static WebArchive producerDeployment() {
         ClassLoader tccl = Thread.currentThread().getContextClassLoader();
         String resourcesLocation = "org/jboss/as/test/integration/web/customerrors/resources/";
-        
+
         WebArchive war = ShrinkWrap.create(WebArchive.class, "error-producer.war");
         war.setWebXML(tccl.getResource(resourcesLocation + "error-producer-web.xml"));
         war.addAsManifestResource(CustomErrorsUnitTestCase.class.getPackage(), "permissions.xml", "permissions.xml");
@@ -101,7 +102,7 @@ public class CustomErrorsUnitTestCase {
      *
      * @throws Exception
      */
-    @Test 
+    @Test
     @OperateOnDeployment("error-producer.war")
     public void test500Error(@ArquillianResource(ErrorGeneratorServlet.class) URL baseURL) throws Exception {
         int errorCode = HttpURLConnection.HTTP_INTERNAL_ERROR;
@@ -123,21 +124,21 @@ public class CustomErrorsUnitTestCase {
 
     private void testURL(URL url, int expectedCode, String expectedPage, String expectedError) throws Exception {
         HttpGet httpget = new HttpGet(url.toURI());
-        DefaultHttpClient httpclient = new DefaultHttpClient();
+        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            log.trace("executing request" + httpget.getRequestLine());
+            HttpResponse response = httpClient.execute(httpget);
 
-        log.info("executing request" + httpget.getRequestLine());
-        HttpResponse response = httpclient.execute(httpget);
+            int statusCode = response.getStatusLine().getStatusCode();
+            Header page = response.getFirstHeader("X-CustomErrorPage");
+            Header error = response.getFirstHeader("X-ExceptionType");
 
-        int statusCode = response.getStatusLine().getStatusCode();
-        Header page = response.getFirstHeader("X-CustomErrorPage");
-        Header error = response.getFirstHeader("X-ExceptionType");
-
-        assertTrue("Wrong response code: " + statusCode, statusCode == expectedCode);
-        if (expectedPage != null) {
-            assertTrue("X-CustomErrorPage(" + page + ") is " + expectedPage, page.getValue().equals(expectedPage));
-        }
-        if (expectedError != null) {
-            assertTrue("X-ExceptionType(" + error + ") is " + expectedError, error.getValue().equals(expectedError));
+            assertTrue("Wrong response code: " + statusCode, statusCode == expectedCode);
+            if (expectedPage != null) {
+                assertTrue("X-CustomErrorPage(" + page + ") is " + expectedPage, page.getValue().equals(expectedPage));
+            }
+            if (expectedError != null) {
+                assertTrue("X-ExceptionType(" + error + ") is " + expectedError, error.getValue().equals(expectedError));
+            }
         }
     }
 }

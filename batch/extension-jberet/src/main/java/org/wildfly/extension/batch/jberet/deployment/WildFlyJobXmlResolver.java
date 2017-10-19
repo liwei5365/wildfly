@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
@@ -43,10 +44,12 @@ import org.jberet.job.model.JobParser;
 import org.jberet.spi.JobXmlResolver;
 import org.jboss.as.ee.structure.DeploymentType;
 import org.jboss.as.ee.structure.DeploymentTypeMarker;
-import org.jboss.as.server.deployment.AttachmentKey;
 import org.jboss.as.server.deployment.Attachments;
 import org.jboss.as.server.deployment.DeploymentUnit;
 import org.jboss.as.server.deployment.DeploymentUnitProcessingException;
+import org.jboss.as.server.deployment.SubDeploymentMarker;
+import org.jboss.as.server.deployment.module.ResourceRoot;
+import org.jboss.modules.Module;
 import org.jboss.vfs.VirtualFile;
 import org.jboss.vfs.VirtualFileFilter;
 import org.wildfly.extension.batch.jberet._private.BatchLogger;
@@ -59,55 +62,75 @@ import org.wildfly.security.manager.WildFlySecurityManager;
  * @author <a href="mailto:jperkins@redhat.com">James R. Perkins</a>
  */
 public class WildFlyJobXmlResolver implements JobXmlResolver {
-    public static final AttachmentKey<WildFlyJobXmlResolver> JOB_XML_RESOLVER = AttachmentKey.create(WildFlyJobXmlResolver.class);
 
     private final Set<JobXmlResolver> jobXmlResolvers;
-    private final Map<String, String> resolvedJobs;
+    private final Map<String, String> jobXmlNames;
     private final Map<String, VirtualFile> jobXmlFiles;
-    private final ClassLoader classLoader;
+    private final Map<String, Set<String>> jobNames;
 
-    private WildFlyJobXmlResolver() {
-        classLoader = null;
-        resolvedJobs = Collections.emptyMap();
-        jobXmlResolvers = Collections.emptySet();
-        jobXmlFiles = Collections.emptyMap();
-    }
-
-    private WildFlyJobXmlResolver(final ClassLoader classLoader, final Map<String, VirtualFile> jobXmlFiles) {
-        this.classLoader = classLoader;
-        resolvedJobs = new LinkedHashMap<>();
+    private WildFlyJobXmlResolver(final Map<String, VirtualFile> jobXmlFiles) {
+        jobXmlNames = new LinkedHashMap<>();
         jobXmlResolvers = new LinkedHashSet<>();
+        jobNames = new LinkedHashMap<>();
         this.jobXmlFiles = jobXmlFiles;
     }
 
-    public static WildFlyJobXmlResolver of(final ClassLoader classLoader, final DeploymentUnit deploymentUnit) throws DeploymentUnitProcessingException {// Get the root file
-        final VirtualFile root = deploymentUnit.getAttachment(Attachments.DEPLOYMENT_ROOT).getRoot();
-        final VirtualFile jobsDir;
-        // Only files in the META-INF/batch-jobs directory
-        if (DeploymentTypeMarker.isType(DeploymentType.WAR, deploymentUnit)) {
-            jobsDir = root.getChild("WEB-INF/classes/META-INF/batch-jobs");
-        } else {
-            jobsDir = root.getChild("META-INF/batch-jobs");
+    /**
+     * Creates the {@linkplain JobXmlResolver resolver} for the deployment inheriting any visible resolvers and job XML
+     * files from dependencies.
+     *
+     * @param deploymentUnit the deployment to process
+     *
+     * @return the resolve
+     *
+     * @throws DeploymentUnitProcessingException if an error occurs processing the deployment
+     */
+    public static WildFlyJobXmlResolver forDeployment(final DeploymentUnit deploymentUnit) throws DeploymentUnitProcessingException {
+        // If this deployment unit already has a resolver, just use it
+        if (deploymentUnit.hasAttachment(BatchAttachments.JOB_XML_RESOLVER)) {
+            return deploymentUnit.getAttachment(BatchAttachments.JOB_XML_RESOLVER);
         }
-        final WildFlyJobXmlResolver jobXmlResolver;
-        if (jobsDir != null && jobsDir.exists()) {
-            try {
-                // We may have some job XML files
-                final Map<String, VirtualFile> xmlFiles = jobsDir.getChildren(JobXmlFilter.INSTANCE)
-                        .stream()
-                        .collect(Collectors.toMap(VirtualFile::getName,  (f) -> f));
-                jobXmlResolver = new WildFlyJobXmlResolver(classLoader, xmlFiles);
-                // Initialize this instance
-                jobXmlResolver.init();
-            } catch (IOException e) {
-                throw BatchLogger.LOGGER.errorProcessingBatchJobsDir(e);
+        // Get the module for it's class loader
+        final Module module = deploymentUnit.getAttachment(Attachments.MODULE);
+        final ClassLoader classLoader = module.getClassLoader();
+        WildFlyJobXmlResolver resolver;
+        // If we're an EAR we need to skip sub-deployments as they'll be process later, however all sub-deployments have
+        // access to the EAR/lib directory so those resources need to be processed
+        if (DeploymentTypeMarker.isType(DeploymentType.EAR, deploymentUnit)) {
+            // Create a new WildFlyJobXmlResolver without jobs from sub-deployments as they'll be processed later
+            final List<ResourceRoot> resources = deploymentUnit.getAttachmentList(Attachments.RESOURCE_ROOTS)
+                    .stream()
+                    .filter(r -> !SubDeploymentMarker.isSubDeployment(r))
+                    .collect(Collectors.toList());
+            resolver = create(classLoader, resources);
+            deploymentUnit.putAttachment(BatchAttachments.JOB_XML_RESOLVER, resolver);
+        } else {
+            // Create a new resolver for this deployment
+            if (deploymentUnit.hasAttachment(Attachments.RESOURCE_ROOTS)) {
+                resolver = create(classLoader, deploymentUnit.getAttachmentList(Attachments.RESOURCE_ROOTS));
+            } else {
+                resolver = create(classLoader, Collections.singletonList(deploymentUnit.getAttachment(Attachments.DEPLOYMENT_ROOT)));
             }
-        } else {
-            // This is likely not a batch deployment, creates a no-op service
-            jobXmlResolver = new WildFlyJobXmlResolver();
+            deploymentUnit.putAttachment(BatchAttachments.JOB_XML_RESOLVER, resolver);
+            // Process all accessible sub-deployments
+            final List<DeploymentUnit> accessibleDeployments = deploymentUnit.getAttachmentList(Attachments.ACCESSIBLE_SUB_DEPLOYMENTS);
+            for (DeploymentUnit subDeployment : accessibleDeployments) {
+                // Skip our self
+                if (deploymentUnit.equals(subDeployment)) {
+                    continue;
+                }
+                if (subDeployment.hasAttachment(BatchAttachments.JOB_XML_RESOLVER)) {
+                    final WildFlyJobXmlResolver toCopy = subDeployment.getAttachment(BatchAttachments.JOB_XML_RESOLVER);
+                    WildFlyJobXmlResolver.merge(resolver, toCopy);
+                } else {
+                    // We need to create a resolver for the sub-deployment and merge the two
+                    final WildFlyJobXmlResolver toCopy = forDeployment(subDeployment);
+                    subDeployment.putAttachment(BatchAttachments.JOB_XML_RESOLVER, toCopy);
+                    WildFlyJobXmlResolver.merge(resolver, toCopy);
+                }
+            }
         }
-        deploymentUnit.putAttachment(JOB_XML_RESOLVER, jobXmlResolver);
-        return jobXmlResolver;
+        return resolver;
     }
 
     @Override
@@ -139,23 +162,101 @@ public class WildFlyJobXmlResolver implements JobXmlResolver {
 
     @Override
     public Collection<String> getJobXmlNames(final ClassLoader classLoader) {
-        return new ArrayList<>(resolvedJobs.keySet());
+        return new ArrayList<>(jobXmlNames.keySet());
     }
 
     @Override
     public String resolveJobName(final String jobXml, final ClassLoader classLoader) {
-        return resolvedJobs.get(jobXml);
+        return jobXmlNames.get(jobXml);
+    }
+
+    /**
+     * Validates whether or not the job name exists for this deployment.
+     *
+     * @param jobName the job name to check
+     *
+     * @return {@code true} if the job exists, otherwise {@code false}
+     */
+    boolean isValidJobName(final String jobName) {
+        return jobNames.containsKey(jobName);
+    }
+
+    /**
+     * Returns the job XML file names which contain the job name.
+     *
+     * @param jobName the job name to find the job XML files for
+     *
+     * @return the set of job XML files the job can be run from
+     */
+    Set<String> getJobXmlNames(final String jobName) {
+        if (jobNames.containsKey(jobName)) {
+            return Collections.unmodifiableSet(jobNames.get(jobName));
+        }
+        return Collections.emptySet();
+    }
+
+    /**
+     * Returns all the job names available from this resolver.
+     *
+     * @return the job names available from this resolver
+     */
+    Set<String> getJobNames() {
+        return new LinkedHashSet<>(jobNames.keySet());
+    }
+
+    /**
+     * Validates whether or not the job XML descriptor exists for this deployment.
+     *
+     * @param jobXmlName the job XML descriptor name
+     *
+     * @return {@code true} if the job XML descriptor exists for this deployment, otherwise {@code false}
+     */
+    boolean isValidJobXmlName(final String jobXmlName) {
+        return jobXmlNames.containsKey(jobXmlName);
+    }
+
+    private static WildFlyJobXmlResolver create(final ClassLoader classLoader, final List<ResourceRoot> resources) throws DeploymentUnitProcessingException {
+        final Map<String, VirtualFile> foundJobXmlFiles = new LinkedHashMap<>();
+        for (ResourceRoot r : resources) {
+            final VirtualFile root = r.getRoot();
+            try {
+                addJobXmlFiles(foundJobXmlFiles, root.getChild(DEFAULT_PATH));
+            } catch (IOException e) {
+                throw BatchLogger.LOGGER.errorProcessingBatchJobsDir(e);
+            }
+        }
+
+        final WildFlyJobXmlResolver jobXmlResolver = new WildFlyJobXmlResolver(foundJobXmlFiles);
+        // Initialize this instance
+        jobXmlResolver.init(classLoader);
+        return jobXmlResolver;
+    }
+
+    private static void addJobXmlFiles(final Map<String, VirtualFile> foundJobXmlFiles, final VirtualFile jobsDir) throws IOException {
+        if (jobsDir != null && jobsDir.exists()) {
+            // We may have some job XML files
+            final Map<String, VirtualFile> xmlFiles = jobsDir.getChildren(JobXmlFilter.INSTANCE)
+                    .stream()
+                    .collect(Collectors.toMap(VirtualFile::getName, (f) -> f));
+            foundJobXmlFiles.putAll(xmlFiles);
+        }
+    }
+
+    private static void merge(final WildFlyJobXmlResolver target, final WildFlyJobXmlResolver toCopy) {
+        toCopy.jobXmlNames.forEach(target.jobXmlNames::putIfAbsent);
+        toCopy.jobXmlFiles.forEach(target.jobXmlFiles::putIfAbsent);
+        target.jobXmlResolvers.addAll(toCopy.jobXmlResolvers);
     }
 
     /**
      * Initializes the state of an instance
      */
-    private void init() {
+    private void init(final ClassLoader classLoader) {
         // Load the user defined resolvers
         for (JobXmlResolver resolver : ServiceLoader.load(JobXmlResolver.class, classLoader)) {
             jobXmlResolvers.add(resolver);
             for (String jobXml : resolver.getJobXmlNames(classLoader)) {
-                resolvedJobs.put(jobXml, resolver.resolveJobName(jobXml, classLoader));
+                addJob(jobXml, resolver.resolveJobName(jobXml, classLoader));
             }
         }
 
@@ -176,12 +277,18 @@ public class WildFlyJobXmlResolver implements JobXmlResolver {
                         }
                     }
                 });
-                resolvedJobs.put(entry.getKey(), job.getId());
+                addJob(entry.getKey(), job.getId());
             } catch (XMLStreamException | IOException e) {
                 // Report the possible error as we don't want to fail the deployment. The job may never be run.
                 BatchLogger.LOGGER.invalidJobXmlFile(entry.getKey());
             }
         }
+    }
+
+    private void addJob(final String jobXmlName, final String jobName) {
+        jobXmlNames.put(jobXmlName, jobName);
+        final Set<String> xmlDescriptors = jobNames.computeIfAbsent(jobName, s -> new LinkedHashSet<>());
+        xmlDescriptors.add(jobXmlName);
     }
 
     private static class JobXmlFilter implements VirtualFileFilter {

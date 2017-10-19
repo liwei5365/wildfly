@@ -81,6 +81,7 @@ public class BeanExpirationScheduler<G, I, T> implements Scheduler<I> {
     @Override
     public void cancel(Locality locality) {
         for (I id: this.expirationFutures.keySet()) {
+            if (Thread.currentThread().isInterrupted()) break;
             if (!locality.isLocal(id)) {
                 this.cancel(id);
             }
@@ -109,27 +110,19 @@ public class BeanExpirationScheduler<G, I, T> implements Scheduler<I> {
     private class ExpirationTask implements Runnable {
         private final I id;
 
-        public ExpirationTask(I id) {
+        ExpirationTask(I id) {
             this.id = id;
         }
 
         @Override
         public void run() {
             InfinispanEjbLogger.ROOT_LOGGER.tracef("Expiring stateful session bean %s", this.id);
-            try {
-                Batch batch = BeanExpirationScheduler.this.batcher.createBatch();
-                boolean success = false;
+            try (Batch batch = BeanExpirationScheduler.this.batcher.createBatch()) {
                 try {
                     BeanExpirationScheduler.this.remover.remove(this.id, BeanExpirationScheduler.this.expiration.getRemoveListener());
-                    success = true;
                 } catch (Throwable e) {
                     InfinispanEjbLogger.ROOT_LOGGER.failedToExpireBean(e, this.id);
-                } finally {
-                    if (success) {
-                        batch.close();
-                    } else {
-                        batch.discard();
-                    }
+                    batch.discard();
                 }
             } finally {
                 synchronized (this) {

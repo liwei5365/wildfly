@@ -26,13 +26,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.jboss.as.clustering.controller.AddStepHandler;
 import org.jboss.as.clustering.controller.Operations;
-import org.jboss.as.clustering.controller.RemoveStepHandler;
-import org.jboss.as.clustering.controller.ResourceDescriptor;
-import org.jboss.as.clustering.controller.ResourceServiceHandler;
-import org.jboss.as.clustering.controller.SimpleAliasEntry;
-import org.jboss.as.clustering.controller.SimpleResourceServiceHandler;
+import org.jboss.as.clustering.controller.transform.LegacyPropertyResourceTransformer;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.ObjectTypeAttributeDefinition;
@@ -44,13 +39,11 @@ import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.operations.common.Util;
 import org.jboss.as.controller.operations.global.ReadResourceHandler;
-import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.registry.Resource;
 import org.jboss.as.controller.transform.ResourceTransformationContext;
 import org.jboss.as.controller.transform.ResourceTransformer;
 import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
 import org.jboss.dmr.ModelNode;
-import org.jboss.dmr.Property;
 
 /**
  * Definition of a binary JDBC cache store resource.
@@ -81,7 +74,7 @@ public class BinaryKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDef
                 }
             }
             this.definition = ObjectTypeAttributeDefinition.Builder.of(name, definitions.toArray(new AttributeDefinition[size]))
-                    .setAllowNull(true)
+                    .setRequired(false)
                     .setDeprecated(InfinispanModel.VERSION_4_0_0.getVersion())
                     .setSuffix("table")
                     .build();
@@ -96,6 +89,8 @@ public class BinaryKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDef
     static void buildTransformation(ModelVersion version, ResourceTransformationDescriptionBuilder parent) {
         ResourceTransformationDescriptionBuilder builder = InfinispanModel.VERSION_4_0_0.requiresTransformation(version) ? parent.addChildRedirection(PATH, LEGACY_PATH) : parent.addChildResource(PATH);
 
+        JDBCStoreResourceDefinition.buildTransformation(version, builder, PATH);
+
         if (InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
             builder.setCustomResourceTransformer(new ResourceTransformer() {
                 @Override
@@ -104,22 +99,34 @@ public class BinaryKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDef
 
                     final ModelNode binaryTableModel = Resource.Tools.readModel(resource.removeChild(BinaryTableResourceDefinition.PATH));
                     if (binaryTableModel != null && binaryTableModel.isDefined()) {
-                        model.get(DeprecatedAttribute.TABLE.getDefinition().getName()).set(binaryTableModel);
+                        model.get(DeprecatedAttribute.TABLE.getName()).set(binaryTableModel);
                     }
 
-                    context.addTransformedResource(PathAddress.EMPTY_ADDRESS, resource);
+                    final ModelNode properties = model.remove(StoreResourceDefinition.Attribute.PROPERTIES.getName());
+                    final ResourceTransformationContext childContext = context.addTransformedResource(PathAddress.EMPTY_ADDRESS, resource);
+
+                    LegacyPropertyResourceTransformer.transformPropertiesToChildrenResources(properties, address, childContext);
+
                     context.processChildren(resource);
                 }
             });
         }
 
         BinaryTableResourceDefinition.buildTransformation(version, builder);
-
-        JDBCStoreResourceDefinition.buildTransformation(version, builder);
     }
 
-    BinaryKeyedJDBCStoreResourceDefinition(boolean allowRuntimeOnlyRegistration) {
-        super(PATH, new InfinispanResourceDescriptionResolver(PATH, pathElement("jdbc"), WILDCARD_PATH), allowRuntimeOnlyRegistration);
+    BinaryKeyedJDBCStoreResourceDefinition() {
+        super(PATH, LEGACY_PATH, InfinispanExtension.SUBSYSTEM_RESOLVER.createChildResolver(PATH, JDBCStoreResourceDefinition.PATH, WILDCARD_PATH), descriptor -> descriptor
+                .addExtraParameters(DeprecatedAttribute.class)
+                .addRequiredChildren(BinaryTableResourceDefinition.PATH)
+                // Translate deprecated TABLE attribute into separate add table operation
+                .setAddOperationTransformation(new TableAttributeTransformation(DeprecatedAttribute.TABLE, BinaryTableResourceDefinition.PATH))
+            , address -> new BinaryKeyedJDBCStoreBuilder(address.getParent()), registration -> {
+                registration.registerReadWriteAttribute(DeprecatedAttribute.TABLE.getDefinition(), LEGACY_READ_TABLE_HANDLER, LEGACY_WRITE_TABLE_HANDLER);
+
+                new BinaryTableResourceDefinition().register(registration);
+            });
+        this.setDeprecated(InfinispanModel.VERSION_5_0_0.getVersion());
     }
 
     static final OperationStepHandler LEGACY_READ_TABLE_HANDLER = new OperationStepHandler() {
@@ -139,53 +146,10 @@ public class BinaryKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDef
             ModelNode table = Operations.getAttributeValue(operation);
             for (Class<? extends org.jboss.as.clustering.controller.Attribute> attributeClass : Arrays.asList(BinaryTableResourceDefinition.Attribute.class, TableResourceDefinition.Attribute.class)) {
                 for (org.jboss.as.clustering.controller.Attribute attribute : attributeClass.getEnumConstants()) {
-                    ModelNode writeAttributeOperation = Operations.createWriteAttributeOperation(address, attribute, table.get(attribute.getDefinition().getName()));
-                    context.addStep(writeAttributeOperation, context.getResourceRegistration().getAttributeAccess(PathAddress.pathAddress(BinaryTableResourceDefinition.PATH), attribute.getDefinition().getName()).getWriteHandler(), context.getCurrentStage());
+                    ModelNode writeAttributeOperation = Operations.createWriteAttributeOperation(address, attribute, table.get(attribute.getName()));
+                    context.addStep(writeAttributeOperation, context.getResourceRegistration().getAttributeAccess(PathAddress.pathAddress(BinaryTableResourceDefinition.PATH), attribute.getName()).getWriteHandler(), context.getCurrentStage());
                 }
             }
         }
     };
-
-    @Override
-    public void register(ManagementResourceRegistration parentRegistration) {
-        ManagementResourceRegistration registration = parentRegistration.registerSubModel(this);
-        parentRegistration.registerAlias(LEGACY_PATH, new SimpleAliasEntry(registration));
-
-        ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver())
-                .addAttributes(JDBCStoreResourceDefinition.Attribute.class)
-                .addAttributes(StoreResourceDefinition.Attribute.class)
-                .addExtraParameters(DeprecatedAttribute.class)
-                .addExtraParameters(JDBCStoreResourceDefinition.DeprecatedAttribute.class)
-                .addCapabilities(Capability.class)
-                ;
-        ResourceServiceHandler handler = new SimpleResourceServiceHandler<>(new BinaryKeyedJDBCStoreBuilderFactory());
-        new AddStepHandler(descriptor, handler) {
-            @Override
-            protected void populateModel(OperationContext context, ModelNode operation, Resource resource) throws OperationFailedException {
-                translateAddOperation(context, operation);
-                super.populateModel(context, operation, resource);
-            }
-
-            @Override
-            public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
-                super.execute(context, operation);
-                if (operation.hasDefined(DeprecatedAttribute.TABLE.getDefinition().getName())) {
-                    // Translate deprecated TABLE attribute into separate add table operation
-                    ModelNode addTableOperation = Util.createAddOperation(context.getCurrentAddress().append(BinaryTableResourceDefinition.PATH));
-                    ModelNode parameters = operation.get(DeprecatedAttribute.TABLE.getDefinition().getName());
-                    for (Property parameter : parameters.asPropertyList()) {
-                        addTableOperation.get(parameter.getName()).set(parameter.getValue());
-                    }
-                    context.addStep(addTableOperation, registration.getOperationHandler(PathAddress.pathAddress(BinaryTableResourceDefinition.PATH), ModelDescriptionConstants.ADD), context.getCurrentStage());
-                }
-            }
-        }.register(registration);
-        new RemoveStepHandler(descriptor, handler).register(registration);
-
-        registration.registerReadWriteAttribute(DeprecatedAttribute.TABLE.getDefinition(), LEGACY_READ_TABLE_HANDLER, LEGACY_WRITE_TABLE_HANDLER);
-
-        new BinaryTableResourceDefinition().register(registration);
-
-        super.register(registration);
-    }
 }

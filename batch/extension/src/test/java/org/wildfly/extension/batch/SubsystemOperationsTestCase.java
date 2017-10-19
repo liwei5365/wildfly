@@ -30,6 +30,7 @@ import javax.xml.stream.XMLStreamException;
 
 import org.jboss.as.controller.client.Operation;
 import org.jboss.as.controller.client.helpers.Operations.CompositeOperationBuilder;
+import org.jboss.as.subsystem.test.AdditionalInitialization;
 import org.jboss.as.subsystem.test.KernelServices;
 import org.jboss.as.subsystem.test.SubsystemOperations;
 import org.jboss.dmr.ModelNode;
@@ -50,6 +51,11 @@ public class SubsystemOperationsTestCase extends AbstractBatchTestCase {
     @Override
     protected String getSubsystemXml() throws IOException {
         return readResource("/default-subsystem.xml");
+    }
+
+    @Override
+    protected AdditionalInitialization createAdditionalInitialization() {
+        return new AdditionalInitialization();
     }
 
     @Test

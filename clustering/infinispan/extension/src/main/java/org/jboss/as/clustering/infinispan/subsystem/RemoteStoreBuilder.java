@@ -25,38 +25,40 @@ package org.jboss.as.clustering.infinispan.subsystem;
 import static org.jboss.as.clustering.infinispan.subsystem.RemoteStoreResourceDefinition.Attribute.*;
 
 import java.net.UnknownHostException;
-import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
-import org.infinispan.configuration.cache.ConfigurationBuilder;
 import org.infinispan.configuration.cache.PersistenceConfiguration;
-import org.infinispan.configuration.cache.StoreConfigurationBuilder;
+import org.infinispan.persistence.remote.configuration.RemoteStoreConfiguration;
 import org.infinispan.persistence.remote.configuration.RemoteStoreConfigurationBuilder;
-import org.jboss.as.clustering.controller.CapabilityDependency;
-import org.jboss.as.clustering.controller.RequiredCapability;
+import org.jboss.as.clustering.controller.CommonUnaryRequirement;
 import org.jboss.as.clustering.infinispan.InfinispanLogger;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.StringListAttributeDefinition;
 import org.jboss.as.network.OutboundSocketBinding;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
 import org.jboss.msc.value.Value;
+import org.wildfly.clustering.service.Builder;
 import org.wildfly.clustering.service.Dependency;
+import org.wildfly.clustering.service.InjectedValueDependency;
 import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
-public class RemoteStoreBuilder extends StoreBuilder {
+public class RemoteStoreBuilder extends StoreBuilder<RemoteStoreConfiguration, RemoteStoreConfigurationBuilder> {
 
-    private final List<ValueDependency<OutboundSocketBinding>> bindings = new LinkedList<>();
+    private volatile List<ValueDependency<OutboundSocketBinding>> bindings;
+    private volatile String remoteCacheName;
+    private volatile long socketTimeout;
+    private volatile boolean tcpNoDelay;
 
-    private volatile RemoteStoreConfigurationBuilder storeBuilder;
-
-    public RemoteStoreBuilder(String containerName, String cacheName) {
-        super(containerName, cacheName);
+    public RemoteStoreBuilder(PathAddress cacheAddress) {
+        super(cacheAddress, RemoteStoreConfigurationBuilder.class);
     }
 
     @Override
@@ -69,28 +71,26 @@ public class RemoteStoreBuilder extends StoreBuilder {
     }
 
     @Override
-    public PersistenceConfiguration getValue() {
-        for (Value<OutboundSocketBinding> value : this.bindings) {
-            OutboundSocketBinding binding = value.getValue();
-            try {
-                this.storeBuilder.addServer().host(binding.getResolvedDestinationAddress().getHostAddress()).port(binding.getDestinationPort());
-            } catch (UnknownHostException e) {
-                throw InfinispanLogger.ROOT_LOGGER.failedToInjectSocketBinding(e, binding);
-            }
-        }
-        return super.getValue();
+    public Builder<PersistenceConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
+        this.remoteCacheName = CACHE.resolveModelAttribute(context, model).asString();
+        this.socketTimeout = SOCKET_TIMEOUT.resolveModelAttribute(context, model).asLong();
+        this.tcpNoDelay = TCP_NO_DELAY.resolveModelAttribute(context, model).asBoolean();
+        this.bindings = StringListAttributeDefinition.unwrapValue(context, SOCKET_BINDINGS.resolveModelAttribute(context, model)).stream().map(binding -> new InjectedValueDependency<>(CommonUnaryRequirement.OUTBOUND_SOCKET_BINDING.getServiceName(context, binding), OutboundSocketBinding.class)).collect(Collectors.toList());
+        return super.configure(context, model);
     }
 
     @Override
-    StoreConfigurationBuilder<?, ?> createStore(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.storeBuilder = new ConfigurationBuilder().persistence().addStore(RemoteStoreConfigurationBuilder.class)
-                .remoteCacheName(CACHE.getDefinition().resolveModelAttribute(context, model).asString())
-                .socketTimeout(SOCKET_TIMEOUT.getDefinition().resolveModelAttribute(context, model).asLong())
-                .tcpNoDelay(TCP_NO_DELAY.getDefinition().resolveModelAttribute(context, model).asBoolean())
-        ;
-        for (String binding : StringListAttributeDefinition.unwrapValue(context, SOCKET_BINDINGS.getDefinition().resolveModelAttribute(context, model))) {
-            this.bindings.add(new CapabilityDependency<>(context, RequiredCapability.OUTBOUND_SOCKET_BINDING, binding, OutboundSocketBinding.class));
-        }
-        return this.storeBuilder;
+    public void accept(RemoteStoreConfigurationBuilder builder) {
+        builder.remoteCacheName(this.remoteCacheName)
+                .socketTimeout(this.socketTimeout)
+                .tcpNoDelay(this.tcpNoDelay)
+                ;
+        this.bindings.stream().map(Value::getValue).forEach(binding -> {
+            try {
+                builder.addServer().host(binding.getResolvedDestinationAddress().getHostAddress()).port(binding.getDestinationPort());
+            } catch (UnknownHostException e) {
+                throw InfinispanLogger.ROOT_LOGGER.failedToInjectSocketBinding(e, binding);
+            }
+        });
     }
 }

@@ -1,12 +1,12 @@
 package org.jboss.as.test.manualmode.weld.extension;
 
-import junit.framework.AssertionFailedError;
 import org.jboss.arquillian.container.test.api.ContainerController;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
+import org.jboss.as.test.shared.integration.ejb.security.PermissionUtils;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ArchivePaths;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
@@ -14,11 +14,13 @@ import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import javax.enterprise.inject.spi.Extension;
 import java.io.File;
+import java.io.FilePermission;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -51,7 +53,11 @@ public class BeforeShutdownJNDILookupTestCase {
                 .create(WebArchive.class, DEPLOYMENT)
                 .addClasses(BeforeShutdownJNDILookupTestCase.class, BeforeShutdownExtension.class)
                 .add(EmptyAsset.INSTANCE, ArchivePaths.create("WEB-INF/beans.xml"))
-                .add(new StringAsset(BeforeShutdownExtension.class.getName()), "META-INF/services/" + Extension.class.getName());
+                .add(new StringAsset(BeforeShutdownExtension.class.getName()), "META-INF/services/" + Extension.class.getName())
+                .addAsManifestResource(PermissionUtils.createPermissionsXmlAsset(
+                        new FilePermission(TEST_PATH.getParent().toString(), "read, write"),
+                        new FilePermission(TEST_PATH.toString(), "read, write, delete")
+                ), "permissions.xml");
     }
 
     @ArquillianResource
@@ -66,7 +72,7 @@ public class BeforeShutdownJNDILookupTestCase {
         if (output.get(0).equals("Exception")) {
             String stacktrace = output.get(1).replaceAll(",", System.getProperty("line.separator"));
             String msg = "An exception was thrown by the deployment %s during shutdown.  The server stacktrace is shown below: %n%s";
-            throw new AssertionFailedError(String.format(msg, DEPLOYMENT, stacktrace));
+            Assert.fail(String.format(msg, DEPLOYMENT, stacktrace));
         }
         assertEquals("Contents of result.txt is not valid!", "UserTransaction", output.get(0));
     }

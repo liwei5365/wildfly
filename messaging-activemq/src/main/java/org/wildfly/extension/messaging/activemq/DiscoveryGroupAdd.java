@@ -30,7 +30,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.activemq.artemis.api.core.BroadcastEndpointFactory;
-import org.apache.activemq.artemis.api.core.ChannelBroadcastEndpointFactory;
 import org.apache.activemq.artemis.api.core.DiscoveryGroupConfiguration;
 import org.apache.activemq.artemis.api.core.UDPBroadcastEndpointFactory;
 import org.apache.activemq.artemis.core.config.Configuration;
@@ -38,7 +37,9 @@ import org.jboss.as.controller.AbstractAddStepHandler;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.PathAddress;
+import org.jboss.as.controller.capability.RuntimeCapability;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
+import org.jboss.as.controller.registry.Resource;
 import org.jboss.as.network.SocketBinding;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.Property;
@@ -46,7 +47,8 @@ import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceRegistry;
 import org.jboss.msc.service.ServiceTarget;
-import org.jgroups.JChannel;
+import org.wildfly.clustering.jgroups.spi.ChannelFactory;
+import org.wildfly.clustering.jgroups.spi.JGroupsDefaultRequirement;
 
 /**
  * Handler for adding a discovery group.
@@ -59,6 +61,21 @@ public class DiscoveryGroupAdd extends AbstractAddStepHandler {
 
     private DiscoveryGroupAdd() {
         super(DiscoveryGroupDefinition.ATTRIBUTES);
+    }
+
+    @Override
+    protected void recordCapabilitiesAndRequirements(OperationContext context, ModelNode operation, Resource resource) throws OperationFailedException {
+        //super.recordCapabilitiesAndRequirements(context, operation, resource);
+        String discoveryGroupName = context.getCurrentAddressValue();
+        String serverName = context.getCurrentAddress().getParent().getLastElement().getValue();
+        String compositeName = serverName + "." + discoveryGroupName;
+
+        context.registerCapability(DiscoveryGroupDefinition.CHANNEL_FACTORY_CAPABILITY.fromBaseCapability(compositeName));
+
+        ModelNode model = resource.getModel();
+        if (CommonAttributes.JGROUPS_CHANNEL.resolveModelAttribute(context, model).isDefined() && !DiscoveryGroupDefinition.JGROUPS_STACK.resolveModelAttribute(context, model).isDefined()) {
+            context.registerAdditionalCapabilityRequirement(JGroupsDefaultRequirement.CHANNEL_FACTORY.getName(), RuntimeCapability.buildDynamicCapabilityName(DiscoveryGroupDefinition.CHANNEL_FACTORY_CAPABILITY.getName(), compositeName), DiscoveryGroupDefinition.JGROUPS_STACK.getName());
+        }
     }
 
     @Override
@@ -131,11 +148,11 @@ public class DiscoveryGroupAdd extends AbstractAddStepHandler {
     }
 
 
-    static DiscoveryGroupConfiguration createDiscoveryGroupConfiguration(final String name, final DiscoveryGroupConfiguration config, final JChannel channel, final String channelName) throws Exception {
+    static DiscoveryGroupConfiguration createDiscoveryGroupConfiguration(final String name, final DiscoveryGroupConfiguration config, final ChannelFactory channelFactory, final String channelName) throws Exception {
         final long refreshTimeout = config.getRefreshTimeout();
         final long initialWaitTimeout = config.getDiscoveryInitialWaitTimeout();
 
-        final BroadcastEndpointFactory endpointFactory = new ChannelBroadcastEndpointFactory(channel, channelName);
+        final BroadcastEndpointFactory endpointFactory = new JGroupsBroadcastEndpointFactory(channelFactory, channelName);
 
         return new DiscoveryGroupConfiguration()
                 .setName(name)

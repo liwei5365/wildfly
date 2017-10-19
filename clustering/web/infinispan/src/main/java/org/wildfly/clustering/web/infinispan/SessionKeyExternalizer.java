@@ -25,45 +25,37 @@ package org.wildfly.clustering.web.infinispan;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
+import java.util.ServiceLoader;
 import java.util.function.Function;
+import java.util.stream.StreamSupport;
 
 import org.wildfly.clustering.infinispan.spi.distribution.Key;
+import org.wildfly.clustering.infinispan.spi.persistence.SimpleKeyFormat;
 import org.wildfly.clustering.marshalling.Externalizer;
+import org.wildfly.clustering.web.IdentifierExternalizerProvider;
 
 /**
  * Base externalizer for cache keys containing session identifiers.
  * @author Paul Ferraro
  */
-public abstract class SessionKeyExternalizer<K extends Key<String>> implements Externalizer<K> {
+public abstract class SessionKeyExternalizer<K extends Key<String>> extends SimpleKeyFormat<K> implements Externalizer<K> {
 
-    protected interface KeyFactory<K extends Key<String>> {
-        K createKey(String id, ObjectInput input) throws IOException, ClassNotFoundException;
-    }
+    static final Externalizer<String> EXTERNALIZER = StreamSupport.stream(ServiceLoader.load(IdentifierExternalizerProvider.class, IdentifierExternalizerProvider.class.getClassLoader()).spliterator(), false).findFirst().get().getExternalizer();
 
-    private final Class<K> targetClass;
-    private final KeyFactory<K> factory;
+    private final Function<String, K> resolver;
 
-    protected SessionKeyExternalizer(Class<K> targetClass, Function<String, K> factory) {
-        this(targetClass, (id, input) -> factory.apply(id));
-    }
-
-    protected SessionKeyExternalizer(Class<K> targetClass, KeyFactory<K> factory) {
-        this.targetClass = targetClass;
-        this.factory = factory;
+    protected SessionKeyExternalizer(Class<K> targetClass, Function<String, K> resolver) {
+        super(targetClass, resolver, Key::getValue);
+        this.resolver = resolver;
     }
 
     @Override
     public void writeObject(ObjectOutput output, K key) throws IOException {
-        SessionIdentifierExternalizer.BASE64.writeObject(output, key.getValue());
+        EXTERNALIZER.writeObject(output, key.getValue());
     }
 
     @Override
     public K readObject(ObjectInput input) throws IOException, ClassNotFoundException {
-        return this.factory.createKey(SessionIdentifierExternalizer.BASE64.readObject(input), input);
-    }
-
-    @Override
-    public Class<? extends K> getTargetClass() {
-        return this.targetClass;
+        return this.resolver.apply(EXTERNALIZER.readObject(input));
     }
 }

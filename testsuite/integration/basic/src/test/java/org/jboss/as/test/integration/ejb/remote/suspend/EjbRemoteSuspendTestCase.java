@@ -23,13 +23,11 @@
 package org.jboss.as.test.integration.ejb.remote.suspend;
 
 import java.util.Hashtable;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import javax.ejb.NoSuchEJBException;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
+
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
@@ -37,8 +35,8 @@ import org.jboss.arquillian.junit.InSequence;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.arquillian.container.ManagementClient;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
+import org.jboss.as.test.shared.TimeoutUtil;
 import org.jboss.dmr.ModelNode;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -59,7 +57,6 @@ public class EjbRemoteSuspendTestCase {
     private static final String MODULE_NAME = "ejb-suspend-test-case";
 
     private static Context context;
-
 
     @ArquillianResource
     private ManagementClient managementClient;
@@ -92,11 +89,19 @@ public class EjbRemoteSuspendTestCase {
         managementClient.getControllerClient().execute(op);
 
         try {
-            echo = localEcho.echo(message);
-            Assert.fail("call should have been rejected");
-        } catch (IllegalStateException expected) {
+            long fin = System.currentTimeMillis() + TimeoutUtil.adjust(5000);
+            while (true) {
+                echo = localEcho.echo(message);
+                if (System.currentTimeMillis() > fin)
+                    Assert.fail("call should have been rejected");
+                Thread.sleep(300);
+            }
+        } catch (NoSuchEJBException expected) {
 
-        } finally {
+        } catch (Exception e) {
+            Assert.fail(e.getMessage() + " thrown but NoSuchEJBException was expected");
+        }
+        finally {
             op = new ModelNode();
             op.get(ModelDescriptionConstants.OP).set("resume");
             managementClient.getControllerClient().execute(op);
@@ -112,16 +117,16 @@ public class EjbRemoteSuspendTestCase {
                 try {
                     localEcho.echo(message);
                     break;
-                } catch(Exception e) {
-                    if(System.currentTimeMillis() > fin) {
+                } catch (Exception e) {
+                    if (System.currentTimeMillis() > fin) {
                         throw e;
                     }
                 }
+                Thread.sleep(300);
             }
 
         }
     }
-
 
 
     @Test
@@ -133,8 +138,13 @@ public class EjbRemoteSuspendTestCase {
         managementClient.getControllerClient().execute(op);
 
         try {
-            Echo localEcho = (Echo) context.lookup("ejb:" + APP_NAME + "/" + MODULE_NAME + "/" + DISTINCT_NAME + "/" + EchoBean.class.getSimpleName() + "!" + Echo.class.getName() + "?stateful");
-            Assert.fail("call should have been rejected");
+            long fin = System.currentTimeMillis() + TimeoutUtil.adjust(5000);
+            while (true) {
+                Echo localEcho = (Echo) context.lookup("ejb:" + APP_NAME + "/" + MODULE_NAME + "/" + DISTINCT_NAME + "/" + EchoBean.class.getSimpleName() + "!" + Echo.class.getName() + "?stateful");
+                if (System.currentTimeMillis() > fin)
+                    Assert.fail("call should have been rejected");
+                Thread.sleep(300);
+            }
         } catch (NamingException expected) {
 
         } finally {

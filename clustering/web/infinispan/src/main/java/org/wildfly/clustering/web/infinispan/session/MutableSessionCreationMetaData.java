@@ -25,7 +25,7 @@ package org.wildfly.clustering.web.infinispan.session;
 import java.time.Duration;
 import java.time.Instant;
 
-import org.wildfly.clustering.ee.infinispan.Mutator;
+import org.wildfly.clustering.ee.Mutator;
 
 /**
  * @author Paul Ferraro
@@ -54,5 +54,15 @@ public class MutableSessionCreationMetaData implements SessionCreationMetaData {
     public void setMaxInactiveInterval(Duration duration) {
         this.metaData.setMaxInactiveInterval(duration);
         this.mutator.mutate();
+    }
+
+    @Override
+    public boolean isValid() {
+        return this.metaData.isValid();
+    }
+
+    @Override
+    public boolean invalidate() {
+        return this.metaData.invalidate();
     }
 }

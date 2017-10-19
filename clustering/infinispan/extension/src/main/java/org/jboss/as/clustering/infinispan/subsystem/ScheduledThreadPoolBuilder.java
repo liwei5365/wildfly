@@ -30,45 +30,47 @@ import java.util.concurrent.TimeUnit;
 import org.infinispan.commons.executors.ThreadPoolExecutorFactory;
 import org.infinispan.configuration.global.ThreadPoolConfiguration;
 import org.infinispan.configuration.global.ThreadPoolConfigurationBuilder;
-import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.concurrent.ClassLoaderThreadFactory;
 
 /**
  * @author Radoslav Husar
  * @version August 2015
  */
-public class ScheduledThreadPoolBuilder extends CacheContainerComponentBuilder<ThreadPoolConfiguration> implements ResourceServiceBuilder<ThreadPoolConfiguration> {
+public class ScheduledThreadPoolBuilder extends GlobalComponentBuilder<ThreadPoolConfiguration> {
 
     private final ThreadPoolConfigurationBuilder builder = new ThreadPoolConfigurationBuilder(null);
     private final ScheduledThreadPoolDefinition definition;
 
-    ScheduledThreadPoolBuilder(ScheduledThreadPoolDefinition definition, String containerName) {
-        super(definition, containerName);
+    ScheduledThreadPoolBuilder(ScheduledThreadPoolDefinition definition, PathAddress containerAddress) {
+        super(definition, containerAddress);
         this.definition = definition;
     }
 
     @Override
     public Builder<ThreadPoolConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
 
-        int maxThreads = this.definition.getMaxThreads().getDefinition().resolveModelAttribute(context, model).asInt();
-        long keepAliveTime = this.definition.getKeepAliveTime().getDefinition().resolveModelAttribute(context, model).asLong();
+        int maxThreads = this.definition.getMaxThreads().resolveModelAttribute(context, model).asInt();
+        long keepAliveTime = this.definition.getKeepAliveTime().resolveModelAttribute(context, model).asLong();
 
         ThreadPoolExecutorFactory<?> factory = new ThreadPoolExecutorFactory<ScheduledExecutorService>() {
-
             @Override
             public ScheduledExecutorService createExecutor(ThreadFactory factory) {
-                ScheduledThreadPoolExecutor scheduledExecutor = new ScheduledThreadPoolExecutor(0);
-                scheduledExecutor.setCorePoolSize(maxThreads);
-                scheduledExecutor.setKeepAliveTime(keepAliveTime, TimeUnit.MILLISECONDS);
-                return scheduledExecutor;
+                // Use fixed size, based on maxThreads
+                ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(maxThreads, new ClassLoaderThreadFactory(factory, ClassLoaderThreadFactory.class.getClassLoader()));
+                executor.setKeepAliveTime(keepAliveTime, TimeUnit.MILLISECONDS);
+                executor.setRemoveOnCancelPolicy(true);
+                executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+                return executor;
             }
 
             @Override
             public void validate() {
-
+                // Do nothing
             }
         };
         this.builder.threadPoolFactory(factory);

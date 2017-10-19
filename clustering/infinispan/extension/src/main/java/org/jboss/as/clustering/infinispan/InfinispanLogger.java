@@ -98,6 +98,9 @@ public interface InfinispanLogger extends BasicLogger {
     @Message(id = 6, value = "Failed to locate a data source bound to %s")
     OperationFailedException dataSourceJndiNameNotFound(String jndiName);
 
+    @Message(id = 7, value = "Failed to locate data source %s")
+    OperationFailedException dataSourceNotFound(String name);
+
     /**
      * Creates an exception indicating a failure to resolve the outbound socket binding represented by the
      * {@code binding} parameter.
@@ -116,10 +119,10 @@ public interface InfinispanLogger extends BasicLogger {
      * @param cause          the cause of the error.
      * @param cacheStoreName the name of the cache store.
      *
-     * @return an {@link OperationFailedException} for the error.
+     * @return an {@link IllegalArgumentException} for the error.
      */
     @Message(id = 10, value = "%s is not a valid cache store")
-    OperationFailedException invalidCacheStore(@Cause Throwable cause, String cacheStoreName);
+    IllegalArgumentException invalidCacheStore(@Cause Throwable cause, String cacheStoreName);
 
     @Message(id = 27, value = "Could not determine 'stack' attribute from JGroups subsystem")
     String indeterminiteStack();

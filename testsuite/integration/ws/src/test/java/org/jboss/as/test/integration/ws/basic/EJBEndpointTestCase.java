@@ -24,6 +24,7 @@ package org.jboss.as.test.integration.ws.basic;
 import java.net.URL;
 import javax.xml.namespace.QName;
 import javax.xml.ws.Service;
+
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
@@ -34,8 +35,9 @@ import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.Before;
 import org.junit.runner.RunWith;
 
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
+
 /**
- *
  * @author <a href="mailto:rsvoboda@redhat.com">Rostislav Svoboda</a>
  */
 @RunWith(Arquillian.class)
@@ -49,6 +51,8 @@ public class EJBEndpointTestCase extends BasicTests {
     public static Archive<?> deployment() {
         JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "jaxws-basic-ejb.jar")
                 .addClasses(EndpointIface.class, EJBEndpoint.class, HelloObject.class);
+        // EJBEndpoint#helloError needs getClassLoader permission for SOAPFactory.newInstance() invocation which is not supposed(??? at least it seems so) to be called from deployments
+        jar.addAsManifestResource(createPermissionsXmlAsset(new RuntimePermission("getClassLoader")), "permissions.xml");
         return jar;
     }
 

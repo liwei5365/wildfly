@@ -30,9 +30,9 @@ import org.jboss.as.test.integration.ejb.singleton.dependson.mdb.CallCounterProx
 import org.jboss.logging.Logger;
 
 /**
- * Base for session beans. 
+ * Base for session beans.
+ *
  * @author baranowb
- * 
  */
 //@DependsOn("CallCounterProxy")
 public abstract class BeanBase implements Trigger {
@@ -42,13 +42,13 @@ public abstract class BeanBase implements Trigger {
 
     @PostConstruct
     public void postConstruct() {
-        this.logger.info("Session.postConstruct");
+        this.logger.trace("Session.postConstruct");
         this.counter.setPostConstruct();
     }
 
     @PreDestroy
     public void preDestroy() {
-        this.logger.info("Session.preDestroy");
+        this.logger.trace("Session.preDestroy");
         this.counter.setPreDestroy();
     }
 }

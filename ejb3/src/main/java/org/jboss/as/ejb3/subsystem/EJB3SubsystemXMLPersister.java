@@ -53,7 +53,7 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
     @Override
     public void writeContent(final XMLExtendedStreamWriter writer, final SubsystemMarshallingContext context) throws XMLStreamException {
 
-        context.startSubsystemElement(EJB3SubsystemNamespace.EJB3_4_0.getUriString(), false);
+        context.startSubsystemElement(EJB3SubsystemNamespace.EJB3_5_0.getUriString(), false);
         writeElements(writer, context);
         // write the subsystem end element
         writer.writeEndElement();
@@ -80,7 +80,6 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
         // <stateful> element
         if (model.hasDefined(EJB3SubsystemModel.DEFAULT_STATEFUL_BEAN_ACCESS_TIMEOUT)
                 || model.hasDefined(EJB3SubsystemModel.DEFAULT_SFSB_CACHE)
-                || model.hasDefined(EJB3SubsystemModel.DEFAULT_CLUSTERED_SFSB_CACHE)
                 || model.hasDefined(EJB3SubsystemModel.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE)) {
             // <stateful>
             writer.writeStartElement(EJB3SubsystemXMLElement.STATEFUL.getLocalName());
@@ -225,10 +224,24 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
             writer.writeEndElement();
         }
 
-        // default-security-domain element
         if (model.hasDefined(DEFAULT_SECURITY_DOMAIN)) {
+            // default-security-domain element
             writer.writeStartElement(EJB3SubsystemXMLElement.DEFAULT_SECURITY_DOMAIN.getLocalName());
             writer.writeAttribute(EJB3SubsystemXMLAttribute.VALUE.getLocalName(), model.get(DEFAULT_SECURITY_DOMAIN).asString());
+            writer.writeEndElement();
+        }
+
+        // application-security-domains element
+        if (model.hasDefined(APPLICATION_SECURITY_DOMAIN)) {
+            writer.writeStartElement(EJB3SubsystemXMLElement.APPLICATION_SECURITY_DOMAINS.getLocalName());
+            writeApplicationSecurityDomains(writer, model);
+            writer.writeEndElement();
+        }
+
+        // identity element
+        if (model.hasDefined(SERVICE) && model.get(SERVICE).hasDefined(IDENTITY) && model.get(SERVICE, IDENTITY).hasDefined(IdentityResourceDefinition.OUTFLOW_SECURITY_DOMAINS.getName())) {
+            writer.writeStartElement(EJB3SubsystemXMLElement.IDENTITY.getLocalName());
+            IdentityResourceDefinition.OUTFLOW_SECURITY_DOMAINS.getAttributeMarshaller().marshallAsAttribute(IdentityResourceDefinition.OUTFLOW_SECURITY_DOMAINS, model.get(SERVICE, IDENTITY), false, writer);
             writer.writeEndElement();
         }
 
@@ -247,16 +260,28 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
             writer.writeEndElement();
         }
 
+        // graceful txn shutdown
+        if (model.hasDefined(ENABLE_GRACEFUL_TXN_SHUTDOWN)) {
+            writer.writeStartElement(EJB3SubsystemXMLElement.ENABLE_GRACEFUL_TXN_SHUTDOWN.getLocalName());
+            writer.writeAttribute(EJB3SubsystemXMLAttribute.VALUE.getLocalName(), model.get(EJB3SubsystemModel.ENABLE_GRACEFUL_TXN_SHUTDOWN).asString());
+            writer.writeEndElement();
+        }
+
         // statistics element
-        if (model.hasDefined(ENABLE_STATISTICS)) {
+        if (model.hasDefined(STATISTICS_ENABLED)) {
             writer.writeStartElement(EJB3SubsystemXMLElement.STATISTICS.getLocalName());
-            writer.writeAttribute(EJB3SubsystemXMLAttribute.ENABLED.getLocalName(), model.get(EJB3SubsystemModel.ENABLE_STATISTICS).asString());
+            writer.writeAttribute(EJB3SubsystemXMLAttribute.ENABLED.getLocalName(), model.get(EJB3SubsystemModel.STATISTICS_ENABLED).asString());
             writer.writeEndElement();
         }
 
         if (model.hasDefined(LOG_SYSTEM_EXCEPTIONS)) {
             writer.writeStartElement(EJB3SubsystemXMLElement.LOG_SYSTEM_EXCEPTIONS.getLocalName());
             writer.writeAttribute(EJB3SubsystemXMLAttribute.VALUE.getLocalName(), model.get(EJB3SubsystemModel.LOG_SYSTEM_EXCEPTIONS).asString());
+            writer.writeEndElement();
+        }
+        if (model.hasDefined(ALLOW_EJB_NAME_REGEX)) {
+            writer.writeStartElement(EJB3SubsystemXMLElement.ALLOW_EJB_NAME_REGEX.getLocalName());
+            writer.writeAttribute(EJB3SubsystemXMLAttribute.VALUE.getLocalName(), model.get(EJB3SubsystemModel.ALLOW_EJB_NAME_REGEX).asString());
             writer.writeEndElement();
         }
     }
@@ -281,6 +306,7 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
         writer.writeAttribute(EJB3SubsystemXMLAttribute.CONNECTOR_REF.getLocalName(), model.require(EJB3SubsystemModel.CONNECTOR_REF).asString());
         writer.writeAttribute(EJB3SubsystemXMLAttribute.THREAD_POOL_NAME.getLocalName(), model.require(EJB3SubsystemModel.THREAD_POOL_NAME).asString());
 
+        EJB3RemoteResourceDefinition.EXECUTE_IN_WORKER.marshallAsAttribute(model, writer);
         // write out any channel creation options
         if (model.hasDefined(CHANNEL_CREATION_OPTIONS)) {
             writeChannelCreationOptions(writer, model.get(CHANNEL_CREATION_OPTIONS));
@@ -380,10 +406,6 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
         if (statefulBeanModel.hasDefined(DEFAULT_SFSB_CACHE)) {
             String cache = statefulBeanModel.get(DEFAULT_SFSB_CACHE).asString();
             writer.writeAttribute(EJB3SubsystemXMLAttribute.CACHE_REF.getLocalName(), cache);
-        }
-        if (statefulBeanModel.hasDefined(DEFAULT_CLUSTERED_SFSB_CACHE)) {
-            String cache = statefulBeanModel.get(DEFAULT_CLUSTERED_SFSB_CACHE).asString();
-            writer.writeAttribute(EJB3SubsystemXMLAttribute.CLUSTERED_CACHE_REF.getLocalName(), cache);
         }
         EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE.marshallAsAttribute(statefulBeanModel, writer);
     }
@@ -568,6 +590,7 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
             if(profileNode.hasDefined(REMOTING_EJB_RECEIVER)){
                 writeRemotingEjbReceivers(writer, profileNode);
             }
+            StaticEJBDiscoveryDefinition.INSTANCE.marshallAsElement(profileNode, writer);
             writer.writeEndElement();
         }
     }
@@ -586,6 +609,21 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
             }
             writer.writeEndElement();
         }
+    }
+
+    private void writeApplicationSecurityDomains(final XMLExtendedStreamWriter writer, final ModelNode model) throws XMLStreamException {
+        List<Property> applicationSecurityDomains = model.get(APPLICATION_SECURITY_DOMAIN).asPropertyList();
+        for (Property property : applicationSecurityDomains) {
+            writeApplicationSecurityDomain(writer, property);
+        }
+    }
+
+    private void writeApplicationSecurityDomain(final XMLExtendedStreamWriter writer, final Property property) throws XMLStreamException {
+        writer.writeStartElement(APPLICATION_SECURITY_DOMAIN);
+        writer.writeAttribute(EJB3SubsystemXMLAttribute.NAME.getLocalName(), property.getName());
+        ApplicationSecurityDomainDefinition.SECURITY_DOMAIN.marshallAsAttribute(property.getValue(), writer);
+        ApplicationSecurityDomainDefinition.ENABLE_JACC.marshallAsAttribute(property.getValue(), writer);
+        writer.writeEndElement();
     }
 
     private static void writeAttribute(XMLExtendedStreamWriter writer, ModelNode model, AttributeDefinition attribute) throws XMLStreamException {

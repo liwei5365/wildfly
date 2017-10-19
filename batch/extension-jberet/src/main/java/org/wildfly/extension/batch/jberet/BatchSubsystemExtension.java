@@ -34,7 +34,7 @@ import org.wildfly.extension.batch.jberet.deployment.BatchJobResourceDefinition;
 
 public class BatchSubsystemExtension implements Extension {
 
-    private static final int MANAGEMENT_API_MAJOR_VERSION = 1;
+    private static final int MANAGEMENT_API_MAJOR_VERSION = 2;
     private static final int MANAGEMENT_API_MINOR_VERSION = 0;
     private static final int MANAGEMENT_API_MICRO_VERSION = 0;
 
@@ -48,7 +48,8 @@ public class BatchSubsystemExtension implements Extension {
 
     @Override
     public void initializeParsers(final ExtensionParsingContext context) {
-        context.setSubsystemXmlMapping(BatchSubsystemDefinition.NAME, Namespace.BATCH_1_0.getUriString(), new BatchSubsystemParser_1_0());
+        context.setSubsystemXmlMapping(BatchSubsystemDefinition.NAME, Namespace.BATCH_1_0.getUriString(), BatchSubsystemParser_1_0::new);
+        context.setSubsystemXmlMapping(BatchSubsystemDefinition.NAME, Namespace.BATCH_2_0.getUriString(), BatchSubsystemParser_2_0::new);
     }
 
     @Override
@@ -60,8 +61,7 @@ public class BatchSubsystemExtension implements Extension {
         if (context.isRuntimeOnlyRegistrationValid()) {
             final ManagementResourceRegistration deployments = subsystem.registerDeploymentModel(new BatchDeploymentResourceDefinition());
             final ManagementResourceRegistration jobRegistration = deployments.registerSubModel(BatchJobResourceDefinition.INSTANCE);
-            // TODO WFLY-5285 get rid of redundant .setRuntimeOnly once WFCORE-959 is integrated
-            jobRegistration.registerSubModel(new BatchJobExecutionResourceDefinition()).setRuntimeOnly(true);
+            jobRegistration.registerSubModel(new BatchJobExecutionResourceDefinition());
         }
 
     }

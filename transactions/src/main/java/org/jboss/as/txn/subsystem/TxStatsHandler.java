@@ -31,7 +31,7 @@ import org.jboss.as.controller.AbstractRuntimeOnlyHandler;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
-import org.jboss.as.controller.SimpleAttributeDefinition;
+import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.txn.logging.TransactionLogger;
@@ -47,15 +47,17 @@ public class TxStatsHandler extends AbstractRuntimeOnlyHandler {
 
     public enum TxStat {
 
-        NUMBER_OF_TRANSACTIONS(new SimpleAttributeDefinition(CommonAttributes.NUMBER_OF_TRANSACTIONS, ModelType.LONG, true)),
-        NUMBER_OF_NESTED_TRANSACTIONS(new SimpleAttributeDefinition(CommonAttributes.NUMBER_OF_NESTED_TRANSACTIONS, ModelType.LONG, true)),
-        NUMBER_OF_HEURISTICS(new SimpleAttributeDefinition(CommonAttributes.NUMBER_OF_HEURISTICS, ModelType.LONG, true)),
-        NUMBER_OF_COMMITTED_TRANSACTIONS(new SimpleAttributeDefinition(CommonAttributes.NUMBER_OF_COMMITTED_TRANSACTIONS, ModelType.LONG, true)),
-        NUMBER_OF_ABORTED_TRANSACTIONS(new SimpleAttributeDefinition(CommonAttributes.NUMBER_OF_ABORTED_TRANSACTIONS, ModelType.LONG, true)),
-        NUMBER_OF_INFLIGHT_TRANSACTIONS(new SimpleAttributeDefinition(CommonAttributes.NUMBER_OF_INFLIGHT_TRANSACTIONS, ModelType.LONG, true)),
-        NUMBER_OF_TIMED_OUT_TRANSACTIONS(new SimpleAttributeDefinition(CommonAttributes.NUMBER_OF_TIMED_OUT_TRANSACTIONS, ModelType.LONG, true)),
-        NUMBER_OF_APPLICATION_ROLLBACKS(new SimpleAttributeDefinition(CommonAttributes.NUMBER_OF_APPLICATION_ROLLBACKS, ModelType.LONG, true)),
-        NUMBER_OF_RESOURCE_ROLLBACKS(new SimpleAttributeDefinition(CommonAttributes.NUMBER_OF_RESOURCE_ROLLBACKS, ModelType.LONG, true));
+        NUMBER_OF_TRANSACTIONS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_TRANSACTIONS, ModelType.LONG, true).build()),
+        NUMBER_OF_NESTED_TRANSACTIONS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_NESTED_TRANSACTIONS, ModelType.LONG, true).build()),
+        NUMBER_OF_HEURISTICS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_HEURISTICS, ModelType.LONG, true).build()),
+        NUMBER_OF_COMMITTED_TRANSACTIONS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_COMMITTED_TRANSACTIONS, ModelType.LONG, true).build()),
+        NUMBER_OF_ABORTED_TRANSACTIONS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_ABORTED_TRANSACTIONS, ModelType.LONG, true).build()),
+        NUMBER_OF_INFLIGHT_TRANSACTIONS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_INFLIGHT_TRANSACTIONS, ModelType.LONG, true).build()),
+        NUMBER_OF_TIMED_OUT_TRANSACTIONS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_TIMED_OUT_TRANSACTIONS, ModelType.LONG, true).build()),
+        NUMBER_OF_APPLICATION_ROLLBACKS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_APPLICATION_ROLLBACKS, ModelType.LONG, true).build()),
+        NUMBER_OF_RESOURCE_ROLLBACKS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_RESOURCE_ROLLBACKS, ModelType.LONG, true).build()),
+        NUMBER_OF_SYSTEM_ROLLBACKS(SimpleAttributeDefinitionBuilder.create(CommonAttributes.NUMBER_OF_SYSTEM_ROLLBACKS, ModelType.LONG, true).build()),
+        AVERAGE_COMMIT_TIME(SimpleAttributeDefinitionBuilder.create(CommonAttributes.AVERAGE_COMMIT_TIME, ModelType.LONG, true).build());
 
         private static final Map<String, TxStat> MAP = new HashMap<String, TxStat>();
         static {
@@ -122,14 +124,18 @@ public class TxStatsHandler extends AbstractRuntimeOnlyHandler {
                 case NUMBER_OF_RESOURCE_ROLLBACKS:
                     result.set(txStats.getNumberOfResourceRollbacks());
                     break;
+                case NUMBER_OF_SYSTEM_ROLLBACKS:
+                    result.set(txStats.getNumberOfSystemRollbacks());
+                    break;
+                case AVERAGE_COMMIT_TIME:
+                    result.set(txStats.getAverageCommitTime());
+                    break;
                 default:
                     throw new IllegalStateException(TransactionLogger.ROOT_LOGGER.unknownMetric(stat));
             }
             context.getResult().set(result);
         }
-
-        context.stepCompleted();
-    }
+   }
 
     void registerMetrics(final ManagementResourceRegistration resourceRegistration) {
         for (TxStat stat : TxStat.values()) {

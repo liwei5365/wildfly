@@ -36,10 +36,14 @@ import javax.persistence.SynchronizationType;
 @Stateful
 public class UnsynchronizedSFSB {
     @PersistenceContext(unitName = "unsynchronized", synchronization = SynchronizationType.UNSYNCHRONIZED)
-        EntityManager em;
+    EntityManager em;
 
     @EJB
     InnerUnsynchronizedSFSB innerUnsynchronizedSFSB;    // for UNSYNCHRONIZED propagation test
+
+    @EJB
+    InnerSynchronizedSFSB innerSynchronizedSFSB;        // forces a mixed SYNCHRONIZATION/UNSYNCHRONIZED ERROR
+
 
     public Employee createAndFind(String name, String address, int id) {
 
@@ -73,6 +77,16 @@ public class UnsynchronizedSFSB {
         emp.setName(name);
         em.persist(emp);        // new employee will not be saved to the database
         return innerUnsynchronizedSFSB.find(id);
+    }
+
+    public Employee createAndPropagatedFindMixExceptionExcepted(String name, String address, int id) {
+
+        Employee emp = new Employee();
+        emp.setId(id);
+        emp.setAddress(address);
+        emp.setName(name);
+        em.persist(emp);        // new employee will not be saved to the database
+        return innerSynchronizedSFSB.find(id);
     }
 
     public void createAndPropagatedJoin(String name, String address, int id) {

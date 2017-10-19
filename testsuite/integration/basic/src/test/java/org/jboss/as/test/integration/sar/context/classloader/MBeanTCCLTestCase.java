@@ -3,6 +3,7 @@ package org.jboss.as.test.integration.sar.context.classloader;
 import java.io.IOException;
 
 import javax.management.MBeanServerConnection;
+import javax.management.MBeanTrustPermission;
 import javax.management.ObjectName;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
@@ -12,9 +13,9 @@ import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.as.arquillian.api.ContainerResource;
 import org.jboss.as.arquillian.container.ManagementClient;
+import org.jboss.as.test.integration.common.DefaultConfiguration;
 import org.jboss.as.test.integration.sar.context.classloader.mbean.MBeanInAModuleService;
 import org.jboss.as.test.integration.sar.context.classloader.mbean.MBeanInAModuleServiceMBean;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.EnterpriseArchive;
@@ -25,6 +26,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.xnio.IoUtils;
 
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
+
 /**
  * Tests that the MBean instance lifecycle has the correct TCCL set. The TCCL is expected to be the classloader of the deployment through which the MBean was deployed.
  *
@@ -34,8 +37,6 @@ import org.xnio.IoUtils;
 @RunWith(Arquillian.class)
 @RunAsClient
 public class MBeanTCCLTestCase {
-
-    private static final Logger logger = Logger.getLogger(MBeanTCCLTestCase.class);
 
     private static final String EAR_NAME = "tccl-mbean-test-app";
     private static final String SAR_NAME = "tccl-mbean-test-sar";
@@ -83,7 +84,13 @@ public class MBeanTCCLTestCase {
         ear.addAsModule(jar);
         ear.addAsManifestResource(MBeanTCCLTestCase.class.getPackage(), "jboss-deployment-structure.xml", "jboss-deployment-structure.xml");
 
-        logger.info("created deployment: " + ear.toString(true));
+        ear.addAsManifestResource(createPermissionsXmlAsset(
+                // mbean [wildfly:name=tccl-test-mbean] needs the following permission
+                new MBeanTrustPermission("register"),
+                // MBeanInAModuleService#testClassLoadByTCCL() needs the following permission
+                new RuntimePermission("getClassLoader")),
+                "permissions.xml");
+
         return ear;
     }
 
@@ -109,9 +116,7 @@ public class MBeanTCCLTestCase {
     }
 
     private MBeanServerConnection getMBeanServerConnection() throws IOException {
-        connector = JMXConnectorFactory.connect(managementClient.getRemoteJMXURL());
+        connector = JMXConnectorFactory.connect(managementClient.getRemoteJMXURL(), DefaultConfiguration.credentials());
         return connector.getMBeanServerConnection();
-
     }
-
 }

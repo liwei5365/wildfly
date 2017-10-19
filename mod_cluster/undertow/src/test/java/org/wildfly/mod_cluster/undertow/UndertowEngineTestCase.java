@@ -21,8 +21,11 @@
  */
 package org.wildfly.mod_cluster.undertow;
 
-import static org.mockito.Mockito.*;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import java.util.Collections;
 import java.util.Iterator;
@@ -30,21 +33,20 @@ import java.util.Iterator;
 import org.jboss.modcluster.container.Connector;
 import org.jboss.modcluster.container.Engine;
 import org.junit.Test;
-import org.wildfly.extension.undertow.HttpsListenerService;
-import org.wildfly.extension.undertow.ListenerService;
 import org.wildfly.extension.undertow.Host;
+import org.wildfly.extension.undertow.HttpsListenerService;
 import org.wildfly.extension.undertow.Server;
 import org.wildfly.extension.undertow.UndertowService;
 import org.xnio.OptionMap;
 
 public class UndertowEngineTestCase {
-    private final String defaultHost = "default-host";
-    private final String serverName = "name";
-    private final String hostName = "host";
-    private final Host host = new Host(this.hostName, Collections.<String>emptyList(), "ROOT.war") {};
-    private final HttpsListenerService listener = new HttpsListenerService("default", "https",OptionMap.EMPTY, null, OptionMap.EMPTY);
-    private final Server server = new TestServer(this.serverName, this.defaultHost, this.host, this.listener);
-    private final UndertowService service = new TestUndertowService("default-container", "default-server", "default-virtual-host", "instance-id", this.server);
+    private final String serverName = "default-server";
+    private final String hostName = "default-host";
+    private final String route = "route";
+    private final Host host = new Host(this.hostName, Collections.emptyList(), "ROOT.war");
+    private final HttpsListenerService listener = new HttpsListenerService("default", "https", OptionMap.EMPTY, null, OptionMap.EMPTY);
+    private final UndertowService service = new TestUndertowService("default-container", this.serverName, this.hostName, this.route, this.server);
+    private final Server server = new TestServer(this.serverName, this.hostName, this.service, this.host, this.listener);
     private final Connector connector = mock(Connector.class);
     private final Engine engine = new UndertowEngine(this.server, this.service, this.connector);
 
@@ -76,7 +78,7 @@ public class UndertowEngineTestCase {
 
     @Test
     public void getDefaultHost() {
-        assertSame(this.defaultHost, this.engine.getDefaultHost());
+        assertSame(this.hostName, this.engine.getDefaultHost());
     }
 
     @Test
@@ -89,20 +91,7 @@ public class UndertowEngineTestCase {
 
     @Test
     public void getJvmRoute() {
-        String expected = "node0";
-
-        this.service.setInstanceId("node0");
-
-        assertSame(expected, this.engine.getJvmRoute());
-    }
-
-    @Test
-    public void setJvmRoute() {
-        String expected = "node1";
-
-        this.engine.setJvmRoute(expected);
-
-        assertSame(expected, this.service.getInstanceId());
+        assertSame(this.route, this.engine.getJvmRoute());
     }
 
     @Test

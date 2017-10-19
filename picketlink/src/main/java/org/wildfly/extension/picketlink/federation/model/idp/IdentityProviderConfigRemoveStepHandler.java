@@ -26,16 +26,12 @@ import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.RestartParentResourceRemoveHandler;
-import org.jboss.as.controller.ServiceVerificationHandler;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceName;
 import org.wildfly.extension.picketlink.common.model.ModelElement;
 import org.wildfly.extension.picketlink.federation.service.IdentityProviderService;
 
 /**
- * <p>This remove handler is used during the removal of all partition-manager child resources. Its purpose is restart the
- * identity store services prior to the child removal, so we can stop all store services properly before restarting the parent.</p>
- *
  * @author Pedro Silva
  */
 public class IdentityProviderConfigRemoveStepHandler extends RestartParentResourceRemoveHandler {
@@ -47,8 +43,8 @@ public class IdentityProviderConfigRemoveStepHandler extends RestartParentResour
     }
 
     @Override
-    protected void recreateParentService(OperationContext context, PathAddress parentAddress, ModelNode parentModel, ServiceVerificationHandler verificationHandler) throws OperationFailedException {
-        IdentityProviderAddHandler.launchServices(context, parentModel, verificationHandler, null, parentAddress);
+    protected void recreateParentService(OperationContext context, PathAddress parentAddress, ModelNode parentModel) throws OperationFailedException {
+        IdentityProviderAddHandler.launchServices(context, parentModel, parentAddress, true);
     }
 
     @Override

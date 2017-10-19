@@ -22,9 +22,8 @@
 
 package org.jboss.as.test.integration.security.jacc.context;
 
-import java.io.InputStream;
-import java.lang.System;
 import java.net.URL;
+import java.security.SecurityPermission;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
@@ -40,6 +39,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(Arquillian.class)
@@ -50,7 +50,6 @@ public class PolicyContextTestCase {
 
     @Deployment(name = "ear")
     public static EnterpriseArchive createDeployment() {
-        LOGGER.info("Start EAR deployment");
         final String earName = "ear-jacc-context";
 
         final EnterpriseArchive ear = ShrinkWrap.create(EnterpriseArchive.class, earName + ".ear");
@@ -59,9 +58,8 @@ public class PolicyContextTestCase {
         ear.addAsModule(war);
         ear.addAsModule(jar);
 
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(ear.toString(true));
-        }
+        ear.addAsManifestResource(createPermissionsXmlAsset(new SecurityPermission("getPolicy")), "permissions.xml");
+
         return ear;
     }
 
@@ -69,7 +67,7 @@ public class PolicyContextTestCase {
     public void testHttpServletRequestFromPolicyContext(@ArquillianResource URL webAppURL) throws Exception {
         String externalFormURL = webAppURL.toExternalForm();
         String servletURL = externalFormURL.substring(0, externalFormURL.length() - 1) + PolicyContextTestServlet.SERVLET_PATH;
-        LOGGER.info("Testing JACC permissions: " + servletURL);
+        LOGGER.trace("Testing JACC permissions: " + servletURL);
 
         String response = HttpRequest.get(servletURL, 1000, SECONDS);
         assertTrue(response.contains("EJB successfully retrieved HttpServletRequest reference from PolicyContext"));
@@ -85,9 +83,6 @@ public class PolicyContextTestCase {
     private static WebArchive createWar(final String warName) {
         final WebArchive war = ShrinkWrap.create(WebArchive.class, warName + ".war");
         war.addClass(PolicyContextTestServlet.class);
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(war.toString(true));
-        }
         return war;
     }
 }

@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -37,12 +37,14 @@ enum Namespace {
     UNDERTOW_1_1("urn:jboss:domain:undertow:1.1"),
     UNDERTOW_1_2("urn:jboss:domain:undertow:1.2"),
     UNDERTOW_2_0("urn:jboss:domain:undertow:2.0"),
-    UNDERTOW_3_0("urn:jboss:domain:undertow:3.0");
+    UNDERTOW_3_0("urn:jboss:domain:undertow:3.0"),
+    UNDERTOW_3_1("urn:jboss:domain:undertow:3.1"),
+    UNDERTOW_4_0("urn:jboss:domain:undertow:4.0");
 
     /**
      * The current namespace version.
      */
-    public static final Namespace CURRENT = UNDERTOW_2_0;
+    public static final Namespace CURRENT = UNDERTOW_4_0;
 
     private final String name;
 

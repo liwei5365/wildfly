@@ -22,13 +22,14 @@
 
 package org.jboss.as.test.integration.hibernate;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.sql.Connection;
 import java.util.HashSet;
 import java.util.Set;
-
 import javax.naming.InitialContext;
-import javax.naming.NameClassPair;
-import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
 
@@ -46,10 +47,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 /**
  * Test that Hibernate statistics is working on native Hibernate and second level cache
  *
@@ -59,16 +56,16 @@ import static org.junit.Assert.assertTrue;
 public class Hibernate2LCacheStatsTestCase {
 
     private static final String FACTORY_CLASS = "<property name=\"hibernate.cache.region.factory_class\">org.jboss.as.jpa.hibernate5.infinispan.InfinispanRegionFactory</property>";
-    private static final String MODULE_DEPENDENCIES = "Dependencies: org.javassist export, org.infinispan export,org.hibernate.envers export,org.hibernate\n";
+    private static final String MODULE_DEPENDENCIES = "Dependencies: org.infinispan export,org.hibernate.envers export,org.hibernate\n";
 
     private static final String ARCHIVE_NAME = "hibernateSecondLevelStats_test";
 
     public static final String hibernate_cfg = "<?xml version='1.0' encoding='utf-8'?>"
             + "<!DOCTYPE hibernate-configuration PUBLIC " + "\"//Hibernate/Hibernate Configuration DTD 3.0//EN\" "
             + "\"http://www.hibernate.org/dtd/hibernate-configuration-3.0.dtd\">"
-            + "<hibernate-configuration><session-factory>" + "<property name=\"show_sql\">true</property>"
+            + "<hibernate-configuration><session-factory>" + "<property name=\"show_sql\">false</property>"
             + "<property name=\"hibernate.cache.use_second_level_cache\">true</property>"
-            + "<property name=\"hibernate.show_sql\">true</property>" + FACTORY_CLASS
+            + "<property name=\"hibernate.show_sql\">false</property>" + FACTORY_CLASS
             + "<property name=\"hibernate.cache.infinispan.cachemanager\">java:jboss/infinispan/container/hibernate</property>"
             + "<mapping resource=\"testmapping.hbm.xml\"/>" + "</session-factory></hibernate-configuration>";
 
@@ -132,34 +129,12 @@ public class Hibernate2LCacheStatsTestCase {
             return interfaceType.cast(iniCtx.lookup("java:global/" + ARCHIVE_NAME + "/" + "beans/" + beanName + "!"
                     + interfaceType.getName()));
         } catch (NamingException e) {
-            dumpJndi("");
             throw e;
         }
     }
 
     protected <T> T rawLookup(String name, Class<T> interfaceType) throws NamingException {
         return interfaceType.cast(iniCtx.lookup(name));
-    }
-
-    // TODO: move this logic to a common base class (might be helpful for writing new tests)
-    private static void dumpJndi(String s) {
-        /*try {
-            dumpTreeEntry(iniCtx.list(s), s);
-        } catch (NamingException ignore) {
-        }*/
-    }
-
-    private static void dumpTreeEntry(NamingEnumeration<NameClassPair> list, String s) throws NamingException {
-        System.out.println("\ndump " + s);
-        while (list.hasMore()) {
-            NameClassPair ncp = list.next();
-            System.out.println(ncp.toString());
-            if (s.length() == 0) {
-                dumpJndi(ncp.getName());
-            } else {
-                dumpJndi(s + "/" + ncp.getName());
-            }
-        }
     }
 
     @Test
@@ -185,7 +160,6 @@ public class Hibernate2LCacheStatsTestCase {
             conn.close();
             // read updated (dirty) data from second level cache
             s2 = sfsb.getPlanet(s2.getPlanetId());
-            System.out.println("get sfsb.getPlanet() returned planet with galaxy=" + s2.getGalaxy());
             assertTrue("was able to read updated Planet entity", s2 != null);
             assertEquals("Galaxy for Planet " + s2.getPlanetName() + " was read from second level cache = " + s2.getGalaxy(),
                     "MILKY WAY", s2.getGalaxy());

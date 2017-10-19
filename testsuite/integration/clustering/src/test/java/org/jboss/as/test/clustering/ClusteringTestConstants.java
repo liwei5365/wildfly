@@ -65,6 +65,8 @@ public interface ClusteringTestConstants {
     String NODE_2 = "node-1";
     String[] NODES = new String[] { NODE_1, NODE_2 };
 
+    String NODE_NAME_PROPERTY = "jboss.node.name";
+
     /**
      * Name of cluster for remote client.
      */
@@ -74,6 +76,7 @@ public interface ClusteringTestConstants {
      * Timeouts.
      */
     int GRACE_TIME_TO_REPLICATE = TimeoutUtil.adjust(3000);
+    int GRACEFUL_SHUTDOWN_TIMEOUT = TimeoutUtil.adjust(15);
 
     /**
      * TODO: This will be removed.

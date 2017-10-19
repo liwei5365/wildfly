@@ -23,7 +23,6 @@ package org.jboss.as.test.integration.jca.deployment;
 
 import java.net.URL;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
@@ -35,7 +34,6 @@ import org.jboss.as.test.integration.jca.rar.MultipleAdminObject1;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
-import org.jboss.shrinkwrap.api.spec.EnterpriseArchive;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.api.spec.ResourceAdapterArchive;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
@@ -45,16 +43,15 @@ import org.junit.runner.RunWith;
 
 /**
  * Test case for servlet activations
+ *
  * @author <a href="jpederse@redhat.com">Jesper Pedersen</a>
  */
 @RunWith(Arquillian.class)
 @RunAsClient
 public class WarServletDeploymentTestCase {
-    private static final Logger log = Logger.getLogger(WarServletDeploymentTestCase.class.getName());
-
-    final static String deploymentName = "raractivation.ear";
-    final static String rarDeploymentName = "eis.rar";
-    final static String webDeploymentName = "web.war";
+    static final String deploymentName = "raractivation.ear";
+    static final String rarDeploymentName = "eis.rar";
+    static final String webDeploymentName = "web.war";
 
     @Deployment(name = "rar", order = 1)
     public static Archive<?> getRar() {
@@ -66,7 +63,6 @@ public class WarServletDeploymentTestCase {
 
         raa.addAsManifestResource(WarServletDeploymentTestCase.class.getPackage(), "ra.xml", "ra.xml");
 
-        log.info(raa.toString(true));
         return raa;
     }
 
@@ -81,7 +77,6 @@ public class WarServletDeploymentTestCase {
     }
 
 
-
     @ArquillianResource
     @OperateOnDeployment("web")
     private URL webUrl;
@@ -89,6 +84,7 @@ public class WarServletDeploymentTestCase {
 
     /**
      * Test web
+     *
      * @throws Throwable Thrown if case of an error
      */
     @Test

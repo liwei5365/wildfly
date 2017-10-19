@@ -22,14 +22,14 @@
 package org.jboss.as.test.integration.jca.rar;
 
 import java.io.Serializable;
-import java.util.logging.Logger;
-
+import org.jboss.logging.Logger;
 import javax.resource.ResourceException;
 import javax.resource.spi.ActivationSpec;
 import javax.resource.spi.BootstrapContext;
 import javax.resource.spi.ResourceAdapter;
 import javax.resource.spi.ResourceAdapterInternalException;
 import javax.resource.spi.endpoint.MessageEndpointFactory;
+import javax.resource.spi.work.WorkManager;
 import javax.transaction.xa.XAResource;
 
 /**
@@ -38,13 +38,14 @@ import javax.transaction.xa.XAResource;
  * @version $Revision: $
  */
 public class MultipleResourceAdapter implements ResourceAdapter, Serializable {
+    private transient WorkManager workManager;
 
     /**
-	 * 
-	 */
-	private static final long serialVersionUID = 1L;
+     *
+     */
+    private static final long serialVersionUID = 1L;
 
-	/**
+    /**
      * The logger
      */
     private static Logger log = Logger.getLogger("MultipleResourceAdapter");
@@ -58,7 +59,7 @@ public class MultipleResourceAdapter implements ResourceAdapter, Serializable {
      * Default constructor
      */
     public MultipleResourceAdapter() {
-    	setName("RA");
+        setName("RA");
     }
 
     /**
@@ -79,6 +80,10 @@ public class MultipleResourceAdapter implements ResourceAdapter, Serializable {
         return name;
     }
 
+    public WorkManager getWorkManager() {
+        return workManager;
+    }
+
     /**
      * This is called during the activation of a message endpoint.
      *
@@ -88,7 +93,7 @@ public class MultipleResourceAdapter implements ResourceAdapter, Serializable {
      */
     public void endpointActivation(MessageEndpointFactory endpointFactory,
                                    ActivationSpec spec) throws ResourceException {
-        log.finest("endpointActivation()");
+        log.trace("endpointActivation()");
     }
 
     /**
@@ -99,19 +104,19 @@ public class MultipleResourceAdapter implements ResourceAdapter, Serializable {
      */
     public void endpointDeactivation(MessageEndpointFactory endpointFactory,
                                      ActivationSpec spec) {
-        log.finest("endpointDeactivation()");
+        log.trace("endpointDeactivation()");
     }
 
     /**
      * This is called when a resource adapter instance is bootstrapped.
      *
      * @param ctx A bootstrap context containing references
-     * @throws ResourceAdapterInternalException
-     *          indicates bootstrap failure.
+     * @throws ResourceAdapterInternalException indicates bootstrap failure.
      */
     public void start(BootstrapContext ctx)
             throws ResourceAdapterInternalException {
-        log.finest("start()");
+        log.trace("start()");
+        workManager = ctx.getWorkManager();
     }
 
     /**
@@ -119,7 +124,7 @@ public class MultipleResourceAdapter implements ResourceAdapter, Serializable {
      * during application server shutdown.
      */
     public void stop() {
-        log.finest("stop()");
+        log.trace("stop()");
     }
 
     /**
@@ -131,7 +136,7 @@ public class MultipleResourceAdapter implements ResourceAdapter, Serializable {
      */
     public XAResource[] getXAResources(ActivationSpec[] specs)
             throws ResourceException {
-        log.finest("getXAResources()");
+        log.trace("getXAResources()");
         return null;
     }
 
@@ -143,10 +148,7 @@ public class MultipleResourceAdapter implements ResourceAdapter, Serializable {
     @Override
     public int hashCode() {
         int result = 17;
-        if (name != null)
-            result += 31 * result + 7 * name.hashCode();
-        else
-            result += 31 * result + 7;
+        if (name != null) { result += 31 * result + 7 * name.hashCode(); } else { result += 31 * result + 7; }
         return result;
     }
 
@@ -158,25 +160,19 @@ public class MultipleResourceAdapter implements ResourceAdapter, Serializable {
      */
     @Override
     public boolean equals(Object other) {
-        if (other == null)
-            return false;
-        if (other == this)
-            return true;
-        if (!(other instanceof MultipleResourceAdapter))
-            return false;
+        if (other == null) { return false; }
+        if (other == this) { return true; }
+        if (!(other instanceof MultipleResourceAdapter)) { return false; }
         MultipleResourceAdapter obj = (MultipleResourceAdapter) other;
         boolean result = true;
         if (result) {
-            if (name == null)
-                result = obj.getName() == null;
-            else
-                result = name.equals(obj.getName());
+            if (name == null) { result = obj.getName() == null; } else { result = name.equals(obj.getName()); }
         }
         return result;
     }
 
     @Override
-    public String toString(){
- 	   return this.getClass().toString()+"name="+name;
+    public String toString() {
+        return this.getClass().toString() + "name=" + name;
     }
 }

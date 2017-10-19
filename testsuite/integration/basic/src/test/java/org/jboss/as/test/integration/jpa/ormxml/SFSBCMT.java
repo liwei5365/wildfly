@@ -29,7 +29,6 @@ import javax.ejb.TransactionManagement;
 import javax.ejb.TransactionManagementType;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
-import javax.persistence.Query;
 
 /**
  * stateful session bean
@@ -40,15 +39,13 @@ import javax.persistence.Query;
 @TransactionManagement(TransactionManagementType.CONTAINER)
 public class SFSBCMT {
     @PersistenceContext(unitName = "ORMpc")
-        EntityManager em;
+    EntityManager em;
 
     @Resource
     SessionContext sessionContext;
 
     public Employee queryEmployeeName(int id) {
-        Query q = em.createQuery("SELECT e FROM Employee e where id=?");
-        q.setParameter(1,new Integer(id));
-        return (Employee)q.getSingleResult();
+        return em.find(Employee.class, id);
     }
 
 

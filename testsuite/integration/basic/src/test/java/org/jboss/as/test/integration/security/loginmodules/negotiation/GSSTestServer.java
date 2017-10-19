@@ -31,7 +31,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
-
 import javax.security.auth.Subject;
 import javax.security.auth.login.Configuration;
 import javax.security.auth.login.LoginContext;
@@ -46,9 +45,9 @@ import org.jboss.as.arquillian.api.ServerSetupTask;
 import org.jboss.as.arquillian.container.ManagementClient;
 import org.jboss.as.test.integration.security.common.Krb5LoginConfiguration;
 import org.jboss.as.test.integration.security.common.Utils;
+import org.jboss.as.test.integration.security.common.negotiation.KerberosTestUtils;
 import org.jboss.as.test.shared.TimeoutUtil;
 import org.jboss.logging.Logger;
-import org.jboss.security.auth.callback.UsernamePasswordHandler;
 
 /**
  * A sample server application for testing Kerberos identity propagation.
@@ -58,6 +57,8 @@ import org.jboss.security.auth.callback.UsernamePasswordHandler;
 public class GSSTestServer implements ServerSetupTask, Runnable {
 
     private static Logger LOGGER = Logger.getLogger(GSSTestServer.class);
+
+    private static final boolean SKIP_TASK;
 
     private static final int ADJUSTED_SECOND = TimeoutUtil.adjust(1000);
 
@@ -72,9 +73,13 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
      * @param containerId
      * @throws Exception
      * @see org.jboss.as.arquillian.api.ServerSetupTask#setup(org.jboss.as.arquillian.container.ManagementClient,
-     *      java.lang.String)
+     * java.lang.String)
      */
     public void setup(ManagementClient managementClient, String containerId) throws Exception {
+        // skip server initialization if Kerberos is not able to work correctly.
+        // JUnit's AssumptionViolationException is not handled correctly in ServerSetupTask instances
+        if (SKIP_TASK) { return; }
+
         new Thread(this).start();
         int i = 0;
         while (!serverStarted && i < 20) {
@@ -82,14 +87,14 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
             try {
                 Thread.sleep(ADJUSTED_SECOND);
             } catch (InterruptedException e) {
-                LOGGER.info("Interrupted", e);
+                LOGGER.trace("Interrupted", e);
             }
         }
 
         final Socket socket = new Socket();
         try {
             LOGGER.debug("Waiting for the GSSTestServer.");
-            socket.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), GSSTestConstants.PORT), 20 * ADJUSTED_SECOND);
+            socket.connect(new InetSocketAddress(InetAddress.getByName(null), GSSTestConstants.PORT), 20 * ADJUSTED_SECOND);
             LOGGER.debug("GSSTestServer is up");
         } finally {
             try {
@@ -108,14 +113,14 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
      * @param containerId
      * @throws Exception
      * @see org.jboss.as.arquillian.api.ServerSetupTask#tearDown(org.jboss.as.arquillian.container.ManagementClient,
-     *      java.lang.String)
+     * java.lang.String)
      */
     public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
+        if (SKIP_TASK) { return; }
         stop();
     }
 
     /**
-     *
      * @see java.lang.Runnable#run()
      */
     public void run() {
@@ -163,7 +168,7 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
         // Create an unbound socket
         final Socket socket = new Socket();
         try {
-            socket.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), GSSTestConstants.PORT),
+            socket.connect(new InetSocketAddress(InetAddress.getByName(null), GSSTestConstants.PORT),
                     GSSTestConstants.SOCKET_TIMEOUT);
             DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
             dos.writeInt(GSSTestConstants.CMD_STOP);
@@ -174,7 +179,7 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
         } catch (IOException e) {
             LOGGER.error("Problem occurred during sending stop command", e);
         } catch (InterruptedException e) {
-            LOGGER.info("Thread.sleep() interrupted", e);
+            LOGGER.trace("Thread.sleep() interrupted", e);
         } finally {
             try {
                 socket.close();
@@ -203,7 +208,7 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
         LOGGER.debug("Authentication succeed");
         // 2. Perform the work as authenticated Subject.
         final String finishMsg = Subject.doAs(lc.getSubject(), new ServerAction());
-        LOGGER.info("Server stopped with result: " + (finishMsg == null ? "OK" : finishMsg));
+        LOGGER.trace("Server stopped with result: " + (finishMsg == null ? "OK" : finishMsg));
         lc.logout();
         krb5configuration.resetConfiguration();
     }
@@ -219,9 +224,10 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
 
         public String run() {
             final GSSManager gssManager = GSSManager.getInstance();
+            ServerSocket serverSocket = null;
             try {
-                final ServerSocket serverSocket = new ServerSocket(GSSTestConstants.PORT);
-                LOGGER.info("Server started on port " + GSSTestConstants.PORT);
+                serverSocket = new ServerSocket(GSSTestConstants.PORT);
+                LOGGER.trace("Server started on port " + GSSTestConstants.PORT);
                 int command = GSSTestConstants.CMD_NOOP;
 
                 serverStarted = true;
@@ -252,9 +258,9 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
                                 }
                             }
                             final String clientName = gssContext.getSrcName().toString();
-                            LOGGER.info("Context Established with Client " + clientName);
+                            LOGGER.trace("Context Established with Client " + clientName);
 
-                            //encrypt
+                            // encrypt
                             final MessageProp msgProp = new MessageProp(true);
                             final byte[] clientNameBytes = clientName.getBytes(GSSTestConstants.CHAR_ENC);
                             final byte[] outToken = gssContext.wrap(clientNameBytes, 0, clientNameBytes.length, msgProp);
@@ -262,10 +268,10 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
                             dataOutputStream.writeInt(outToken.length);
                             dataOutputStream.write(outToken);
                             dataOutputStream.flush();
-                            LOGGER.info("Client name was returned as the token value.");
+                            LOGGER.trace("Client name was returned as the token value.");
                         }
                     } catch (EOFException e) {
-                        LOGGER.info("Client didn't send a correct message.");
+                        LOGGER.trace("Client didn't send a correct message.");
                     } catch (IOException e) {
                         LOGGER.error("IOException occurred", e);
                     } catch (GSSException e) {
@@ -288,14 +294,31 @@ public class GSSTestServer implements ServerSetupTask, Runnable {
 
                     }
                 } while (command != GSSTestConstants.CMD_STOP);
-                LOGGER.info("Stop command received.");
+                LOGGER.trace("Stop command received.");
             } catch (IOException e) {
                 LOGGER.error("IOException occurred", e);
                 return e.getMessage();
+            } finally {
+                if (serverSocket != null) {
+                    try {
+                        serverSocket.close();
+                    } catch (IOException e) {
+                        LOGGER.error("Problem occurred during closing a ServerSocket", e);
+                    }
+                }
             }
             return null;
         }
 
     }
 
+    static {
+        boolean skipTask = false;
+        try {
+            KerberosTestUtils.assumeKerberosAuthenticationSupported();
+        } catch (Exception e) {
+            skipTask = true;
+        }
+        SKIP_TASK = skipTask;
+    }
 }

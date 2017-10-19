@@ -22,55 +22,69 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
-import static org.jboss.as.clustering.infinispan.subsystem.TableResourceDefinition.ColumnAttribute.*;
 import static org.jboss.as.clustering.infinispan.subsystem.TableResourceDefinition.Attribute.*;
+import static org.jboss.as.clustering.infinispan.subsystem.TableResourceDefinition.ColumnAttribute.*;
+
+import java.util.AbstractMap;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.Map;
 
 import org.infinispan.configuration.cache.ConfigurationBuilder;
 import org.infinispan.persistence.jdbc.configuration.JdbcStringBasedStoreConfigurationBuilder;
 import org.infinispan.persistence.jdbc.configuration.TableManipulationConfiguration;
-import org.infinispan.persistence.jdbc.configuration.TableManipulationConfigurationBuilder;
-import org.infinispan.persistence.jdbc.configuration.JdbcStringBasedStoreConfigurationBuilder.StringTableManipulationConfigurationBuilder;
 import org.jboss.as.clustering.controller.Attribute;
-import org.jboss.as.clustering.controller.ResourceServiceBuilder;
+import org.jboss.as.clustering.infinispan.subsystem.TableResourceDefinition.ColumnAttribute;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.wildfly.clustering.service.Builder;
 
 /**
  * @author Paul Ferraro
  */
-public class TableBuilder extends CacheComponentBuilder<TableManipulationConfiguration> implements ResourceServiceBuilder<TableManipulationConfiguration> {
+public class TableBuilder extends ComponentBuilder<TableManipulationConfiguration> {
 
     private final Attribute prefixAttribute;
-    private final TableManipulationConfigurationBuilder<JdbcStringBasedStoreConfigurationBuilder, StringTableManipulationConfigurationBuilder> builder = new ConfigurationBuilder().persistence().addStore(JdbcStringBasedStoreConfigurationBuilder.class).table();
+    private final Map<ColumnAttribute, Map.Entry<String, String>> columns = new EnumMap<>(ColumnAttribute.class);
 
-    public TableBuilder(Attribute prefixAttribute, CacheComponent component, String containerName, String cacheName) {
-        super(component, containerName, cacheName);
+    private volatile int batchSize;
+    private volatile int fetchSize;
+    private volatile String prefix;
+
+    public TableBuilder(Attribute prefixAttribute, CacheComponent component, PathAddress cacheAddress) {
+        super(component, cacheAddress);
         this.prefixAttribute = prefixAttribute;
     }
 
     @Override
     public Builder<TableManipulationConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        ModelNode idModel = ID.getDefinition().resolveModelAttribute(context, model);
-        ModelNode dataModel = DATA.getDefinition().resolveModelAttribute(context, model);
-        ModelNode timestampModel = TIMESTAMP.getDefinition().resolveModelAttribute(context, model);
+        for (ColumnAttribute column : EnumSet.allOf(ColumnAttribute.class)) {
+            ModelNode columnModel = column.resolveModelAttribute(context, model);
+            String name = column.getColumnName().resolveModelAttribute(context, columnModel).asString();
+            String type = column.getColumnType().resolveModelAttribute(context, columnModel).asString();
+            this.columns.put(column, new AbstractMap.SimpleImmutableEntry<>(name, type));
+        }
 
-        this.builder.idColumnName(ID.getColumnName().getDefinition().resolveModelAttribute(context, idModel).asString())
-                .idColumnType(ID.getColumnType().getDefinition().resolveModelAttribute(context, idModel).asString())
-                .dataColumnName(DATA.getColumnName().getDefinition().resolveModelAttribute(context, dataModel).asString())
-                .dataColumnType(DATA.getColumnType().getDefinition().resolveModelAttribute(context, dataModel).asString())
-                .timestampColumnName(TIMESTAMP.getColumnName().getDefinition().resolveModelAttribute(context, timestampModel).asString())
-                .timestampColumnType(TIMESTAMP.getColumnType().getDefinition().resolveModelAttribute(context, timestampModel).asString())
-                .batchSize(BATCH_SIZE.getDefinition().resolveModelAttribute(context, model).asInt())
-                .fetchSize(FETCH_SIZE.getDefinition().resolveModelAttribute(context, model).asInt())
-                .tableNamePrefix(this.prefixAttribute.getDefinition().resolveModelAttribute(context, model).asString())
-        ;
+        this.batchSize = BATCH_SIZE.resolveModelAttribute(context, model).asInt();
+        this.fetchSize = FETCH_SIZE.resolveModelAttribute(context, model).asInt();
+        this.prefix = this.prefixAttribute.resolveModelAttribute(context, model).asString();
         return this;
     }
 
     @Override
     public TableManipulationConfiguration getValue() {
-        return this.builder.create();
+        return new ConfigurationBuilder().persistence().addStore(JdbcStringBasedStoreConfigurationBuilder.class).table()
+                .idColumnName(this.columns.get(ID).getKey())
+                .idColumnType(this.columns.get(ID).getValue())
+                .dataColumnName(this.columns.get(DATA).getKey())
+                .dataColumnType(this.columns.get(DATA).getValue())
+                .timestampColumnName(this.columns.get(TIMESTAMP).getKey())
+                .timestampColumnType(this.columns.get(TIMESTAMP).getValue())
+                .batchSize(this.batchSize)
+                .fetchSize(this.fetchSize)
+                .tableNamePrefix(this.prefix)
+                .create();
     }
 }

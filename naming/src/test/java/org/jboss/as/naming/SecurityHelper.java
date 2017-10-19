@@ -38,10 +38,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.concurrent.Callable;
-
 import javax.naming.CompositeName;
 import javax.naming.Name;
 import javax.naming.NamingException;
+
+import org.wildfly.naming.java.permission.JndiPermission;
 
 /**
  * @author Lukas Krejci
@@ -52,16 +53,16 @@ public class SecurityHelper {
 
     }
 
-    public static Object testActionPermission(final JndiPermission.Action action, final NamingContext namingContext,
-        final String name, final Object... params) throws Exception {
+    public static Object testActionPermission(final int action, final NamingContext namingContext,
+                                              final String name, final Object... params) throws Exception {
 
         return testActionPermission(action, Collections.<JndiPermission>emptyList(), namingContext, name, params);
     }
 
-    public static Object testActionPermission(final JndiPermission.Action action, 
-        final Collection<JndiPermission> additionalRequiredPerms, final NamingContext namingContext, final String name, 
-        final Object... params) throws Exception {
-        
+    public static Object testActionPermission(final int action,
+                                              final Collection<JndiPermission> additionalRequiredPerms, final NamingContext namingContext, final String name,
+                                              final Object... params) throws Exception {
+
         Exception positiveTestCaseException = null;
 
         try {
@@ -80,15 +81,15 @@ public class SecurityHelper {
                     throw e;
                 } else {
                     throw new Exception("Both positive and negative permission test for JNDI action "
-                        + action
-                        + " failed. The negative test case (which should have resulted in a security exception)"
-                        + " failed with a message: "
-                        + "("
-                        + e.getClass().getName()
-                        + "): "
-                        + e.getMessage()
-                        + ". The exception of the positive testcase"
-                        + " is set up as the cause of this exception.", positiveTestCaseException);
+                            + action
+                            + " failed. The negative test case (which should have resulted in a security exception)"
+                            + " failed with a message: "
+                            + "("
+                            + e.getClass().getName()
+                            + "): "
+                            + e.getMessage()
+                            + ". The exception of the positive testcase"
+                            + " is set up as the cause of this exception.", positiveTestCaseException);
                 }
             }
 
@@ -96,19 +97,19 @@ public class SecurityHelper {
                 throw positiveTestCaseException;
             }
         }
-        
+
     }
-    
-    public static Object testActionWithPermission(final JndiPermission.Action action, 
-        final Collection<JndiPermission> additionalRequiredPerms, final NamingContext namingContext, final String name, 
-        final Object... params) throws Exception {
+
+    public static Object testActionWithPermission(final int action,
+                                                  final Collection<JndiPermission> additionalRequiredPerms, final NamingContext namingContext, final String name,
+                                                  final Object... params) throws Exception {
 
         final CompositeName n = name == null ? new CompositeName() : new CompositeName(name);
         final String sn = name == null ? "" : name;
 
         ArrayList<JndiPermission> allPerms = new ArrayList<JndiPermission>(additionalRequiredPerms);
         allPerms.add(new JndiPermission(sn, action));
-        
+
         return runWithSecurityManager(new Callable<Object>() {
             @Override
             public Object call() throws Exception {
@@ -117,16 +118,16 @@ public class SecurityHelper {
         }, getSecurityContextForJNDILookup(allPerms));
     }
 
-    public static void testActionWithoutPermission(final JndiPermission.Action action, 
-        final Collection<JndiPermission> additionalRequiredPerms, final NamingContext namingContext, final String name, 
-        final Object... params) throws Exception {
+    public static void testActionWithoutPermission(final int action,
+                                                   final Collection<JndiPermission> additionalRequiredPerms, final NamingContext namingContext, final String name,
+                                                   final Object... params) throws Exception {
 
         final CompositeName n = name == null ? new CompositeName() : new CompositeName(name);
         final String sn = name == null ? "" : name;
 
         ArrayList<JndiPermission> allPerms = new ArrayList<JndiPermission>(additionalRequiredPerms);
         allPerms.add(new JndiPermission(sn, not(action)));
-        
+
         try {
             runWithSecurityManager(new Callable<Object>() {
                 @Override
@@ -141,34 +142,27 @@ public class SecurityHelper {
         }
     }
 
-    private static JndiPermission.Action not(JndiPermission.Action action) {
-        for (JndiPermission.Action a : JndiPermission.Action.values()) {
-            //none is considered an invalid value
-            if (a != action && a != JndiPermission.Action.NONE) {
-                return a;
-            }
-        }
-
-        return null;
+    private static int not(int action) {
+        return ~action & JndiPermission.ACTION_ALL;
     }
 
-    private static Object performAction(JndiPermission.Action action, NamingContext namingContext, Name name,
-        Object... params) throws NamingException {
+    private static Object performAction(int action, NamingContext namingContext, Name name,
+                                        Object... params) throws NamingException {
         switch (action) {
-        case BIND:
+        case JndiPermission.ACTION_BIND:
             if (params.length == 1) {
                 namingContext.bind(name, params[0]);
             } else {
                 throw new IllegalArgumentException("Invalid number of arguments passed to bind()");
             }
             return null;
-        case CREATE_SUBCONTEXT:
+        case JndiPermission.ACTION_CREATE_SUBCONTEXT:
             return namingContext.createSubcontext(name);
-        case LIST:
+        case JndiPermission.ACTION_LIST:
             return namingContext.list(name);
-        case LIST_BINDINGS:
+        case JndiPermission.ACTION_LIST_BINDINGS:
             return namingContext.listBindings(name);
-        case LOOKUP:
+        case JndiPermission.ACTION_LOOKUP:
             if (params.length == 0) {
                 return namingContext.lookup(name);
             } else if (params.length == 1) {
@@ -176,14 +170,14 @@ public class SecurityHelper {
             } else {
                 throw new IllegalArgumentException("Invalid number of arguments passed to lookup()");
             }
-        case REBIND:
+        case JndiPermission.ACTION_REBIND:
             if (params.length == 1) {
                 namingContext.rebind(name, params[0]);
             } else {
                 throw new IllegalArgumentException("Invalid number of arguments passed to rebind()");
             }
             return null;
-        case UNBIND:
+        case JndiPermission.ACTION_UNBIND:
             namingContext.unbind(name);
             return null;
         default:
@@ -194,7 +188,7 @@ public class SecurityHelper {
     }
 
     public static <T> T runWithSecurityManager(final Callable<T> action, final AccessControlContext securityContext)
-        throws Exception {
+            throws Exception {
 
         Policy previousPolicy = Policy.getPolicy();
         SecurityManager previousSM = System.getSecurityManager();
@@ -238,7 +232,7 @@ public class SecurityHelper {
 
         ProtectionDomain domain = new ProtectionDomain(src, perms);
 
-        AccessControlContext ctx = new AccessControlContext(new ProtectionDomain[] { domain });
+        AccessControlContext ctx = new AccessControlContext(new ProtectionDomain[]{domain});
 
         return ctx;
     }

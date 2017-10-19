@@ -6,7 +6,6 @@ import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
-import org.jboss.as.test.clustering.EJBClientContextSelector;
 import org.jboss.as.test.clustering.cluster.ClusterAbstractTestCase;
 import org.jboss.as.test.clustering.cluster.dispatcher.bean.ClusterTopology;
 import org.jboss.as.test.clustering.cluster.dispatcher.bean.ClusterTopologyRetriever;
@@ -14,9 +13,6 @@ import org.jboss.as.test.clustering.cluster.dispatcher.bean.ClusterTopologyRetri
 import org.jboss.as.test.clustering.ejb.EJBDirectory;
 import org.jboss.as.test.clustering.ejb.RemoteEJBDirectory;
 import org.jboss.as.test.shared.TimeoutUtil;
-import org.jboss.ejb.client.ContextSelector;
-import org.jboss.ejb.client.EJBClientContext;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -27,9 +23,7 @@ import org.junit.runner.RunWith;
 @RunAsClient
 public class CommandDispatcherTestCase extends ClusterAbstractTestCase {
     private static final long VIEW_CHANGE_WAIT = TimeoutUtil.adjust(2000);
-    private static final Logger log = Logger.getLogger(CommandDispatcherTestCase.class);
     private static final String MODULE_NAME = "command-dispatcher";
-    private static final String CLIENT_PROPERTIES = "cluster/ejb3/stateless/jboss-ejb-client.properties";
 
     @Deployment(name = DEPLOYMENT_1, managed = false, testable = false)
     @TargetsContainer(CONTAINER_1)
@@ -46,17 +40,14 @@ public class CommandDispatcherTestCase extends ClusterAbstractTestCase {
     private static Archive<?> createDeployment() {
         final JavaArchive ejbJar = ShrinkWrap.create(JavaArchive.class, MODULE_NAME + ".jar");
         ejbJar.addPackage(ClusterTopologyRetriever.class.getPackage());
-        log.info(ejbJar.toString(true));
         return ejbJar;
     }
 
     @Test
     public void test() throws Exception {
-
-        ContextSelector<EJBClientContext> selector = EJBClientContextSelector.setup(CLIENT_PROPERTIES);
-
         try (EJBDirectory directory = new RemoteEJBDirectory(MODULE_NAME)) {
             ClusterTopologyRetriever bean = directory.lookupStateless(ClusterTopologyRetrieverBean.class, ClusterTopologyRetriever.class);
+
             ClusterTopology topology = bean.getClusterTopology();
             assertEquals(2, topology.getNodes().size());
             assertTrue(topology.getNodes().toString(), topology.getNodes().contains(NODE_1));
@@ -98,11 +89,6 @@ public class CommandDispatcherTestCase extends ClusterAbstractTestCase {
             assertTrue(topology.getNodes().toString() + " should contain " + NODE_1, topology.getNodes().contains(NODE_1));
             assertTrue(topology.getNodes().toString() + " should contain " + NODE_2, topology.getNodes().contains(NODE_2));
             assertFalse(topology.getRemoteNodes().toString() + " should not contain " + topology.getLocalNode(), topology.getRemoteNodes().contains(topology.getLocalNode()));
-        } finally {
-            // reset the selector
-            if (selector != null) {
-                EJBClientContext.setSelector(selector);
-            }
         }
     }
 }

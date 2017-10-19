@@ -21,13 +21,12 @@
  */
 package org.jboss.as.test.integration.ee.datasourcedefinition;
 
+import java.sql.SQLException;
 import javax.annotation.Resource;
 import javax.annotation.sql.DataSourceDefinition;
 import javax.annotation.sql.DataSourceDefinitions;
 import javax.ejb.Stateless;
 import javax.sql.DataSource;
-
-import java.sql.SQLException;
 
 /**
  * @author Stuart Douglas
@@ -38,11 +37,12 @@ import java.sql.SQLException;
                 user = "sa",
                 password = "sa",
                 className = "org.h2.jdbcx.JdbcDataSource",
-                url = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
+                url = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
         ),
         @DataSourceDefinition(
                 name = "java:comp/dse",
-                className = "org.jboss.as.test.integration.ee.datasourcedefinition.EmbeddedDataSource"
+                className = "org.jboss.as.test.integration.ee.datasourcedefinition.EmbeddedDataSource",
+                url = "jdbc:embedded:/some/url"
         )
 }
 )

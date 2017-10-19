@@ -40,14 +40,14 @@ import org.junit.runner.RunWith;
 
 /**
  * Tests of web app single sign-on
- * 
+ *
  * @author Scott.Stark@jboss.org
  * @author lbarreiro@redhat.com
  */
 @RunWith(Arquillian.class)
 @RunAsClient
 @ServerSetup(SingleSignOnUnitTestCase.SingleSignOnUnitTestCaseSetup.class)
-@Ignore(value="ARQ-791 Arquillian is unable to reconnect to JMX server if the connection is lost")
+@Ignore(value = "ARQ-791 Arquillian is unable to reconnect to JMX server if the connection is lost")
 @Category(CommonCriteria.class)
 public class SingleSignOnUnitTestCase {
 
@@ -78,7 +78,7 @@ public class SingleSignOnUnitTestCase {
      */
     @Test
     public void testFormAuthSingleSignOn(@ArquillianResource URL baseURLNoAuth) throws Exception {
-        log.info("+++ testFormAuthSingleSignOn");
+        log.trace("+++ testFormAuthSingleSignOn");
         SSOTestBase.executeFormAuthSingleSignOnTest(baseURLNoAuth, baseURLNoAuth, log);
     }
 
@@ -87,7 +87,7 @@ public class SingleSignOnUnitTestCase {
      */
     @Test
     public void testNoAuthSingleSignOn(@ArquillianResource URL baseURLNoAuth) throws Exception {
-        log.info("+++ testNoAuthSingleSignOn");
+        log.trace("+++ testNoAuthSingleSignOn");
         SSOTestBase.executeNoAuthSingleSignOnTest(baseURLNoAuth, baseURLNoAuth, log);
     }
 

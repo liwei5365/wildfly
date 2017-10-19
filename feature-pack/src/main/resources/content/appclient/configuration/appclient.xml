@@ -20,7 +20,7 @@
   ~ 02110-1301 USA, or see the FSF site: http://www.fsf.org.
   -->
 
-<server xmlns="urn:jboss:domain:4.0">
+<server xmlns="urn:jboss:domain:5.0">
 
     <extensions>
         <extension module="org.jboss.as.connector"/>
@@ -33,6 +33,7 @@
         <extension module="org.jboss.as.transactions"/>
         <extension module="org.jboss.as.webservices"/>
         <extension module="org.wildfly.extension.bean-validation"/>
+        <extension module="org.wildfly.extension.security.manager"/>
         <extension module="org.wildfly.iiop-openjdk"/>
     </extensions>
 
@@ -155,6 +156,13 @@
                     </authorization>
                 </security-domain>
             </security-domains>
+        </subsystem>
+        <subsystem xmlns="urn:jboss:domain:security-manager:1.0">
+            <deployment-permissions>
+                <maximum-set>
+                    <permission class="java.security.AllPermission"/>
+                </maximum-set>
+            </deployment-permissions>
         </subsystem>
         <subsystem xmlns="urn:jboss:domain:transactions:2.0">
             <core-environment>

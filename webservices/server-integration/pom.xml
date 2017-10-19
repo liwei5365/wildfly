@@ -29,7 +29,7 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-webservices</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Final-SNAPSHOT</version>
     </parent>
 
     <artifactId>wildfly-webservices-server-integration</artifactId>
@@ -73,6 +73,11 @@
        <groupId>org.wildfly</groupId>
        <artifactId>wildfly-ejb3</artifactId>
     </dependency>
+    
+    <dependency>
+       <groupId>org.wildfly</groupId>
+       <artifactId>wildfly-undertow</artifactId>
+    </dependency>
 
     <dependency>
         <groupId>org.wildfly</groupId>
@@ -106,10 +111,6 @@
        <scope>provided</scope>
        <optional>true</optional>
     </dependency>
-    <dependency>
-       <groupId>org.wildfly</groupId>
-       <artifactId>wildfly-undertow</artifactId>
-    </dependency>
 
     <dependency>
        <groupId>org.jboss.ws</groupId>
@@ -123,10 +124,13 @@
 
     <dependency>
         <groupId>org.wildfly.core</groupId>
-            <artifactId>wildfly-subsystem-test</artifactId>
-				<type>pom</type>
+        <artifactId>wildfly-subsystem-test</artifactId>
+        <type>pom</type>
         <scope>test</scope>
     </dependency>
-
+    <dependency>
+        <groupId>javax.jws</groupId>
+        <artifactId>jsr181-api</artifactId>
+    </dependency>
  </dependencies>
 </project>

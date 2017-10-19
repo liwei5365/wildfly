@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004,2014 Red Hat, Inc.,. All rights reserved.
+ * Copyright (c) 2004,2016 Red Hat, Inc.,. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -20,6 +20,7 @@
  */
 package org.wildfly.iiop.openjdk.csiv2;
 
+import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -41,8 +42,10 @@ import org.omg.CSIIOP.TransportAddress;
 import org.omg.IOP.TAG_ALTERNATE_IIOP_ADDRESS;
 import org.omg.IOP.TAG_CSI_SEC_MECH_LIST;
 import org.omg.IOP.TaggedComponent;
+import org.omg.SSLIOP.SSL;
+import org.omg.SSLIOP.SSLHelper;
+import org.omg.SSLIOP.TAG_SSL_SEC_TRANS;
 import org.wildfly.iiop.openjdk.Constants;
-import org.wildfly.iiop.openjdk.SSLConfigValue;
 
 import com.sun.corba.se.impl.encoding.CDRInputStream;
 import com.sun.corba.se.impl.encoding.EncapsInputStream;
@@ -53,6 +56,9 @@ import com.sun.corba.se.spi.ior.iiop.IIOPProfileTemplate;
 import com.sun.corba.se.spi.orb.ORB;
 import com.sun.corba.se.spi.transport.IORToSocketInfo;
 import com.sun.corba.se.spi.transport.SocketInfo;
+import org.wildfly.iiop.openjdk.logging.IIOPLogger;
+
+import static java.security.AccessController.doPrivileged;
 
 /**
  * <p>
@@ -66,18 +72,10 @@ import com.sun.corba.se.spi.transport.SocketInfo;
 
 public class CSIV2IORToSocketInfo implements IORToSocketInfo {
 
-    private static SSLConfigValue clientRequiresSsl;
+    private static boolean clientRequiresSsl;
 
-    public static void setClientTransportConfigMetaData(final SSLConfigValue clientRequiresSSL) {
+    public static void setClientRequiresSSL(final boolean clientRequiresSSL) {
         CSIV2IORToSocketInfo.clientRequiresSsl = clientRequiresSSL;
-    }
-
-    private static boolean checkClientRequiresSSL() {
-        if (clientRequiresSsl == SSLConfigValue.CLIENTAUTH || clientRequiresSsl == SSLConfigValue.MUTUALAUTH) {
-            return true;
-        } else {
-            return false;
-        }
     }
 
     public List getSocketInfo(IOR ior) {
@@ -97,8 +95,11 @@ public class CSIV2IORToSocketInfo implements IORToSocketInfo {
         SocketInfo socketInfo;
 
         TransportAddress sslAddress = selectSSLTransportAddress(ior);
+        SSL ssl = getSSL(ior);
         if (sslAddress != null) {
             socketInfo = createSSLSocketInfo(hostname, sslAddress.port);
+        } else if (ssl != null) {
+            socketInfo = createSSLSocketInfo(hostname, ssl.port);
         } else {
             // FIXME not all corba object export ssl port
             // if (clientRequiresSsl) {
@@ -113,6 +114,30 @@ public class CSIV2IORToSocketInfo implements IORToSocketInfo {
         return result;
     }
 
+    private SSL getSSL(IOR ior){
+        Iterator iter = ior.getProfile().getTaggedProfileTemplate().iteratorById(TAG_SSL_SEC_TRANS.value);
+        if(!iter.hasNext()){
+            return null;
+        }
+        ORB orb = ior.getORB();
+        TaggedComponent compList = ((com.sun.corba.se.spi.ior.TaggedComponent) iter.next()).getIOPComponent(orb);
+        CDRInputStream in = doPrivileged(new PrivilegedAction<CDRInputStream>() {
+            @Override
+            public CDRInputStream run() {
+                return new EncapsInputStream(orb, compList.component_data, compList.component_data.length);
+            }
+        });
+        in.consumeEndian();
+
+        SSL ssl = SSLHelper.read(in);
+        boolean targetRequiresSsl = ssl.target_requires > 0;
+        boolean targetSupportsSsl = ssl.target_supports >0;
+        if(!targetSupportsSsl && clientRequiresSsl){
+            throw IIOPLogger.ROOT_LOGGER.serverDoesNotSupportSsl();
+        }
+        return targetSupportsSsl && (targetRequiresSsl || clientRequiresSsl) ? ssl : null;
+    }
+
     private TransportAddress selectSSLTransportAddress(IOR ior) {
         CompoundSecMechList compoundSecMechList = readCompoundSecMechList(ior);
         if (compoundSecMechList != null) {
@@ -123,7 +148,10 @@ public class CSIV2IORToSocketInfo implements IORToSocketInfo {
                 }
                 boolean targetSupportsSsl = checkSSL(sslMech.target_supports);
                 boolean targetRequiresSsl = checkSSL(sslMech.target_requires);
-                if (targetSupportsSsl && (targetRequiresSsl || checkClientRequiresSSL())) {
+                if(!targetSupportsSsl && clientRequiresSsl){
+                    throw IIOPLogger.ROOT_LOGGER.serverDoesNotSupportSsl();
+                }
+                if (targetSupportsSsl && (targetRequiresSsl || clientRequiresSsl)) {
                     return extractAddress(sslMech);
                 }
             }
@@ -143,7 +171,12 @@ public class CSIV2IORToSocketInfo implements IORToSocketInfo {
         }
         ORB orb = ior.getORB();
         TaggedComponent compList = ((com.sun.corba.se.spi.ior.TaggedComponent) iter.next()).getIOPComponent(orb);
-        CDRInputStream in = new EncapsInputStream(orb, compList.component_data, compList.component_data.length);
+        CDRInputStream in = doPrivileged(new PrivilegedAction<CDRInputStream>() {
+            @Override
+            public CDRInputStream run() {
+                return new EncapsInputStream(orb, compList.component_data, compList.component_data.length);
+            }
+        });
         in.consumeEndian();
         return CompoundSecMechListHelper.read(in);
     }
@@ -154,7 +187,12 @@ public class CSIV2IORToSocketInfo implements IORToSocketInfo {
             return null;
         }
         ORB orb = ior.getORB();
-        CDRInputStream in = new EncapsInputStream(orb, comp.component_data, comp.component_data.length);
+        CDRInputStream in = doPrivileged(new PrivilegedAction<CDRInputStream>() {
+            @Override
+            public CDRInputStream run() {
+                return new EncapsInputStream(orb, comp.component_data, comp.component_data.length);
+            }
+        });
         in.consumeEndian();
         return TLS_SEC_TRANSHelper.read(in);
     }

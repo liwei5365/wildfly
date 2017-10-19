@@ -30,19 +30,20 @@ import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SER
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SOCKET_BINDING;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SOCKET_BINDING_GROUP;
 import static org.jboss.as.test.integration.domain.management.util.DomainTestSupport.validateResponse;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
 import java.io.InputStream;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.http.impl.client.HttpClients;
+import org.jboss.as.test.shared.TestSuiteEnvironment;
 import org.junit.Assert;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.jboss.as.arquillian.container.NetworkUtils;
 import org.jboss.as.controller.client.helpers.domain.DeploymentPlan;
 import org.jboss.as.controller.client.helpers.domain.DeploymentPlanResult;
 import org.jboss.as.controller.client.helpers.domain.DomainClient;
@@ -94,6 +95,7 @@ public class ReadEnvironmentVariablesTestCase {
             //Deploy the archive
             WebArchive archive = ShrinkWrap.create(WebArchive.class, "env-test.war").addClass(EnvironmentTestServlet.class);
             archive.addAsResource(new StringAsset("Manifest-Version: 1.0\nDependencies: org.jboss.dmr \n"),"META-INF/MANIFEST.MF");
+            archive.addAsManifestResource(createPermissionsXmlAsset(new RuntimePermission("getenv.*")), "permissions.xml");
 
             final InputStream contents = archive.as(ZipExporter.class).exportAsInputStream();
             try {
@@ -139,11 +141,11 @@ public class ReadEnvironmentVariablesTestCase {
         ModelNode socketBinding = validateResponse(client.execute(op));
 
         URL url = new URL("http",
-                NetworkUtils.formatPossibleIpv6Address(socketBinding.get("bound-address").asString()),
+                TestSuiteEnvironment.formatPossibleIpv6Address(socketBinding.get("bound-address").asString()),
                 socketBinding.get("bound-port").asInt(),
                 "/env-test/env");
         HttpGet get = new HttpGet(url.toURI());
-        HttpClient httpClient = new DefaultHttpClient();
+        HttpClient httpClient = HttpClients.createDefault();
         HttpResponse response = httpClient.execute(get);
         ModelNode env = ModelNode.fromJSONStream(response.getEntity().getContent());
         Map<String, String> environment = new HashMap<String, String>();

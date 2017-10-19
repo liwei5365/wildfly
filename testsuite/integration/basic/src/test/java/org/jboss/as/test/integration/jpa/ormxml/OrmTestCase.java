@@ -34,7 +34,6 @@ import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -49,19 +48,18 @@ public class OrmTestCase {
     private static final String ARCHIVE_NAME = "jpa_OrmTestCase";
 
     private static final String orm_xml =
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
-            "<entity-mappings xmlns=\"http://java.sun.com/xml/ns/persistence/orm\" version=\"2.0\">" +
-            "<entity class=\"org.jboss.as.test.integration.jpa.ormxml.Employee\"/>" +
-            "</entity-mappings>"
-        ;
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                    "<entity-mappings xmlns=\"http://java.sun.com/xml/ns/persistence/orm\" version=\"2.0\">" +
+                    "<entity class=\"org.jboss.as.test.integration.jpa.ormxml.Employee\"/>" +
+                    "</entity-mappings>";
 
     @Deployment
     public static Archive<?> deploy() {
 
         JavaArchive jar = ShrinkWrap.create(JavaArchive.class, ARCHIVE_NAME + ".jar");
         jar.addClasses(OrmTestCase.class,
-            Employee.class,
-            SFSBCMT.class
+                Employee.class,
+                SFSBCMT.class
         );
 
         jar.addAsManifestResource(OrmTestCase.class.getPackage(), "persistence.xml", "persistence.xml");
@@ -73,7 +71,6 @@ public class OrmTestCase {
     private InitialContext iniCtx;
 
     @Test
-    @Ignore
     public void testOrmXmlDefinedEmployeeEntity() throws Exception {
         SFSBCMT sfsbcmt = lookup("SFSBCMT", SFSBCMT.class);
         Employee emp = sfsbcmt.queryEmployeeName(1);

@@ -30,7 +30,7 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-batch-parent</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Final-SNAPSHOT</version>
     </parent>
 
     <artifactId>wildfly-batch</artifactId>
@@ -39,10 +39,6 @@
     <name>WildFly: Batch Integration Subsystem</name>
 
     <dependencies>
-        <dependency>
-            <groupId>org.wildfly</groupId>
-            <artifactId>wildfly-jberet</artifactId>
-        </dependency>
         <!-- Used to inherit some stuff from the new subsystem -->
         <dependency>
             <groupId>org.wildfly</groupId>

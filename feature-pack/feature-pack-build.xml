@@ -39,36 +39,73 @@
                 subsystems="configuration/standalone/subsystems-ha.xml"
                 output-file="standalone/configuration/standalone-ha.xml">
             <property name="jgroups.supplement" value="" />
+            <property name="mod_cluster.supplement" value="" />
         </standalone>
         <standalone
                 template="configuration/standalone/template.xml"
                 subsystems="configuration/standalone/subsystems-full-ha.xml"
                 output-file="standalone/configuration/standalone-full-ha.xml">
             <property name="jgroups.supplement" value="" />
+            <property name="mod_cluster.supplement" value="" />
         </standalone>
+        <standalone
+                template="configuration/standalone/template.xml"
+                subsystems="configuration/standalone/subsystems-load-balancer.xml"
+                output-file="standalone/configuration/standalone-load-balancer.xml"/>
+        <standalone
+                template="configuration/standalone/template.xml"
+                subsystems="configuration/examples/subsystems-activemq-colocated.xml"
+                output-file="docs/examples/configs/standalone-activemq-colocated.xml"/>
         <standalone
                 template="configuration/standalone/template.xml"
                 subsystems="configuration/standalone/subsystems-full-ha.xml"
                 output-file="docs/examples/configs/standalone-ec2-full-ha.xml">
-            <property name="jgroups.supplement" value="ec2" />
-        </standalone>
+                <property name="jgroups.supplement" value="ec2" />
+                <property name="mod_cluster.supplement" value="no-multicast" />
+       </standalone>
         <standalone
                 template="configuration/standalone/template.xml"
                 subsystems="configuration/standalone/subsystems-ha.xml"
                 output-file="docs/examples/configs/standalone-ec2-ha.xml">
             <property name="jgroups.supplement" value="ec2" />
+            <property name="mod_cluster.supplement" value="no-multicast" />
         </standalone>
+        <domain
+                template="configuration/domain/template.xml"
+                subsystems="configuration/domain/subsystems.xml"
+                output-file="docs/examples/configs/domain-ec2.xml">
+            <property name="jgroups.supplement" value="ec2" />
+            <property name="mod_cluster.supplement" value="no-multicast" />
+        </domain>
+        <!-- azure.AZURE_PING -->
+        <standalone
+                template="configuration/standalone/template.xml"
+                subsystems="configuration/standalone/subsystems-full-ha.xml"
+                output-file="docs/examples/configs/standalone-azure-full-ha.xml">
+            <property name="jgroups.supplement" value="azure"/>
+            <property name="mod_cluster.supplement" value="no-multicast" />
+        </standalone>
+        <standalone
+                template="configuration/standalone/template.xml"
+                subsystems="configuration/standalone/subsystems-ha.xml"
+                output-file="docs/examples/configs/standalone-azure-ha.xml">
+            <property name="jgroups.supplement" value="azure"/>
+            <property name="mod_cluster.supplement" value="no-multicast" />
+        </standalone>
+        <!-- TCPGOSSIP -->
         <standalone
                 template="configuration/standalone/template.xml"
                 subsystems="configuration/standalone/subsystems-full-ha.xml"
                 output-file="docs/examples/configs/standalone-gossip-full-ha.xml">
             <property name="jgroups.supplement" value="gossip" />
+            <property name="mod_cluster.supplement" value="no-multicast" />
         </standalone>
         <standalone
                 template="configuration/standalone/template.xml"
                 subsystems="configuration/standalone/subsystems-ha.xml"
                 output-file="docs/examples/configs/standalone-gossip-ha.xml">
             <property name="jgroups.supplement" value="gossip" />
+            <property name="mod_cluster.supplement" value="no-multicast" />
         </standalone>
         <standalone
                 template="configuration/standalone/template.xml"
@@ -93,7 +130,10 @@
         <domain
                 template="configuration/domain/template.xml"
                 subsystems="configuration/domain/subsystems.xml"
-                output-file="domain/configuration/domain.xml"/>
+                output-file="domain/configuration/domain.xml">
+            <property name="jgroups.supplement" value="" />
+            <property name="mod_cluster.supplement" value="" />
+        </domain>
         <host
                 template="configuration/host/host.xml"
                 subsystems="configuration/host/subsystems.xml"
@@ -106,14 +146,13 @@
                 template="configuration/host/host-slave.xml"
                 subsystems="configuration/host/subsystems.xml"
                 output-file="domain/configuration/host-slave.xml" />
-
     </config>
     <copy-artifacts>
         <copy-artifact artifact="org.jboss.resteasy:resteasy-spring" to-location="modules/system/layers/base/org/jboss/resteasy/resteasy-spring/main/bundled/resteasy-spring-jar/"/>
-        <copy-artifact artifact="org.jboss.seam.integration:jboss-seam-int-jbossas" to-location="modules/system/layers/base/org/jboss/integration/ext-content/main/bundled/jboss-seam-int.jar"/>
+        <copy-artifact artifact="org.jboss.seam.integration:jboss-seam-int-jbossas" to-location="modules/system/layers/base/org/jboss/integration/ext-content/main/bundled/jboss-seam-int-jbossas.jar"/>
         <copy-artifact artifact="org.wildfly:wildfly-client-all" to-location="bin/client/jboss-client.jar"/>
         <copy-artifact artifact="org.wildfly.core:wildfly-cli::client" to-location="bin/client/jboss-cli-client.jar"/>
-        <copy-artifact artifact="org.apache.activemq:artemis-native" to-location="modules/system/layers/base/org/apache/activemq/artemis/main" extract="true" >
+        <copy-artifact artifact="org.apache.activemq:artemis-native" to-location="modules/system/layers/base/org/apache/activemq/artemis/journal/main" extract="true" >
             <filter pattern="lib/*" include="true" />
             <filter pattern="*" include="false"/>
         </copy-artifact>

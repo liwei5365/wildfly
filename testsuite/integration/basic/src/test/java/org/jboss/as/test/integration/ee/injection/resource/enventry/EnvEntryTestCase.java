@@ -41,7 +41,6 @@ import org.jboss.as.arquillian.api.ServerSetupTask;
 import org.jboss.as.arquillian.container.ManagementClient;
 import org.jboss.as.test.integration.common.jms.JMSOperations;
 import org.jboss.as.test.integration.common.jms.JMSOperationsProvider;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -50,16 +49,15 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 /**
- * Migration test from EJB Testsuite (ejbthree-985 + enventry) to AS7 [JIRA JBQA-5483]. 
+ * Migration test from EJB Testsuite (ejbthree-985 + enventry) to AS7 [JIRA JBQA-5483].
  * Test to see if optional env-entry-value works (16.4.1.3).
  * Testing of behaviour of environment variables in ejb-jar.xml.
- * 
+ *
  * @author Carlo de Wolf, William DeCoste, Ondrej Chaloupka
  */
 @RunWith(Arquillian.class)
 @ServerSetup({EnvEntryTestCase.JmsQueueSetup.class})
 public class EnvEntryTestCase {
-    private static final Logger log = Logger.getLogger(EnvEntryTestCase.class);
 
     @ArquillianResource
     InitialContext ctx;
@@ -98,7 +96,6 @@ public class EnvEntryTestCase {
                         JmsQueueSetup.class)
                 .addPackage(JMSOperations.class.getPackage());
         jar.addAsManifestResource(EnvEntryTestCase.class.getPackage(), "ejb-jar.xml", "ejb-jar.xml");
-        log.info(jar.toString(true));
         return jar;
     }
 

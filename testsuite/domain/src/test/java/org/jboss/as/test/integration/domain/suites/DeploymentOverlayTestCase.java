@@ -30,13 +30,13 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.http.impl.client.HttpClients;
+import org.jboss.as.test.shared.TestSuiteEnvironment;
 import org.junit.Assert;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.DefaultHttpClient;
 import org.jboss.as.cli.Util;
-import org.jboss.as.controller.client.Operation;
 import org.jboss.as.controller.client.OperationBuilder;
 import org.jboss.as.controller.client.helpers.domain.DomainClient;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
@@ -73,6 +73,10 @@ import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.STE
 import static org.jboss.as.test.integration.domain.management.util.DomainTestSupport.cleanFile;
 import static org.jboss.as.test.integration.domain.management.util.DomainTestSupport.validateResponse;
 import static org.junit.Assert.assertEquals;
+
+import org.jboss.as.controller.PathAddress;
+import org.jboss.as.controller.client.Operation;
+import org.jboss.as.controller.client.helpers.Operations;
 
 /**
  * Test of various management operations involving deployment overlays
@@ -247,7 +251,7 @@ public class DeploymentOverlayTestCase {
         op = new ModelNode();
         addr = new ModelNode();
         addr.add(ModelDescriptionConstants.DEPLOYMENT_OVERLAY, TEST_WILDCARD);
-        addr.add(ModelDescriptionConstants.CONTENT, "WEB-INF/classes/wildcard-new-file");
+        addr.add(ModelDescriptionConstants.CONTENT, "wildcard-new-file.txt");
         op.get(ModelDescriptionConstants.OP_ADDR).set(addr);
         op.get(ModelDescriptionConstants.OP).set(ModelDescriptionConstants.ADD);
         op.get(ModelDescriptionConstants.CONTENT).get(ModelDescriptionConstants.INPUT_STREAM_INDEX).set(0);
@@ -293,12 +297,35 @@ public class DeploymentOverlayTestCase {
         executeOnMaster(builder.build());
 
         DomainClient client = testSupport.getDomainMasterLifecycleUtil().createDomainClient();
-        Assert.assertEquals("OVERRIDDEN", performHttpCall(client, "master", "main-one", "standard-sockets"));
-        Assert.assertEquals("OVERRIDDEN", performHttpCall(client, "slave", "main-three", "standard-sockets"));
+        Assert.assertEquals("OVERRIDDEN", performHttpCall(client, "master", "main-one", "standard-sockets", "/test/servlet"));
+        Assert.assertEquals("OVERRIDDEN", performHttpCall(client, "slave", "main-three", "standard-sockets", "/test/servlet"));
+        Assert.assertEquals("new file", performHttpCall(client, "master", "main-one", "standard-sockets", "/test/wildcard-new-file.txt"));
+        Assert.assertEquals("new file", performHttpCall(client, "slave", "main-three", "standard-sockets", "/test/wildcard-new-file.txt"));
 
+        //Remove the wildcard overlay
+        ModelNode op = Operations.createRemoveOperation(PathAddress.pathAddress(ModelDescriptionConstants.SERVER_GROUP, "main-server-group")
+                .append(ModelDescriptionConstants.DEPLOYMENT_OVERLAY, TEST_WILDCARD)
+                .append(ModelDescriptionConstants.DEPLOYMENT, "*.war")
+                .toModelNode());
+        op.get("redeploy-affected").set(true);
+        executeOnMaster(op);
+        Assert.assertEquals("OVERRIDDEN", performHttpCall(client, "master", "main-one", "standard-sockets", "/test/servlet"));
+        Assert.assertEquals("OVERRIDDEN", performHttpCall(client, "slave", "main-three", "standard-sockets", "/test/servlet"));
+        Assert.assertEquals("<html><head><title>Error</title></head><body>Not Found</body></html>", performHttpCall(client, "master", "main-one", "standard-sockets", "/test/wildcard-new-file.txt"));
+        Assert.assertEquals("<html><head><title>Error</title></head><body>Not Found</body></html>", performHttpCall(client, "slave", "main-three", "standard-sockets", "/test/wildcard-new-file.txt"));
+        op = Operations.createRemoveOperation(PathAddress.pathAddress(ModelDescriptionConstants.SERVER_GROUP, "main-server-group")
+                .append(ModelDescriptionConstants.DEPLOYMENT_OVERLAY, TEST_OVERLAY)
+                .append(ModelDescriptionConstants.DEPLOYMENT, "test.war")
+                .toModelNode());
+        op.get("redeploy-affected").set(true);
+        executeOnMaster(op);
+        Assert.assertEquals("NON OVERRIDDEN", performHttpCall(client, "master", "main-one", "standard-sockets", "/test/servlet"));
+        Assert.assertEquals("NON OVERRIDDEN", performHttpCall(client, "slave", "main-three", "standard-sockets", "/test/servlet"));
+        Assert.assertEquals("<html><head><title>Error</title></head><body>Not Found</body></html>", performHttpCall(client, "master", "main-one", "standard-sockets", "/test/wildcard-new-file.txt"));
+        Assert.assertEquals("<html><head><title>Error</title></head><body>Not Found</body></html>", performHttpCall(client, "slave", "main-three", "standard-sockets", "/test/wildcard-new-file.txt"));
     }
 
-    private String performHttpCall(DomainClient client, String host, String server, String socketBindingGroup) throws Exception {
+    private String performHttpCall(DomainClient client, String host, String server, String socketBindingGroup, String path) throws Exception {
         ModelNode op = new ModelNode();
         op.get(OP).set(READ_RESOURCE_OPERATION);
         op.get(OP_ADDR).add(HOST, host).add(SERVER, server).add(SOCKET_BINDING_GROUP, socketBindingGroup).add(SOCKET_BINDING, "http");
@@ -306,11 +333,11 @@ public class DeploymentOverlayTestCase {
         ModelNode socketBinding = validateResponse(client.execute(op));
 
         URL url = new URL("http",
-                org.jboss.as.arquillian.container.NetworkUtils.formatPossibleIpv6Address(socketBinding.get("bound-address").asString()),
+                TestSuiteEnvironment.formatPossibleIpv6Address(socketBinding.get("bound-address").asString()),
                 socketBinding.get("bound-port").asInt(),
-                "/test/");
+                path);
         HttpGet get = new HttpGet(url.toURI());
-        HttpClient httpClient = new DefaultHttpClient();
+        HttpClient httpClient = HttpClients.createDefault();
         HttpResponse response = httpClient.execute(get);
         return getContent(response);
     }
@@ -318,9 +345,10 @@ public class DeploymentOverlayTestCase {
     public static String getContent(HttpResponse response) throws IOException {
         InputStreamReader reader = new InputStreamReader(response.getEntity().getContent());
         StringBuilder content = new StringBuilder();
+        char[] buffer = new char[8];
         int c;
-        while (-1 != (c = reader.read())) {
-            content.append((char) c);
+        while ((c = reader.read(buffer)) != -1) {
+            content.append(buffer, 0, c);
         }
         reader.close();
         return content.toString();

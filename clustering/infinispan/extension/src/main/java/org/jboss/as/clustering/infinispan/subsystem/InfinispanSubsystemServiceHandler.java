@@ -22,19 +22,21 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
+import static org.jboss.as.clustering.infinispan.subsystem.InfinispanSubsystemResourceDefinition.*;
+
 import java.util.ServiceLoader;
 
+import org.jboss.as.clustering.controller.CapabilityServiceBuilder;
 import org.jboss.as.clustering.controller.ResourceServiceHandler;
 import org.jboss.as.clustering.infinispan.InfinispanLogger;
-import org.jboss.as.clustering.infinispan.deployment.ClusteringDependencyProcessor;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
-import org.jboss.as.controller.OperationStepHandler;
-import org.jboss.as.server.AbstractDeploymentChainStep;
-import org.jboss.as.server.DeploymentProcessorTarget;
-import org.jboss.as.server.deployment.Phase;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
-import org.wildfly.clustering.service.Builder;
+import org.jboss.msc.service.ServiceTarget;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
+import org.wildfly.clustering.service.ServiceNameProvider;
+import org.wildfly.clustering.spi.GroupAliasBuilderProvider;
 import org.wildfly.clustering.spi.GroupBuilderProvider;
 import org.wildfly.clustering.spi.LocalGroupBuilderProvider;
 
@@ -47,28 +49,42 @@ public class InfinispanSubsystemServiceHandler implements ResourceServiceHandler
     public void installServices(OperationContext context, ModelNode model) throws OperationFailedException {
         InfinispanLogger.ROOT_LOGGER.activatingSubsystem();
 
-        OperationStepHandler step = new AbstractDeploymentChainStep() {
-            @Override
-            protected void execute(DeploymentProcessorTarget target) {
-                target.addDeploymentProcessor(InfinispanExtension.SUBSYSTEM_NAME, Phase.DEPENDENCIES, Phase.DEPENDENCIES_CLUSTERING, new ClusteringDependencyProcessor());
-            }
-        };
-        context.addStep(step, OperationContext.Stage.RUNTIME);
+        PathAddress address = context.getCurrentAddress();
+        ServiceTarget target = context.getServiceTarget();
 
         // Install local group services
         for (GroupBuilderProvider provider : ServiceLoader.load(LocalGroupBuilderProvider.class, LocalGroupBuilderProvider.class.getClassLoader())) {
             InfinispanLogger.ROOT_LOGGER.debugf("Installing %s for %s group", provider.getClass().getSimpleName(), LocalGroupBuilderProvider.LOCAL);
-            for (Builder<?> builder : provider.getBuilders(LocalGroupBuilderProvider.LOCAL, null)) {
-                builder.build(context.getServiceTarget()).install();
+            for (CapabilityServiceBuilder<?> builder : provider.getBuilders(requirement -> LOCAL_CLUSTERING_CAPABILITIES.get(requirement).getServiceName(address), LocalGroupBuilderProvider.LOCAL)) {
+                builder.configure(context).build(target).install();
+            }
+        }
+
+        // If JGroups subsystem is not available, install default group aliases to local group.
+        if (!context.hasOptionalCapability(JGroupsRequirement.CHANNEL.getDefaultRequirement().getName(), null, null)) {
+            for (GroupAliasBuilderProvider provider : ServiceLoader.load(GroupAliasBuilderProvider.class, GroupAliasBuilderProvider.class.getClassLoader())) {
+                for (CapabilityServiceBuilder<?> builder : provider.getBuilders(requirement -> CLUSTERING_CAPABILITIES.get(requirement).getServiceName(address), null, LocalGroupBuilderProvider.LOCAL)) {
+                    builder.configure(context).build(target).install();
+                }
             }
         }
     }
 
     @Override
     public void removeServices(OperationContext context, ModelNode model) throws OperationFailedException {
+        PathAddress address = context.getCurrentAddress();
+
         for (GroupBuilderProvider provider : ServiceLoader.load(LocalGroupBuilderProvider.class, LocalGroupBuilderProvider.class.getClassLoader())) {
-            for (Builder<?> builder : provider.getBuilders(LocalGroupBuilderProvider.LOCAL, null)) {
+            for (ServiceNameProvider builder : provider.getBuilders(requirement -> LOCAL_CLUSTERING_CAPABILITIES.get(requirement).getServiceName(address), LocalGroupBuilderProvider.LOCAL)) {
                 context.removeService(builder.getServiceName());
+            }
+        }
+
+        if (!context.hasOptionalCapability(JGroupsRequirement.CHANNEL.getDefaultRequirement().getName(), null, null)) {
+            for (GroupAliasBuilderProvider provider : ServiceLoader.load(GroupAliasBuilderProvider.class, GroupAliasBuilderProvider.class.getClassLoader())) {
+                for (CapabilityServiceBuilder<?> builder : provider.getBuilders(requirement -> CLUSTERING_CAPABILITIES.get(requirement).getServiceName(address), null, LocalGroupBuilderProvider.LOCAL)) {
+                    context.removeService(builder.getServiceName());
+                }
             }
         }
     }

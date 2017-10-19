@@ -22,33 +22,31 @@
 
 package org.jboss.as.clustering.jgroups.subsystem;
 
-import java.util.Iterator;
+import static org.jboss.as.clustering.jgroups.subsystem.ForkResourceDefinition.CLUSTERING_CAPABILITIES;
+import static org.jboss.as.clustering.jgroups.subsystem.ForkResourceDefinition.Capability.*;
+
+import java.util.EnumSet;
 import java.util.ServiceLoader;
 
-import org.jboss.as.clustering.controller.ParentResourceServiceHandler;
+import org.jboss.as.clustering.controller.CapabilityServiceBuilder;
 import org.jboss.as.clustering.controller.ResourceServiceBuilderFactory;
+import org.jboss.as.clustering.controller.SimpleResourceServiceHandler;
 import org.jboss.as.clustering.naming.BinderServiceBuilder;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceTarget;
-import org.jgroups.Channel;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
-import org.wildfly.clustering.jgroups.spi.service.ChannelBuilder;
-import org.wildfly.clustering.jgroups.spi.service.ChannelConnectorBuilder;
-import org.wildfly.clustering.jgroups.spi.service.ChannelServiceName;
-import org.wildfly.clustering.jgroups.spi.service.ChannelServiceNameFactory;
-import org.wildfly.clustering.jgroups.spi.service.ProtocolStackServiceName;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
 import org.wildfly.clustering.service.AliasServiceBuilder;
 import org.wildfly.clustering.service.Builder;
-import org.wildfly.clustering.spi.DistributedGroupBuilderProvider;
-import org.wildfly.clustering.spi.GroupBuilderProvider;
+import org.wildfly.clustering.spi.GroupAliasBuilderProvider;
 
 /**
  * @author Paul Ferraro
  */
-public class ForkServiceHandler extends ParentResourceServiceHandler<ChannelFactory> {
+public class ForkServiceHandler extends SimpleResourceServiceHandler<ChannelFactory> {
 
     ForkServiceHandler(ResourceServiceBuilderFactory<ChannelFactory> factory) {
         super(factory);
@@ -65,22 +63,17 @@ public class ForkServiceHandler extends ParentResourceServiceHandler<ChannelFact
 
         ServiceTarget target = context.getServiceTarget();
 
-        // Install channel factory alias
-        new AliasServiceBuilder<>(ChannelServiceName.FACTORY.getServiceName(name), ProtocolStackServiceName.CHANNEL_FACTORY.getServiceName(channel), ChannelFactory.class).build(target).install();
+        new AliasServiceBuilder<>(FORK_CHANNEL_SOURCE.getServiceName(address), JGroupsRequirement.CHANNEL_FACTORY.getServiceName(context, channel), JGroupsRequirement.CHANNEL_FACTORY.getType()).build(target).install();
+        new AliasServiceBuilder<>(FORK_CHANNEL_MODULE.getServiceName(address), JGroupsRequirement.CHANNEL_MODULE.getServiceName(context, channel), JGroupsRequirement.CHANNEL_MODULE.getType()).build(target).install();
+        new AliasServiceBuilder<>(FORK_CHANNEL_CLUSTER.getServiceName(address), JGroupsRequirement.CHANNEL_CLUSTER.getServiceName(context, channel), JGroupsRequirement.CHANNEL_CLUSTER.getType()).build(target).install();
+        new ChannelBuilder(FORK_CHANNEL, address).configure(context, model).build(target).install();
 
-        // Install channel
-        new ChannelBuilder(name).build(target).install();
+        new BinderServiceBuilder<>(JGroupsBindingFactory.createChannelBinding(name), JGroupsRequirement.CHANNEL.getServiceName(context, name), JGroupsRequirement.CHANNEL.getType()).build(target).install();
+        new BinderServiceBuilder<>(JGroupsBindingFactory.createChannelFactoryBinding(name), JGroupsRequirement.CHANNEL_FACTORY.getServiceName(context, name), JGroupsRequirement.CHANNEL_FACTORY.getType()).build(target).install();
 
-        // Install channel connector
-        new ChannelConnectorBuilder(name).build(target).install();
-
-        // Install channel jndi binding
-        new BinderServiceBuilder<>(JGroupsBindingFactory.createChannelBinding(name), ChannelServiceName.CHANNEL.getServiceName(name), Channel.class).build(target).install();
-
-        for (GroupBuilderProvider provider : ServiceLoader.load(DistributedGroupBuilderProvider.class, DistributedGroupBuilderProvider.class.getClassLoader())) {
-            Iterator<Builder<?>> groupBuilders = provider.getBuilders(channel, null).iterator();
-            for (Builder<?> groupBuilder : provider.getBuilders(name, null)) {
-                new AliasServiceBuilder<>(groupBuilder.getServiceName(), groupBuilders.next().getServiceName(), Object.class).build(target).install();
+        for (GroupAliasBuilderProvider provider : ServiceLoader.load(GroupAliasBuilderProvider.class, GroupAliasBuilderProvider.class.getClassLoader())) {
+            for (CapabilityServiceBuilder<?> builder : provider.getBuilders(requirement -> CLUSTERING_CAPABILITIES.get(requirement).getServiceName(address), name, channel)) {
+                builder.configure(context).build(target).install();
             }
         }
     }
@@ -88,19 +81,20 @@ public class ForkServiceHandler extends ParentResourceServiceHandler<ChannelFact
     @Override
     public void removeServices(OperationContext context, ModelNode model) throws OperationFailedException {
 
+        PathAddress address = context.getCurrentAddress();
         String name = context.getCurrentAddressValue();
+        String channel = address.getParent().getLastElement().getValue();
 
-        for (GroupBuilderProvider provider : ServiceLoader.load(DistributedGroupBuilderProvider.class, DistributedGroupBuilderProvider.class.getClassLoader())) {
-            for (Builder<?> builder : provider.getBuilders(name, null)) {
+        for (GroupAliasBuilderProvider provider : ServiceLoader.load(GroupAliasBuilderProvider.class, GroupAliasBuilderProvider.class.getClassLoader())) {
+            for (Builder<?> builder : provider.getBuilders(requirement -> CLUSTERING_CAPABILITIES.get(requirement).getServiceName(address), name, channel)) {
                 context.removeService(builder.getServiceName());
             }
         }
 
         context.removeService(JGroupsBindingFactory.createChannelBinding(name).getBinderServiceName());
+        context.removeService(JGroupsBindingFactory.createChannelFactoryBinding(name).getBinderServiceName());
 
-        for (ChannelServiceNameFactory factory : ChannelServiceName.values()) {
-            context.removeService(factory.getServiceName(name));
-        }
+        EnumSet.complementOf(EnumSet.of(FORK_CHANNEL_FACTORY)).forEach(capability -> context.removeService(capability.getServiceName(address)));
 
         super.removeServices(context, model);
     }

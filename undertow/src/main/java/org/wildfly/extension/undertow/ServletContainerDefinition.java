@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -34,10 +34,12 @@ import org.jboss.as.controller.PersistentResourceDefinition;
 import org.jboss.as.controller.ReloadRequiredRemoveStepHandler;
 import org.jboss.as.controller.SimpleAttributeDefinition;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
+import org.jboss.as.controller.capability.RuntimeCapability;
 import org.jboss.as.controller.client.helpers.MeasurementUnit;
 import org.jboss.as.controller.operations.validation.EnumValidator;
 import org.jboss.as.controller.operations.validation.IntRangeValidator;
 import org.jboss.as.controller.registry.AttributeAccess;
+import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
 
@@ -45,6 +47,11 @@ import org.jboss.dmr.ModelType;
  * @author <a href="mailto:tomaz.cerar@redhat.com">Tomaz Cerar</a> (c) 2013 Red Hat Inc.
  */
 class ServletContainerDefinition extends PersistentResourceDefinition {
+    static final RuntimeCapability<Void> SERVLET_CONTAINER_CAPABILITY = RuntimeCapability.Builder.of(Capabilities.CAPABILITY_SERVLET_CONTAINER, true, ServletContainerService.class)
+                .addRequirements(Capabilities.CAPABILITY_UNDERTOW)
+                .build();
+
+
     protected static final SimpleAttributeDefinition ALLOW_NON_STANDARD_WRAPPERS =
             new SimpleAttributeDefinitionBuilder(Constants.ALLOW_NON_STANDARD_WRAPPERS, ModelType.BOOLEAN, true)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
@@ -139,6 +146,21 @@ class ServletContainerDefinition extends PersistentResourceDefinition {
                     .setAllowExpression(true)
                     .build();
 
+
+    protected static final AttributeDefinition DISABLE_FILE_WATCH_SERVICE =
+            new SimpleAttributeDefinitionBuilder(Constants.DISABLE_FILE_WATCH_SERVICE, ModelType.BOOLEAN, true)
+                    .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
+                    .setDefaultValue(new ModelNode(false))
+                    .setAllowExpression(true)
+                    .build();
+
+    protected static final AttributeDefinition DISABLE_SESSION_ID_REUSE =
+            new SimpleAttributeDefinitionBuilder(Constants.DISABLE_SESSION_ID_REUSE, ModelType.BOOLEAN, true)
+                    .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
+                    .setDefaultValue(new ModelNode(false))
+                    .setAllowExpression(true)
+                    .build();
+
     private static final List<? extends PersistentResourceDefinition> CHILDREN;
     static final Collection<AttributeDefinition> ATTRIBUTES = Arrays.asList(
             ALLOW_NON_STANDARD_WRAPPERS,
@@ -153,7 +175,9 @@ class ServletContainerDefinition extends PersistentResourceDefinition {
             DIRECTORY_LISTING,
             PROACTIVE_AUTHENTICATION,
             SESSION_ID_LENGTH,
-            MAX_SESSIONS
+            MAX_SESSIONS,
+            DISABLE_FILE_WATCH_SERVICE,
+            DISABLE_SESSION_ID_REUSE
             );
 
     static final ServletContainerDefinition INSTANCE = new ServletContainerDefinition();
@@ -166,6 +190,7 @@ class ServletContainerDefinition extends PersistentResourceDefinition {
         children.add(WebsocketsDefinition.INSTANCE);
         children.add(MimeMappingDefinition.INSTANCE);
         children.add(WelcomeFileDefinition.INSTANCE);
+        children.add(CrawlerSessionManagementDefinition.INSTANCE);
         CHILDREN = Collections.unmodifiableList(children);
     }
 
@@ -184,5 +209,10 @@ class ServletContainerDefinition extends PersistentResourceDefinition {
     @Override
     public List<? extends PersistentResourceDefinition> getChildren() {
         return CHILDREN;
+    }
+
+    @Override
+    public void registerCapabilities(ManagementResourceRegistration resourceRegistration) {
+        resourceRegistration.registerCapability(SERVLET_CONTAINER_CAPABILITY);
     }
 }

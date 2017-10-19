@@ -26,15 +26,16 @@ import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.ADD
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.ALLOW_RESOURCE_SERVICE_RESTART;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.FAILURE_DESCRIPTION;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OPERATION_HEADERS;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.REMOVE;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.BINDING;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.BINDING_TYPE;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.CLASS;
+import static org.jboss.as.naming.subsystem.NamingSubsystemModel.ENVIRONMENT;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.MODULE;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.OBJECT_FACTORY;
-import static org.jboss.as.naming.subsystem.NamingSubsystemModel.ENVIRONMENT;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -46,11 +47,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
-
 import javax.naming.InitialContext;
 import javax.naming.spi.ObjectFactory;
-
-import org.junit.Assert;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
@@ -64,6 +62,7 @@ import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.exporter.ZipExporter;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.xnio.IoUtils;
@@ -126,7 +125,7 @@ public class ObjectFactoryWithEnvironmentBindingTestCase {
             bindingAdd.get(ENVIRONMENT).set(environment);
             final ModelNode addResult = managementClient.getControllerClient().execute(bindingAdd);
             Assert.assertFalse(addResult.get(FAILURE_DESCRIPTION).toString(), addResult.get(FAILURE_DESCRIPTION).isDefined());
-            LOGGER.info("Object factory bound.");
+            LOGGER.trace("Object factory bound.");
 
         }
 
@@ -144,14 +143,14 @@ public class ObjectFactoryWithEnvironmentBindingTestCase {
                 final ModelNode bindingRemove = new ModelNode();
                 bindingRemove.get(OP).set(REMOVE);
                 bindingRemove.get(OP_ADDR).set(createAddress());
-                bindingRemove.get(ALLOW_RESOURCE_SERVICE_RESTART).set(true);
+                bindingRemove.get(OPERATION_HEADERS, ALLOW_RESOURCE_SERVICE_RESTART).set(true);
                 final ModelNode removeResult = managementClient.getControllerClient().execute(bindingRemove);
                 Assert.assertFalse(removeResult.get(FAILURE_DESCRIPTION).toString(), removeResult.get(FAILURE_DESCRIPTION)
                         .isDefined());
-                LOGGER.info("Object factory unbound.");
+                LOGGER.trace("Object factory unbound.");
             } finally {
                 undeployModule();
-                LOGGER.info("Module undeployed.");
+                LOGGER.trace("Module undeployed.");
             }
         }
     }

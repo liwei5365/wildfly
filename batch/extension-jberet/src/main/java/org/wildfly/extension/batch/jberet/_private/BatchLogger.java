@@ -22,6 +22,9 @@
 
 package org.wildfly.extension.batch.jberet._private;
 
+import java.security.Permission;
+import javax.batch.operations.BatchRuntimeException;
+import javax.batch.operations.JobSecurityException;
 import javax.batch.operations.JobStartException;
 import javax.batch.operations.NoSuchJobException;
 
@@ -142,4 +145,74 @@ public interface BatchLogger extends BasicLogger {
     @Message(id = 13, value = "Only one job repository can be defined in the jboss-all.xml deployment descriptor. The first job repository will be used.")
     void multipleJobRepositoriesFound();
 
+    /**
+     * Logs a warning message indicating a job is stopping.
+     *
+     * @param executionId    the execution id of the job
+     * @param jobName        the name of the job
+     * @param deploymentName the name of the deployment stopping the job
+     */
+    @LogMessage(level = Level.WARN)
+    @Message(id = 14, value = "Stopping execution %d of %s for deployment %s")
+    void stoppingJob(long executionId, String jobName, String deploymentName);
+
+    /**
+     * Logs an error message indicating a job failed to stop.
+     *
+     * @param cause          the cause of the error
+     * @param executionId    the execution id of the job
+     * @param jobName        the name of the job
+     * @param deploymentName the name of the deployment
+     */
+    @LogMessage(level = Level.ERROR)
+    @Message(id = 15, value = "Failed to stop execution %d for job %s on deployment %s")
+    void stoppingJobFailed(@Cause Throwable cause, long executionId, String jobName, String deploymentName);
+
+    /**
+     * Logs an error message indicating a job failed to restart.
+     *
+     * @param cause          the cause of the error
+     * @param executionId    the execution id of the job
+     * @param jobName        the name of the job
+     * @param deploymentName the name of the deployment
+     */
+    @LogMessage(level = Level.ERROR)
+    @Message(id = 16, value = "Failed to restart execution %d for job %s on deployment %s")
+    void failedRestartingJob(@Cause Throwable cause, long executionId, String jobName, String deploymentName);
+
+    /**
+     * Logs an info message indicating a job is restarting due to a previous stop issued by a suspend operation.
+     *
+     * @param jobName    the name of the job
+     * @param previousId the previous execution id
+     * @param newId      the new execution id
+     */
+    @LogMessage(level = Level.INFO)
+    @Message(id = 17, value = "Restarting previously stopped batch job %s. Previous execution id %d. New execution id %d.")
+    void restartingJob(String jobName, long previousId, long newId);
+
+//    /**
+//     * Creates an exception indicating the job repository has been shutdown and job operations can no longer be
+//     * executed.
+//     */
+//    @Message(id = 18, value = "The job repository has been shutdown. Job operations can no longer be executed.")
+//    IllegalStateException jobRepositoryShutdown();
+
+    /**
+     * Creates an exception indicating the batch environment was not found for the {@linkplain ClassLoader class loader}.
+     *
+     * @return an {@link BatchRuntimeException} for the error
+     */
+    @Message(id = 19, value = "No batch environment was found for class loader: %s")
+    BatchRuntimeException noBatchEnvironmentFound(ClassLoader cl);
+
+    /**
+     * Creates an exception indicating the user is not authorized for the batch operation.
+     * @param user the user name
+     * @param permission the missing permission
+     * @return
+     * Operation requires %s permissions. User %s is not authorized for this operation.
+     */
+    @Message(id = 20, value = "Permission denied. User %s does not have %s permissions.")
+    JobSecurityException unauthorized(String user, Permission permission);
 }

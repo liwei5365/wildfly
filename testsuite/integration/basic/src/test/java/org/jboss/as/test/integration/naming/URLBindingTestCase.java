@@ -35,21 +35,25 @@ import static org.jboss.as.naming.subsystem.NamingSubsystemModel.BINDING_TYPE;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.SIMPLE;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.TYPE;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.VALUE;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
+import java.io.FilePermission;
 import java.net.URL;
 import javax.ejb.EJB;
 
-import org.junit.Assert;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.arquillian.container.ManagementClient;
 import org.jboss.as.naming.subsystem.NamingExtension;
+import org.jboss.as.test.shared.TestSuiteEnvironment;
 import org.jboss.dmr.ModelNode;
+import org.jboss.remoting3.security.RemotingPermission;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -64,14 +68,22 @@ public class URLBindingTestCase {
     @ArquillianResource
     private ManagementClient managementClient;
 
-    @EJB(mappedName = "java:global/URLBindingTestCaseBean/URLBindingTestCaseBean")
-    private URLBindingTestCaseBean bean;
+    @EJB(mappedName = "java:global/URLBindingTestCaseBean/BindingLookupBean")
+    private BindingLookupBean bean;
 
     @Deployment
     public static Archive<?> deploy() {
+        final String tempDir = TestSuiteEnvironment.getTmpDir();
+
         JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "URLBindingTestCaseBean.jar");
-        jar.addClasses(URLBindingTestCase.class, URLBindingTestCaseBean.class);
-        jar.addAsManifestResource(new StringAsset("Dependencies: org.jboss.as.controller\n"), "MANIFEST.MF");
+        jar.addClasses(URLBindingTestCase.class, BindingLookupBean.class);
+        jar.addAsManifestResource(new StringAsset("Dependencies: org.jboss.as.controller, org.jboss.remoting3\n"), "MANIFEST.MF");
+        jar.addAsManifestResource(createPermissionsXmlAsset(
+                new RemotingPermission("createEndpoint"),
+                new RemotingPermission("connect"),
+                new FilePermission(tempDir+"/-", "read")
+        ), "jboss-permissions.xml");
+
         return jar;
     }
 

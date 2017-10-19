@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -198,9 +198,10 @@ public class WarMetaDataProcessor implements DeploymentUnitProcessor {
                     }
                     if (!found) {
                         UndertowLogger.ROOT_LOGGER.invalidAbsoluteOrdering(orderingElementMetaData.getName());
+                    } else {
+                        i++;
                     }
                 }
-                i++;
             }
             if (otherPos >= 0) {
                 order.addAll(otherPos, jarsSet);
@@ -492,7 +493,7 @@ public class WarMetaDataProcessor implements DeploymentUnitProcessor {
                     throw new IllegalStateException(UndertowLogger.ROOT_LOGGER.invalidRelativeOrdering(this.ordering.getJar()));
                 }
                 if (check.isBeforeInternal(ordering, checked)) {
-                    return false;
+                    return true;
                 }
             }
             return false;
@@ -520,7 +521,7 @@ public class WarMetaDataProcessor implements DeploymentUnitProcessor {
                     throw new IllegalStateException(UndertowLogger.ROOT_LOGGER.invalidRelativeOrdering(this.ordering.getJar()));
                 }
                 if (check.isAfterInternal(ordering, checked)) {
-                    return false;
+                    return true;
                 }
             }
             return false;

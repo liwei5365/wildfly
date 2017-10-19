@@ -51,7 +51,6 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Properties;
-
 import javax.ejb.EJBAccessException;
 import javax.naming.Context;
 import javax.naming.InitialContext;
@@ -98,7 +97,7 @@ import org.picketbox.util.KeyStoreUtil;
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ RemotingLoginModuleTestCase.FilesSetup.class, //
+@ServerSetup({RemotingLoginModuleTestCase.FilesSetup.class, //
         RemotingLoginModuleTestCase.SecurityRealmsSetup.class, //
         RemotingLoginModuleTestCase.RemotingSetup.class, //
         RemotingLoginModuleTestCase.SecurityDomainsSetup.class //
@@ -109,7 +108,9 @@ public class RemotingLoginModuleTestCase {
 
     private static final String TEST_NAME = "remoting-lm-test";
 
-    /** The LOOKUP_NAME */
+    /**
+     * The LOOKUP_NAME
+     */
     private static final String HELLOBEAN_LOOKUP_NAME = "/" + TEST_NAME + "/" + HelloBean.class.getSimpleName() + "!"
             + Hello.class.getName();
 
@@ -288,7 +289,7 @@ public class RemotingLoginModuleTestCase {
                                     .putOption("usersProperties", USERS_FILE.getAbsolutePath())
                                     .putOption("rolesProperties", ROLES_FILE.getAbsolutePath()).build()) //
                     .build();
-            return new SecurityDomain[] { sd };
+            return new SecurityDomain[]{sd};
         }
     }
 
@@ -322,7 +323,7 @@ public class RemotingLoginModuleTestCase {
                             new Authentication.Builder().truststore(
                                     keyStoreBuilder.keystorePath(SERVER_TRUSTSTORE_FILE.getAbsolutePath()).build()).build())
                     .build();
-            return new SecurityRealm[] { realm };
+            return new SecurityRealm[]{realm};
         }
     }
 
@@ -333,7 +334,7 @@ public class RemotingLoginModuleTestCase {
 
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
             final List<ModelNode> updates = new LinkedList<ModelNode>();
-            LOGGER.info("Adding new socket binding and remoting connector");
+            LOGGER.trace("Adding new socket binding and remoting connector");
             // /socket-binding-group=standard-sockets/socket-binding=remoting-xxx:add(port=14447)
             ModelNode socketBindingModelNode = Util.createAddOperation(ADDR_SOCKET_BINDING);
             socketBindingModelNode.get(PORT).set(REMOTING_PORT_TEST);
@@ -415,7 +416,7 @@ public class RemotingLoginModuleTestCase {
             v3CertGen.setIssuerDN(dn);
             v3CertGen.setSubjectDN(dn);
             v3CertGen.setPublicKey(keyPair.getPublic());
-            v3CertGen.setSignatureAlgorithm("MD5withRSA");
+            v3CertGen.setSignatureAlgorithm("SHA256withRSA");
             final SecureRandom sr = new SecureRandom();
             v3CertGen.setSerialNumber(BigInteger.ONE);
             X509Certificate certificate = v3CertGen.generate(keyPair.getPrivate(), sr);
@@ -424,7 +425,7 @@ public class RemotingLoginModuleTestCase {
             final KeyStore keystore = KeyStore.getInstance("JKS");
             keystore.load(null, null);
             keystore.setKeyEntry(name, keyPair.getPrivate(), KEYSTORE_PASSWORD.toCharArray(),
-                    new java.security.cert.Certificate[] { certificate });
+                    new java.security.cert.Certificate[]{certificate});
             if (keystoreFile == null) {
                 keystoreFile = getClientKeystoreFile(name);
             }

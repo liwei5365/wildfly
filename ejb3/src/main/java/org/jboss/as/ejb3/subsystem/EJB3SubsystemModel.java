@@ -32,9 +32,14 @@ import org.jboss.msc.service.ServiceName;
  */
 public interface EJB3SubsystemModel {
     String LITE = "lite";
+    String ABSTACT_TYPE = "abstract-type";
+    String ABSTACT_TYPE_AUTHORITY = "abstract-type-authority";
     String ALIASES = "aliases";
+    String ATTRIBUTES = "attributes";
 
     String ASYNC = "async";
+    String ALLOW_EJB_NAME_REGEX = "allow-ejb-name-regex";
+
     String IIOP = "iiop";
 
     String CONNECTOR_REF = "connector-ref";
@@ -55,9 +60,13 @@ public interface EJB3SubsystemModel {
     String DEFAULT_ENTITY_BEAN_INSTANCE_POOL = "default-entity-bean-instance-pool";
     String DEFAULT_ENTITY_BEAN_OPTIMISTIC_LOCKING = "default-entity-bean-optimistic-locking";
     String DISABLE_DEFAULT_EJB_PERMISSIONS = "disable-default-ejb-permissions";
+    String ENABLE_GRACEFUL_TXN_SHUTDOWN = "enable-graceful-txn-shutdown";
+    String DISCOVERY = "discovery";
+    String STATIC = "static";
     String LOG_SYSTEM_EXCEPTIONS = "log-system-exceptions";
 
     String ENABLE_STATISTICS = "enable-statistics";
+    String STATISTICS_ENABLED = "statistics-enabled";
 
     String FILE_DATA_STORE = "file-data-store";
 
@@ -126,6 +135,8 @@ public interface EJB3SubsystemModel {
     String REFRESH_INTERVAL = "refresh-interval";
     String ALLOW_EXECUTION = "allow-execution";
 
+    String STATIC_URLS = "static-urls";
+
     PathElement REMOTE_SERVICE_PATH = PathElement.pathElement(SERVICE, REMOTE);
     PathElement ASYNC_SERVICE_PATH = PathElement.pathElement(SERVICE, ASYNC);
     PathElement TIMER_PATH = PathElement.pathElement(TIMER);
@@ -136,4 +147,15 @@ public interface EJB3SubsystemModel {
     PathElement DATABASE_DATA_STORE_PATH = PathElement.pathElement(DATABASE_DATA_STORE);
 
     ServiceName BASE_THREAD_POOL_SERVICE_NAME = ThreadsServices.EXECUTOR.append("ejb3");
+    String EXECUTE_IN_WORKER = "execute-in-worker";
+
+    // Elytron integration
+    String APPLICATION_SECURITY_DOMAIN = "application-security-domain";
+    String IDENTITY = "identity";
+    String OUTFLOW_SECURITY_DOMAINS = "outflow-security-domains";
+    String REFERENCING_DEPLOYMENTS = "referencing-deployments";
+    String SECURITY_DOMAIN = "security-domain";
+    String ENABLE_JACC = "enable-jacc";
+
+    PathElement IDENTITY_PATH = PathElement.pathElement(SERVICE, IDENTITY);
 }

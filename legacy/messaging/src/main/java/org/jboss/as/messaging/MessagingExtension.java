@@ -119,6 +119,7 @@ import org.jboss.as.messaging.jms.bridge.JMSBridgeDefinition;
  * @author <a href="mailto:andy.taylor@jboss.com">Andy Taylor</a>
  * @author Brian Stansberry (c) 2011 Red Hat Inc.
  */
+@SuppressWarnings("deprecation")
 public class MessagingExtension extends AbstractLegacyExtension {
 
     public static final String SUBSYSTEM_NAME = "messaging";
@@ -131,8 +132,8 @@ public class MessagingExtension extends AbstractLegacyExtension {
 
     public static final ModelVersion VERSION_2_1_0 = ModelVersion.create(2, 1, 0);
     public static final ModelVersion VERSION_2_0_0 = ModelVersion.create(2, 0, 0);
+    public static final ModelVersion VERSION_1_4_0 = ModelVersion.create(1, 4, 0);
     public static final ModelVersion VERSION_1_3_0 = ModelVersion.create(1, 3, 0);
-    public static final ModelVersion VERSION_1_2_1 = ModelVersion.create(1, 2, 1);
     public static final ModelVersion VERSION_1_2_0 = ModelVersion.create(1, 2, 0);
     public static final ModelVersion VERSION_1_1_0 = ModelVersion.create(1, 1, 0);
     public static final ModelVersion DEPRECATED_SINCE = ModelVersion.create(1, 4, 0);
@@ -141,6 +142,7 @@ public class MessagingExtension extends AbstractLegacyExtension {
         return getResourceDescriptionResolver(true, keyPrefix);
     }
 
+    @SuppressWarnings("deprecation")
     public static ResourceDescriptionResolver getResourceDescriptionResolver(final boolean useUnprefixedChildTypes, final String... keyPrefix) {
         StringBuilder prefix = new StringBuilder();
         for (String kp : keyPrefix) {
@@ -245,17 +247,17 @@ public class MessagingExtension extends AbstractLegacyExtension {
 
     @Override
     protected void initializeLegacyParsers(ExtensionParsingContext context) {
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_0.getUriString(), MessagingSubsystemParser.getInstance());
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_1.getUriString(), MessagingSubsystemParser.getInstance());
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_2.getUriString(), Messaging12SubsystemParser.getInstance());
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_3.getUriString(), Messaging13SubsystemParser.getInstance());
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_4.getUriString(), Messaging14SubsystemParser.getInstance());
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_0.getUriString(), MessagingSubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_1.getUriString(), MessagingSubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_2.getUriString(), Messaging12SubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_3.getUriString(), Messaging13SubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_4.getUriString(), Messaging14SubsystemParser::new);
         // the 1.5 schema is port forwarded from EAP 6.4.
         // The 1.4 schema was updated by mistake in EAP 6.4. The 1.4 parser in WildFly is updated to be able to parse these
         // elements. There are no other changes in the 1.5 schema apart from these elements so we use the 1.4 parser to parse
         // the 1.5 schema too.
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_5.getUriString(), Messaging14SubsystemParser.getInstance());
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_2_0.getUriString(), Messaging20SubsystemParser.getInstance());
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_3_0.getUriString(), Messaging30SubsystemParser.getInstance());
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_1_5.getUriString(), Messaging14SubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_2_0.getUriString(), Messaging20SubsystemParser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, MESSAGING_3_0.getUriString(), Messaging30SubsystemParser::new);
     }
 }

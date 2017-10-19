@@ -22,8 +22,6 @@
 
 package org.jboss.as.test.integration.naming;
 
-import java.security.Security;
-
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.ADD;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.ALLOW_RESOURCE_SERVICE_RESTART;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.FAILURE_DESCRIPTION;
@@ -39,12 +37,16 @@ import static org.jboss.as.naming.subsystem.NamingSubsystemModel.CLASS;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.ENVIRONMENT;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.EXTERNAL_CONTEXT;
 import static org.jboss.as.naming.subsystem.NamingSubsystemModel.MODULE;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
+import java.security.Security;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.InitialDirContext;
 
+import com.sun.jndi.ldap.LdapCtx;
+import com.sun.jndi.ldap.LdapCtxFactory;
 import org.apache.directory.api.ldap.model.entry.DefaultEntry;
 import org.apache.directory.api.ldap.model.ldif.LdifEntry;
 import org.apache.directory.api.ldap.model.ldif.LdifReader;
@@ -75,9 +77,7 @@ import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import com.sun.jndi.ldap.LdapCtx;
-import com.sun.jndi.ldap.LdapCtxFactory;
+import org.wildfly.naming.java.permission.JndiPermission;
 
 /**
  * Test for external context binding. There are tests which use a usual InitialContext and treat it
@@ -112,7 +112,7 @@ public class ExternalContextBindingTestCase {
             ModelNode addResult = managementClient.getControllerClient().execute(bindingAdd);
             Assert.assertFalse(addResult.get(FAILURE_DESCRIPTION).toString(),
                     addResult.get(FAILURE_DESCRIPTION).isDefined());
-            LOGGER.info("Object factory bound.");
+            LOGGER.trace("Object factory bound.");
 
             address = createAddress("cache");
             bindingAdd = new ModelNode();
@@ -125,7 +125,7 @@ public class ExternalContextBindingTestCase {
             addResult = managementClient.getControllerClient().execute(bindingAdd);
             Assert.assertFalse(addResult.get(FAILURE_DESCRIPTION).toString(),
                     addResult.get(FAILURE_DESCRIPTION).isDefined());
-            LOGGER.info("Object factory bound.");
+            LOGGER.trace("Object factory bound.");
 
             address = createAddress("ldap");
             bindingAdd = new ModelNode();
@@ -185,7 +185,7 @@ public class ExternalContextBindingTestCase {
             Assert.assertFalse(removeResult.get(FAILURE_DESCRIPTION).toString(),
                     removeResult.get(FAILURE_DESCRIPTION)
                             .isDefined());
-            LOGGER.info("Object factory with uncached InitialContext unbound.");
+            LOGGER.trace("Object factory with uncached InitialContext unbound.");
 
             bindingRemove = new ModelNode();
             bindingRemove.get(OP).set(REMOVE);
@@ -195,7 +195,7 @@ public class ExternalContextBindingTestCase {
             Assert.assertFalse(removeResult.get(FAILURE_DESCRIPTION).toString(),
                     removeResult.get(FAILURE_DESCRIPTION)
                             .isDefined());
-            LOGGER.info("Object factory with cached InitialContext unbound.");
+            LOGGER.trace("Object factory with cached InitialContext unbound.");
 
             bindingRemove = new ModelNode();
             bindingRemove.get(OP).set(REMOVE);
@@ -205,7 +205,7 @@ public class ExternalContextBindingTestCase {
             Assert.assertFalse(removeResult.get(FAILURE_DESCRIPTION).toString(),
                     removeResult.get(FAILURE_DESCRIPTION)
                             .isDefined());
-            LOGGER.info("Object factory with uncached InitialDirContext unbound.");
+            LOGGER.trace("Object factory with uncached InitialDirContext unbound.");
 
             bindingRemove = new ModelNode();
             bindingRemove.get(OP).set(REMOVE);
@@ -215,7 +215,7 @@ public class ExternalContextBindingTestCase {
             Assert.assertFalse(removeResult.get(FAILURE_DESCRIPTION).toString(),
                     removeResult.get(FAILURE_DESCRIPTION)
                             .isDefined());
-            LOGGER.info("Object factory with cached InitialDirContext unbound.");
+            LOGGER.trace("Object factory with cached InitialDirContext unbound.");
         }
     }
 
@@ -312,7 +312,8 @@ public class ExternalContextBindingTestCase {
     @Deployment
     public static JavaArchive deploy() {
         return ShrinkWrap.create(JavaArchive.class, "externalContextBindingTest.jar")
-                .addClasses(ExternalContextBindingTestCase.class, LookupEjb.class);
+                .addClasses(ExternalContextBindingTestCase.class, LookupEjb.class)
+                .addAsManifestResource(createPermissionsXmlAsset(new JndiPermission("*", "lookup")), "jboss-permissions.xml");
     }
 
     @Test

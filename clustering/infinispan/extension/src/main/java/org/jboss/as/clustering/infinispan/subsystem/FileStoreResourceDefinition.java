@@ -22,24 +22,17 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
-import org.jboss.as.clustering.controller.AddStepHandler;
-import org.jboss.as.clustering.controller.ResourceDescriptor;
-import org.jboss.as.clustering.controller.RemoveStepHandler;
-import org.jboss.as.clustering.controller.ResourceServiceHandler;
-import org.jboss.as.clustering.controller.SimpleAliasEntry;
-import org.jboss.as.clustering.controller.SimpleResourceServiceHandler;
-import org.jboss.as.clustering.controller.transform.LegacyPropertyAddOperationTransformer;
-import org.jboss.as.clustering.controller.transform.LegacyPropertyResourceTransformer;
-import org.jboss.as.clustering.controller.transform.SimpleOperationTransformer;
+import java.util.function.UnaryOperator;
+
+import org.jboss.as.clustering.controller.CapabilityReference;
+import org.jboss.as.clustering.controller.CommonUnaryRequirement;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
-import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.registry.AttributeAccess;
-import org.jboss.as.controller.registry.ManagementResourceRegistration;
-import org.jboss.as.controller.services.path.PathManager;
 import org.jboss.as.controller.services.path.ResolvePathHandler;
+import org.jboss.as.controller.transform.description.RejectAttributeChecker;
 import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
 import org.jboss.as.server.ServerEnvironment;
 import org.jboss.dmr.ModelNode;
@@ -56,18 +49,17 @@ public class FileStoreResourceDefinition extends StoreResourceDefinition {
     static final PathElement PATH = pathElement("file");
 
     enum Attribute implements org.jboss.as.clustering.controller.Attribute {
-        RELATIVE_PATH("path", ModelType.STRING, null),
-        RELATIVE_TO("relative-to", ModelType.STRING, new ModelNode(ServerEnvironment.SERVER_DATA_DIR)),
+        RELATIVE_PATH("path", ModelType.STRING, builder -> builder.setAllowExpression(true)),
+        RELATIVE_TO("relative-to", ModelType.STRING, builder -> builder.setDefaultValue(new ModelNode(ServerEnvironment.SERVER_DATA_DIR)).setCapabilityReference(new CapabilityReference(Capability.PERSISTENCE, CommonUnaryRequirement.PATH))),
         ;
         private final AttributeDefinition definition;
 
-        Attribute(String name, ModelType type, ModelNode defaultValue) {
-            this.definition = new SimpleAttributeDefinitionBuilder(name, type)
-                    .setAllowExpression(true)
-                    .setAllowNull(true)
-                    .setDefaultValue(defaultValue)
-                    .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
-                    .build();
+        Attribute(String name, ModelType type) {
+            this(name, type, UnaryOperator.identity());
+        }
+
+        Attribute(String name, ModelType type, UnaryOperator<SimpleAttributeDefinitionBuilder> configurator) {
+            this.definition = configurator.apply(new SimpleAttributeDefinitionBuilder(name, type).setRequired(false).setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)).build();
         }
 
         @Override
@@ -79,44 +71,22 @@ public class FileStoreResourceDefinition extends StoreResourceDefinition {
     static void buildTransformation(ModelVersion version, ResourceTransformationDescriptionBuilder parent) {
         ResourceTransformationDescriptionBuilder builder = InfinispanModel.VERSION_4_0_0.requiresTransformation(version) ? parent.addChildRedirection(PATH, LEGACY_PATH) : parent.addChildResource(PATH);
 
-        if (InfinispanModel.VERSION_3_0_0.requiresTransformation(version)) {
-            builder.addOperationTransformationOverride(ModelDescriptionConstants.ADD)
-                    .setCustomOperationTransformer(new SimpleOperationTransformer(new LegacyPropertyAddOperationTransformer())).inheritResourceAttributeDefinitions();
-
-            builder.setCustomResourceTransformer(new LegacyPropertyResourceTransformer());
+        if (InfinispanModel.VERSION_5_0_0.requiresTransformation(version)) {
+            builder.getAttributeBuilder().addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, Attribute.RELATIVE_TO.getName());
         }
 
-        StoreResourceDefinition.buildTransformation(version, builder);
+        StoreResourceDefinition.buildTransformation(version, builder, PATH);
     }
 
-    private final PathManager pathManager;
-
-    FileStoreResourceDefinition(PathManager pathManager, boolean allowRuntimeOnlyRegistration) {
-        super(PATH, new InfinispanResourceDescriptionResolver(PATH, WILDCARD_PATH), allowRuntimeOnlyRegistration);
-        this.pathManager = pathManager;
-    }
-
-    @Override
-    public void register(ManagementResourceRegistration parentRegistration) {
-        ManagementResourceRegistration registration = parentRegistration.registerSubModel(this);
-        parentRegistration.registerAlias(LEGACY_PATH, new SimpleAliasEntry(registration));
-
-        ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver())
-                .addAttributes(Attribute.class)
-                .addAttributes(StoreResourceDefinition.Attribute.class)
-                ;
-        ResourceServiceHandler handler = new SimpleResourceServiceHandler<>(new FileStoreBuilderFactory());
-        new AddStepHandler(descriptor, handler).register(registration);
-        new RemoveStepHandler(descriptor, handler).register(registration);
-
-        if (this.pathManager != null) {
-            ResolvePathHandler pathHandler = ResolvePathHandler.Builder.of(this.pathManager)
-                    .setPathAttribute(Attribute.RELATIVE_PATH.getDefinition())
-                    .setRelativeToAttribute(Attribute.RELATIVE_TO.getDefinition())
-                    .build();
-            registration.registerOperationHandler(pathHandler.getOperationDefinition(), pathHandler);
-        }
-
-        super.register(registration);
+    FileStoreResourceDefinition() {
+        super(PATH, LEGACY_PATH, InfinispanExtension.SUBSYSTEM_RESOLVER.createChildResolver(PATH, WILDCARD_PATH),
+                descriptor -> descriptor.addAttributes(Attribute.class),
+                address -> new FileStoreBuilder(address.getParent()), registration -> registration.getPathManager().ifPresent(pathManager -> {
+                    ResolvePathHandler pathHandler = ResolvePathHandler.Builder.of(pathManager)
+                            .setPathAttribute(Attribute.RELATIVE_PATH.getDefinition())
+                            .setRelativeToAttribute(Attribute.RELATIVE_TO.getDefinition())
+                            .build();
+                    registration.registerOperationHandler(pathHandler.getOperationDefinition(), pathHandler);
+                }));
     }
 }

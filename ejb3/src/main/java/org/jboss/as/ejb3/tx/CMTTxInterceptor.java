@@ -33,6 +33,7 @@ import javax.ejb.NoSuchEntityException;
 import javax.ejb.TransactionAttributeType;
 import javax.transaction.HeuristicMixedException;
 import javax.transaction.HeuristicRollbackException;
+import javax.transaction.NotSupportedException;
 import javax.transaction.RollbackException;
 import javax.transaction.Status;
 import javax.transaction.SystemException;
@@ -79,7 +80,7 @@ public class CMTTxInterceptor implements Interceptor {
      */
     protected void endTransaction(final TransactionManager tm, final Transaction tx) {
         try {
-            if (tx != tm.getTransaction()) {
+            if (! tx.equals(tm.getTransaction())) {
                 throw EjbLogger.ROOT_LOGGER.wrongTxOnThread(tx, tm.getTransaction());
             }
             final int txStatus = tx.getStatus();
@@ -91,7 +92,7 @@ public class CMTTxInterceptor implements Interceptor {
                 tm.commit();
             } else if (txStatus == Status.STATUS_MARKED_ROLLBACK) {
                 tm.rollback();
-            } else if (txStatus == Status.STATUS_ROLLEDBACK) {
+            } else if (txStatus == Status.STATUS_ROLLEDBACK || txStatus == Status.STATUS_ROLLING_BACK) {
                 // handle reaper canceled (rolled back) tx case (see WFLY-1346)
                 // clear current tx state and throw RollbackException (EJBTransactionRolledbackException)
                 tm.rollback();
@@ -107,7 +108,7 @@ public class CMTTxInterceptor implements Interceptor {
                 // logically, all of the following (unexpected) tx states are handled here:
                 //  Status.STATUS_PREPARED
                 //  Status.STATUS_PREPARING
-                //  Status.STATUS_ROLLING_BACK
+                //  Status.STATUS_COMMITTING
                 //  Status.STATUS_NO_TRANSACTION
                 //  Status.STATUS_COMMITTED
                 tm.suspend();                       // clear current tx state and throw EJBException
@@ -269,8 +270,7 @@ public class CMTTxInterceptor implements Interceptor {
 
     protected Object invokeInOurTx(InterceptorContext invocation, TransactionManager tm, final EJBComponent component) throws Exception {
         for (int i = 0; i < MAX_RETRIES; i++) {
-            tm.begin();
-            Transaction tx = tm.getTransaction();
+            Transaction tx = beginTransaction(tm);
             try {
                 return invocation.proceed();
             } catch (Throwable t) {
@@ -280,6 +280,11 @@ public class CMTTxInterceptor implements Interceptor {
             }
         }
         throw new RuntimeException("UNREACHABLE");
+    }
+
+    protected Transaction beginTransaction(final TransactionManager tm) throws NotSupportedException, SystemException {
+        tm.begin();
+        return tm.getTransaction();
     }
 
     protected Object mandatory(InterceptorContext invocation, final EJBComponent component) throws Exception {

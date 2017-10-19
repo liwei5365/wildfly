@@ -23,23 +23,14 @@
 package org.wildfly.clustering.server.group;
 
 import org.wildfly.clustering.group.Group;
-import org.wildfly.clustering.server.CacheBuilderFactory;
-import org.wildfly.clustering.service.Builder;
 
 /**
  * Provides the requisite builders for a clustered cache-based {@link Group} service.
  * @author Paul Ferraro
  */
-public class DistributedCacheGroupBuilderProvider extends CacheGroupBuilderProvider implements org.wildfly.clustering.spi.DistributedCacheGroupBuilderProvider {
-
-    private static final CacheBuilderFactory<Group> FACTORY = new CacheBuilderFactory<Group>() {
-        @Override
-        public Builder<Group> createBuilder(String containerName, String cacheName) {
-            return new CacheGroupBuilder(containerName, cacheName);
-        }
-    };
+public class DistributedCacheGroupBuilderProvider extends CacheGroupBuilderProvider implements org.wildfly.clustering.spi.DistributedCacheBuilderProvider {
 
     public DistributedCacheGroupBuilderProvider() {
-        super(FACTORY);
+        super((name, containerName, cacheName) -> new CacheGroupBuilder(name, containerName, cacheName));
     }
 }

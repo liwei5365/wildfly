@@ -36,21 +36,29 @@ public @interface Version {
 
     AsVersion value();
 
-    final String AS = "jboss-as-";
-    final String WILDFLY = "wildfly";
-    final String EAP = "jboss-eap-";
+    String AS = "jboss-as-";
+    String WILDFLY = "wildfly";
+    String EAP = "jboss-eap-";
 
     enum AsVersion {
-        EAP_6_2_0(EAP, "6.2.0"),
-        EAP_6_3_0(EAP, "6.3.0"),
-        EAP_6_4_0(EAP, "6.4.0");
+        EAP_6_2_0(EAP, 6, 2, 0),
+        EAP_6_3_0(EAP, 6, 3, 0),
+        EAP_6_4_0(EAP, 6, 4, 0),
+        EAP_7_0_0(EAP, 7, 0, 0);
+
 
         final String basename;
+        private final int major;
+        private final int minor;
+        private final int micro;
         final String version;
 
-        AsVersion(String basename, String version){
+        AsVersion(String basename, int major, int minor, int micro){
             this.basename = basename;
-            this.version = version;
+            this.major = major;
+            this.minor = minor;
+            this.micro = micro;
+            this.version = major + "." + minor + "." + micro;
         }
 
         public String getBaseName() {
@@ -64,10 +72,25 @@ public @interface Version {
         public String getFullVersionName() {
             return basename + version;
         }
+
         public String getZipFileName() {
             return  getFullVersionName() + ".zip";
         }
+
+        public boolean isEAP6Version() {
+            return (this == EAP_6_2_0 || this == EAP_6_3_0 || this == EAP_6_4_0);
+        }
+
+        public int getMajor() {
+            return major;
+        }
+
+        public int getMinor() {
+            return minor;
+        }
+
+        public int getMicro() {
+            return micro;
+        }
     }
-
-
 }

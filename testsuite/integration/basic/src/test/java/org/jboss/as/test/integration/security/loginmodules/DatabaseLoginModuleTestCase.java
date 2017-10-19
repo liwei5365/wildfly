@@ -70,7 +70,7 @@ import org.junit.runner.RunWith;
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ DatabaseLoginModuleTestCase.DBSetup.class, //
+@ServerSetup({DatabaseLoginModuleTestCase.DBSetup.class, //
         DatabaseLoginModuleTestCase.DataSourcesSetup.class, //
         DatabaseLoginModuleTestCase.SecurityDomainsSetup.class //
 })
@@ -179,7 +179,7 @@ public class DatabaseLoginModuleTestCase {
      * @throws IOException
      * @throws URISyntaxException
      */
-    private void testAccess(URL url) throws MalformedURLException, ClientProtocolException, IOException, URISyntaxException {
+    private void testAccess(URL url) throws IOException, URISyntaxException {
         final URL servletUrl = new URL(url.toExternalForm() + SimpleSecuredServlet.SERVLET_PATH.substring(1));
         //successful authentication and authorization
         assertEquals("Response body is not correct.", SimpleSecuredServlet.RESPONSE_BODY,
@@ -199,7 +199,6 @@ public class DatabaseLoginModuleTestCase {
      * @return
      */
     private static WebArchive createWar(final String deployment) {
-        LOGGER.info("Starting deployment " + deployment);
 
         final WebArchive war = ShrinkWrap.create(WebArchive.class, deployment + ".war");
         war.addClasses(SimpleSecuredServlet.class, SimpleServlet.class);
@@ -208,9 +207,6 @@ public class DatabaseLoginModuleTestCase {
                 "<security-domain>" + deployment + "</security-domain>" + //
                 "</jboss-web>"), "jboss-web.xml");
 
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(war.toString(true));
-        }
         return war;
     }
 
@@ -241,7 +237,7 @@ public class DatabaseLoginModuleTestCase {
             loginModuleBuilder.options(getLoginModuleOptions(DEP4)).putOption("hashAlgorithm", MD5)
                     .putOption("hashEncoding", "hex");
             final SecurityDomain sd4 = new SecurityDomain.Builder().name(DEP4).loginModules(loginModuleBuilder.build()).build();
-            return new SecurityDomain[] { sd1, sd2, sd3, sd4 };
+            return new SecurityDomain[]{sd1, sd2, sd3, sd4};
         }
 
         /**
@@ -266,11 +262,11 @@ public class DatabaseLoginModuleTestCase {
 
         @Override
         protected DataSource[] getDataSourceConfigurations(ManagementClient managementClient, String containerId) {
-            return new DataSource[] { new DataSource.Builder()
+            return new DataSource[]{new DataSource.Builder()
                     .name(DATASOURCE_NAME)
                     .connectionUrl(
                             "jdbc:h2:tcp://" + Utils.getSecondaryTestAddress(managementClient) + "/mem:" + DATASOURCE_NAME)
-                    .driver("h2").username("sa").password("sa").build() };
+                    .driver("h2").username("sa").password("sa").build()};
         }
     }
 
@@ -283,8 +279,8 @@ public class DatabaseLoginModuleTestCase {
 
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
             server = Server.createTcpServer("-tcpAllowOthers").start();
-            final String dbUrl = "jdbc:h2:mem:" + DATASOURCE_NAME + ";DB_CLOSE_DELAY=-1";
-            LOGGER.info("Creating database " + dbUrl);
+            final String dbUrl = "jdbc:h2:mem:" + DATASOURCE_NAME + ";DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE";
+            LOGGER.trace("Creating database " + dbUrl);
 
             final Connection conn = DriverManager.getConnection(dbUrl, "sa", "sa");
             executeUpdate(conn, "CREATE TABLE Roles(PrincipalID Varchar(50), Role Varchar(50), RoleGroup Varchar(50))");
@@ -311,7 +307,7 @@ public class DatabaseLoginModuleTestCase {
         private void executeUpdate(Connection connection, String query) throws SQLException {
             final Statement statement = connection.createStatement();
             final int updateResult = statement.executeUpdate(query);
-            LOGGER.info("Result: " + updateResult + ".  SQL statement: " + query);
+            LOGGER.trace("Result: " + updateResult + ".  SQL statement: " + query);
             statement.close();
         }
     }

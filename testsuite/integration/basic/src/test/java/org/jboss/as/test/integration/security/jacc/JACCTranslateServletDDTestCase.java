@@ -53,11 +53,11 @@ import org.junit.runner.RunWith;
 /**
  * Test based on a section 3.1.3 "Translating Servlet Deployment Descriptors" of the JACC 1.1 specification. This tests works
  * with deployment descriptor (web.xml) content which is a part of the JACC specification as an Example section 3.1.3.4.
- * 
+ *
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ JACCTranslateServletDDTestCase.SecurityDomainsSetup.class })
+@ServerSetup({JACCTranslateServletDDTestCase.SecurityDomainsSetup.class})
 @RunAsClient
 @Category(CommonCriteria.class)
 @Ignore("WFLY-4991")
@@ -70,27 +70,23 @@ public class JACCTranslateServletDDTestCase {
 
     /**
      * Creates {@link WebArchive}.
-     * 
+     *
      * @return
      */
     @Deployment
     public static WebArchive warDeployment() {
-        LOGGER.info("Start WAR deployment");
         final WebArchive war = ShrinkWrap.create(WebArchive.class, WEBAPP_NAME);
         war.addClass(ListJACCPoliciesServlet.class);
         war.addAsWebInfResource(JACCTranslateServletDDTestCase.class.getPackage(), "web-JACC11-example.xml", "web.xml");
         war.addAsWebInfResource(new StringAsset("<jboss-web>" + //
                 "<security-domain>" + SECURITY_DOMAIN_NAME + "</security-domain>" + //
                 "</jboss-web>"), "jboss-web.xml");
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(war.toString(true));
-        }
         return war;
     }
 
     /**
      * Test canonical form of HTTP Method list.
-     * 
+     *
      * @see #testHTTPMethodExceptionList(URL) for some other tests
      */
     @Test
@@ -176,12 +172,12 @@ public class JACCTranslateServletDDTestCase {
 
     /**
      * Retruns Node representing ContextPolicy with given contextId.
-     * 
+     *
      * @param webAppURL
      */
     private Node getContextPolicyNode(final URL webAppURL, String contextId) throws Exception {
         final URL servletURL = new URL(webAppURL.toExternalForm() + ListJACCPoliciesServlet.SERVLET_PATH.substring(1));
-        LOGGER.info("Testing JACC permissions: " + servletURL);
+        LOGGER.trace("Testing JACC permissions: " + servletURL);
 
         final InputStream is = servletURL.openStream();
         try {
@@ -189,8 +185,8 @@ public class JACCTranslateServletDDTestCase {
             final String xpathBase = "/" + ListJACCPoliciesServlet.ROOT_ELEMENT
                     + "/ActiveContextPolicies/ContextPolicy[@contextID='" + contextId + "']";
             final Node contextPolicyNode = document.selectSingleNode(xpathBase);
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(contextPolicyNode.asXML());
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.trace(contextPolicyNode.asXML());
             }
             return contextPolicyNode;
         } finally {
@@ -202,7 +198,7 @@ public class JACCTranslateServletDDTestCase {
 
     /**
      * A {@link ServerSetupTask} instance which creates security domains for this test case.
-     * 
+     *
      * @author Josef Cacek
      */
     static class SecurityDomainsSetup extends AbstractSecurityDomainsServerSetupTask {
@@ -212,8 +208,8 @@ public class JACCTranslateServletDDTestCase {
          */
         @Override
         protected SecurityDomain[] getSecurityDomains() {
-            return new SecurityDomain[] { new SecurityDomain.Builder().name(SECURITY_DOMAIN_NAME)
-                    .authorizationModules(new SecurityModule.Builder().name("JACC").flag(Constants.REQUIRED).build()).build() };
+            return new SecurityDomain[]{new SecurityDomain.Builder().name(SECURITY_DOMAIN_NAME)
+                    .authorizationModules(new SecurityModule.Builder().name("JACC").flag(Constants.REQUIRED).build()).build()};
         }
     }
 }

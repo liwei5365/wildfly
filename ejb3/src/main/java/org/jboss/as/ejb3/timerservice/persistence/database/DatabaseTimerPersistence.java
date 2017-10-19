@@ -37,6 +37,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -128,6 +130,8 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
     private static final String LOAD_TIMER = "load-timer";
     private static final String DELETE_TIMER = "delete-timer";
     private static final String UPDATE_RUNNING = "update-running";
+    /** The format for scheduler start and end date*/
+    private static final String SCHEDULER_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
     public DatabaseTimerPersistence(final String database, String partition, String nodeName, int refreshInterval, boolean allowExecution) {
         this.database = database;
@@ -203,21 +207,21 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                 database = identifyDialect(dbProduct);
 
                 if (database == null) {
-                    EjbLogger.ROOT_LOGGER.debug("Attempting to guess on driver name.");
+                    EjbLogger.EJB3_TIMER_LOGGER.debug("Attempting to guess on driver name.");
                     database = identifyDialect(metaData.getDriverName());
                 }
             } catch (Exception e) {
-                EjbLogger.ROOT_LOGGER.debug("Unable to read JDBC metadata.", e);
+                EjbLogger.EJB3_TIMER_LOGGER.debug("Unable to read JDBC metadata.", e);
             } finally {
                 safeClose(connection);
             }
             if (database == null) {
-                EjbLogger.ROOT_LOGGER.jdbcDatabaseDialectDetectionFailed(databaseDialects.toString());
+                EjbLogger.EJB3_TIMER_LOGGER.jdbcDatabaseDialectDetectionFailed(databaseDialects.toString());
             } else {
-                EjbLogger.ROOT_LOGGER.debugf("Detect database dialect as '%s'.  If this is incorrect, please specify the correct dialect using the 'database' attribute in your configuration.  Supported database dialect strings are %s", database, databaseDialects);
+                EjbLogger.EJB3_TIMER_LOGGER.debugf("Detect database dialect as '%s'.  If this is incorrect, please specify the correct dialect using the 'database' attribute in your configuration.  Supported database dialect strings are %s", database, databaseDialects);
             }
         } else {
-            EjbLogger.ROOT_LOGGER.debugf("Database dialect '%s' read from configuration", database);
+            EjbLogger.EJB3_TIMER_LOGGER.debugf("Database dialect '%s' read from configuration", database);
         }
     }
 
@@ -249,7 +253,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                 unified = "sybase";
             }
          }
-        EjbLogger.ROOT_LOGGER.debugf("Check dialect for '%s', result is '%s'", name, unified);
+        EjbLogger.EJB3_TIMER_LOGGER.debugf("Check dialect for '%s', result is '%s'", name, unified);
         return unified;
     }
 
@@ -267,7 +271,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
             //test for the existence of the table by running the load timer query
             connection = dataSource.getConnection();
             if (connection.getTransactionIsolation() < Connection.TRANSACTION_READ_COMMITTED) {
-                EjbLogger.ROOT_LOGGER.wrongTransactionIsolationConfiguredForTimer();
+                EjbLogger.EJB3_TIMER_LOGGER.wrongTransactionIsolationConfiguredForTimer();
             }
             preparedStatement = connection.prepareStatement(loadTimer);
             preparedStatement.setString(1, "NON-EXISTENT");
@@ -289,10 +293,10 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                         }
                     }
                 } catch (SQLException e1) {
-                    EjbLogger.ROOT_LOGGER.couldNotCreateTable(e1);
+                    EjbLogger.EJB3_TIMER_LOGGER.couldNotCreateTable(e1);
                 }
             } else {
-                EjbLogger.ROOT_LOGGER.couldNotCreateTable(e);
+                EjbLogger.EJB3_TIMER_LOGGER.couldNotCreateTable(e);
             }
         } finally {
             safeClose(resultSet);
@@ -410,25 +414,19 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
             int affected = statement.executeUpdate();
             tm.commit();
             return affected == 1;
-        } catch (SQLException e) {
+        } catch (SQLException | SystemException | SecurityException | IllegalStateException | RollbackException | HeuristicMixedException | HeuristicRollbackException e) {
             // failed to update the DB
-            // TODO need to analyze the Exception and suppress the Exception if 'only' the timer should not executed
             try {
                 tm.rollback();
             } catch (IllegalStateException | SecurityException | SystemException rbe) {
-                EjbLogger.ROOT_LOGGER.timerUpdateFailedAndRollbackNotPossible(rbe);
+                EjbLogger.EJB3_TIMER_LOGGER.timerUpdateFailedAndRollbackNotPossible(rbe);
             }
-            throw new RuntimeException(e);
-        }catch (SystemException | SecurityException | IllegalStateException | RollbackException | HeuristicMixedException | HeuristicRollbackException e) {
-            try {
-                tm.rollback();
-            } catch (IllegalStateException | SecurityException | SystemException rbe) {
-                EjbLogger.ROOT_LOGGER.timerUpdateFailedAndRollbackNotPossible(rbe);
-            }
-            throw new RuntimeException(e);
+            EjbLogger.EJB3_TIMER_LOGGER.debugf(e, "Timer %s not running due to exception ", timer);
+            return false;
         } catch (NotSupportedException e) {
             // happen from tm.begin, no rollback necessary
-            throw new RuntimeException(e);
+            EjbLogger.EJB3_TIMER_LOGGER.timerNotRunning(e, timer);
+            return false;
         } finally {
             safeClose(statement);
             safeClose(connection);
@@ -458,9 +456,17 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                     final Holder timerImpl = timerFromResult(resultSet, timerService);
                     if (timerImpl != null) {
                         timers.add(timerImpl);
+                    } else {
+                        final String deleteTimer = sql(DELETE_TIMER);
+                        try (final PreparedStatement deleteStatement = connection.prepareStatement(deleteTimer)) {
+                            deleteStatement.setString(1, resultSet.getString(2));
+                            deleteStatement.setString(2, resultSet.getString(1));
+                            deleteStatement.setString(3, partition);
+                            deleteStatement.execute();
+                        }
                     }
                 } catch (Exception e) {
-                    EjbLogger.ROOT_LOGGER.timerReinstatementFailed(resultSet.getString(2), resultSet.getString(1), e);
+                    EjbLogger.EJB3_TIMER_LOGGER.timerReinstatementFailed(resultSet.getString(2), resultSet.getString(1), e);
                 }
             }
             synchronized (this) {
@@ -476,7 +482,6 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                         if(ret.getNextExpiration() == null) {
                             ret.setTimerState(TimerState.CANCELED);
                             persistTimer(ret);
-                            return null;
                         } else {
                             ret.setTimerState(TimerState.ACTIVE);
                             persistTimer(ret);
@@ -520,6 +525,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
         boolean requiresReset = false;
 
         TimerImpl.Builder builder = null;
+        final String timerId = resultSet.getString(1); // needed for error message
         if (calendarTimer) {
             CalendarTimer.Builder cb = CalendarTimer.builder();
             builder = cb;
@@ -531,8 +537,8 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
             cb.setScheduleExprDayOfMonth(resultSet.getString(14));
             cb.setScheduleExprMonth(resultSet.getString(15));
             cb.setScheduleExprYear(resultSet.getString(16));
-            cb.setScheduleExprStartDate(resultSet.getTimestamp(17));
-            cb.setScheduleExprEndDate(resultSet.getTimestamp(18));
+            cb.setScheduleExprStartDate(stringAsSchedulerDate(resultSet.getString(17), timerId));
+            cb.setScheduleExprEndDate(stringAsSchedulerDate(resultSet.getString(18), timerId));
             cb.setScheduleExprTimezone(resultSet.getString(19));
             cb.setAutoTimer(resultSet.getBoolean(20));
 
@@ -543,7 +549,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                 final String[] params = paramString == null || paramString.isEmpty() ? new String[0] : paramString.split(";");
                 final Method timeoutMethod = CalendarTimer.getTimeoutMethod(new TimeoutMethod(clazz, methodName, params), timerService.getTimedObjectInvoker().getValue().getClassLoader());
                 if (timeoutMethod == null) {
-                    EjbLogger.ROOT_LOGGER.timerReinstatementFailed(resultSet.getString(2), resultSet.getString(1), new NoSuchMethodException());
+                    EjbLogger.EJB3_TIMER_LOGGER.timerReinstatementFailed(resultSet.getString(2), resultSet.getString(1), new NoSuchMethodException());
                     return null;
                 }
                 cb.setTimeoutMethod(timeoutMethod);
@@ -553,7 +559,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
         }
 
 
-        builder.setId(resultSet.getString(1));
+        builder.setId(timerId);
         builder.setTimedObjectId(resultSet.getString(2));
         builder.setInitialDate(resultSet.getTimestamp(3));
         builder.setRepeatInterval(resultSet.getLong(4));
@@ -593,8 +599,10 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
             statement.setString(14, c.getScheduleExpression().getDayOfMonth());
             statement.setString(15, c.getScheduleExpression().getMonth());
             statement.setString(16, c.getScheduleExpression().getYear());
-            statement.setTimestamp(17, timestamp(c.getScheduleExpression().getStart()));
-            statement.setTimestamp(18, timestamp(c.getScheduleExpression().getEnd()));
+            // WFLY-9054: Oracle ojdbc6/7 store a timestamp as '06-JUL-17 01.54.00.269000000 PM'
+            //            but expect 'YYYY-MM-DD hh:mm:ss.fffffffff' as all other DB
+            statement.setString(17, schedulerDateAsString(c.getScheduleExpression().getStart()));
+            statement.setString(18, schedulerDateAsString(c.getScheduleExpression().getEnd()));
             statement.setString(19, c.getScheduleExpression().getTimezone());
             statement.setBoolean(20, c.isAutoTimer());
             if (c.isAutoTimer()) {
@@ -673,6 +681,26 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
         }
     }
 
+    private String schedulerDateAsString(final Date date) {
+        if (date == null) {
+            return null;
+        }
+        return new SimpleDateFormat(SCHEDULER_DATE_FORMAT).format(date);
+    }
+
+    /** Convert the stored date-string from database back to Date */
+    private Date stringAsSchedulerDate(final String date, final String timerId) {
+        if (date == null) {
+            return null;
+        }
+        try {
+            return new SimpleDateFormat(SCHEDULER_DATE_FORMAT).parse(date);
+        } catch (ParseException e) {
+            EjbLogger.EJB3_TIMER_LOGGER.scheduleExpressionDateFromTimerPersistenceInvalid(timerId, e.getMessage());
+            return null;
+        }
+    }
+
     private Timestamp timestamp(final Date date) {
         if (date == null) {
             return null;
@@ -717,7 +745,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                 resource.close();
             }
         } catch (Throwable t) {
-            EjbLogger.ROOT_LOGGER.tracef(t, "Closing resource failed");
+            EjbLogger.EJB3_TIMER_LOGGER.tracef(t, "Closing resource failed");
         }
     }
 
@@ -727,7 +755,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                 resource.close();
             }
         } catch (Throwable t) {
-            EjbLogger.ROOT_LOGGER.tracef(t, "Closing resource failed");
+            EjbLogger.EJB3_TIMER_LOGGER.tracef(t, "Closing resource failed");
         }
     }
 
@@ -737,7 +765,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                 resource.close();
             }
         } catch (Throwable t) {
-            EjbLogger.ROOT_LOGGER.tracef(t, "Closing resource failed");
+            EjbLogger.EJB3_TIMER_LOGGER.tracef(t, "Closing resource failed");
         }
     }
 
@@ -747,7 +775,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                 resource.close();
             }
         } catch (Throwable t) {
-            EjbLogger.ROOT_LOGGER.tracef(t, "Closing resource failed");
+            EjbLogger.EJB3_TIMER_LOGGER.tracef(t, "Closing resource failed");
         }
     }
 
@@ -795,7 +823,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                                         }
                                     }
                                 } catch (Exception e) {
-                                    EjbLogger.ROOT_LOGGER.timerReinstatementFailed(resultSet.getString(2), resultSet.getString(1), e);
+                                    EjbLogger.EJB3_TIMER_LOGGER.timerReinstatementFailed(resultSet.getString(2), resultSet.getString(1), e);
                                 }
                             }
 
@@ -807,7 +835,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                                 }
                             }
                         } catch (SQLException e) {
-                            EjbLogger.ROOT_LOGGER.failedToRefreshTimers(timedObjectId);
+                            EjbLogger.EJB3_TIMER_LOGGER.failedToRefreshTimers(timedObjectId);
                         } finally {
                             safeClose(resultSet);
                             safeClose(statement);

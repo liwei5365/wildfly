@@ -37,15 +37,16 @@ import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.arquillian.api.ServerSetup;
 import org.jboss.as.arquillian.api.ServerSetupTask;
-import org.wildfly.test.api.Authentication;
 import org.jboss.as.arquillian.container.ManagementClient;
 import org.jboss.as.test.integration.ejb.remote.common.EJBManagementUtil;
+import org.jboss.as.test.shared.ServerReload;
 import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.wildfly.test.api.Authentication;
 
 /**
  * Tests that deployments containing a jboss-ejb-client.xml are processed correctly for EJB client context
@@ -78,21 +79,22 @@ public class EJBClientDescriptorTestCase {
         public void setup(final ManagementClient managementClient, final String containerId) throws Exception {
             final String socketBindingRef = "http";
             EJBManagementUtil.createLocalOutboundSocket(managementClient.getControllerClient(), "standard-sockets", outboundSocketName, socketBindingRef, Authentication.getCallbackHandler());
-            logger.info("Created local outbound socket " + outboundSocketName);
+            logger.trace("Created local outbound socket " + outboundSocketName);
 
             final Map<String, String> connectionCreationOptions = new HashMap<String, String>();
-            logger.info("Creatng remote outbound connection " + outboundConnectionName);
+            logger.trace("Creatng remote outbound connection " + outboundConnectionName);
             EJBManagementUtil.createRemoteOutboundConnection(managementClient.getControllerClient(), outboundConnectionName, outboundSocketName, connectionCreationOptions, Authentication.getCallbackHandler());
-            logger.info("Created remote outbound connection " + outboundConnectionName);
+            logger.trace("Created remote outbound connection " + outboundConnectionName);
         }
 
         @Override
         public void tearDown(final ManagementClient managementClient, final String containerId) throws Exception {
-            EJBManagementUtil.removeLocalOutboundSocket(managementClient.getControllerClient(), "standard-sockets", outboundSocketName, Authentication.getCallbackHandler());
-            logger.info("Removed local outbound socket " + outboundSocketName);
-
             EJBManagementUtil.removeRemoteOutboundConnection(managementClient.getControllerClient(), outboundConnectionName, Authentication.getCallbackHandler());
-            logger.info("Removed remote outbound connection " + outboundConnectionName);
+            logger.trace("Removed remote outbound connection " + outboundConnectionName);
+            ServerReload.reloadIfRequired(managementClient.getControllerClient());
+
+            EJBManagementUtil.removeLocalOutboundSocket(managementClient.getControllerClient(), "standard-sockets", outboundSocketName, Authentication.getCallbackHandler());
+            logger.trace("Removed local outbound socket " + outboundSocketName);
         }
     }
 
@@ -137,7 +139,7 @@ public class EJBClientDescriptorTestCase {
         jar.addAsManifestResource(EJBClientDescriptorTestCase.class.getPackage(), "local-and-remote-receiver-jboss-ejb-client.xml", "jboss-ejb-client.xml");
         return jar;
     }
-    
+
     @Deployment(name = "jboss-ejb-client_with_properties_1_2_version", testable = false, managed = false)
     public static JavaArchive createJBossEJBClientWithProperties12VersionDeployment() throws Exception {
 
@@ -145,7 +147,7 @@ public class EJBClientDescriptorTestCase {
         jar.addPackage(EchoBean.class.getPackage());
         jar.addAsManifestResource(EJBClientDescriptorTestCase.class.getPackage(), "jboss-ejb-client_with_properties_1_2.xml", "jboss-ejb-client.xml");
         jar.addAsManifestResource(EJBClientDescriptorTestCase.class.getPackage(), "jboss-ejb-client_with_properties_1_2.properties", "jboss.properties");
-        
+
         return jar;
     }
 
@@ -163,7 +165,7 @@ public class EJBClientDescriptorTestCase {
             Assert.assertNotNull("Lookup returned a null bean proxy", remoteEcho);
             final String msg = "Hello world from an EJB client descriptor test!!!";
             final String echo = remoteEcho.echo(MODULE_NAME_ONE, msg);
-            logger.info("Received echo " + echo);
+            logger.trace("Received echo " + echo);
             Assert.assertEquals("Unexpected echo returned from remote bean", msg, echo);
         } finally {
             deployer.undeploy("good-client-config");
@@ -189,7 +191,7 @@ public class EJBClientDescriptorTestCase {
                 Assert.fail("Exepcted to fail due to no EJB receivers availability");
             } catch (EJBException e) {
                 // no EJB receivers available, so expected to fail
-                logger.info("Received the expected exception during testing with no EJB receivers", e);
+                logger.trace("Received the expected exception during testing with no EJB receivers", e);
                 // TODO: We could even narrow down into the exception to ensure we got the right exception.
                 // But that's a bit brittle too since there's no guarantee in terms of API on what underlying
                 // exception will be thrown for non-availability of EJB receivers.
@@ -216,7 +218,7 @@ public class EJBClientDescriptorTestCase {
             Assert.assertNotNull("Lookup returned a null bean proxy", remoteEcho);
             final String msg = "Hello world from an EJB client descriptor test!!!";
             final String echo = remoteEcho.echo(MODULE_NAME_THREE, msg);
-            logger.info("Received echo " + echo);
+            logger.trace("Received echo " + echo);
             Assert.assertEquals("Unexpected echo returned from remote bean", msg, echo);
         } finally {
             deployer.undeploy("local-and-remote-receviers-config");
@@ -243,7 +245,7 @@ public class EJBClientDescriptorTestCase {
                 Assert.fail("Expected to receive a timeout for the invocation");
             } catch (Exception e) {
                 if (e instanceof EJBException && e.getCause() instanceof TimeoutException) {
-                    logger.info("Got the expected timeout exception", e.getCause());
+                    logger.trace("Got the expected timeout exception", e.getCause());
                     return;
                 }
                 throw e;
@@ -253,7 +255,7 @@ public class EJBClientDescriptorTestCase {
             deployer.undeploy("jboss-ejb-client_1_2_version");
         }
     }
-    
+
     /**
      * Tests that a deployment containing jboss-ejb-client.xml with remoting EJB receivers configured and property placeholders,
      * works as expected.
@@ -274,7 +276,6 @@ public class EJBClientDescriptorTestCase {
             deployer.undeploy("jboss-ejb-client_with_properties_1_2_version");
         }
     }
-    
-    
+
 
 }

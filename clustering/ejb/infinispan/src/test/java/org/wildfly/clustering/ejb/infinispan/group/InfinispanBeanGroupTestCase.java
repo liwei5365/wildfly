@@ -21,7 +21,12 @@
  */
 package org.wildfly.clustering.ejb.infinispan.group;
 
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -29,22 +34,22 @@ import java.util.Map;
 
 import org.junit.Assert;
 import org.junit.Test;
-import org.wildfly.clustering.ee.infinispan.Mutator;
-import org.wildfly.clustering.ee.infinispan.Remover;
+import org.wildfly.clustering.ee.Mutator;
+import org.wildfly.clustering.ee.Remover;
 import org.wildfly.clustering.ejb.PassivationListener;
 import org.wildfly.clustering.ejb.infinispan.BeanGroup;
 import org.wildfly.clustering.ejb.infinispan.BeanGroupEntry;
-import org.wildfly.clustering.marshalling.jboss.MarshalledValue;
 import org.wildfly.clustering.marshalling.jboss.MarshallingContext;
+import org.wildfly.clustering.marshalling.spi.MarshalledValue;
 
 public class InfinispanBeanGroupTestCase {
-    private Integer id;
+    private String id;
     private BeanGroupEntry<String, Object> entry = mock(BeanGroupEntry.class);
     private MarshallingContext context = mock(MarshallingContext.class);
     private Mutator mutator = mock(Mutator.class);
-    private Remover<Integer> remover = mock(Remover.class);
+    private Remover<String> remover = mock(Remover.class);
 
-    private BeanGroup<Integer, String, Object> group = new InfinispanBeanGroup<>(this.id, this.entry, this.context, this.mutator, this.remover);
+    private BeanGroup<String, Object> group = new InfinispanBeanGroup<>(this.id, this.entry, this.context, this.mutator, this.remover);
 
     @Test
     public void getId() {
@@ -82,9 +87,9 @@ public class InfinispanBeanGroupTestCase {
 
         when(this.entry.getBeans()).thenReturn(value);
         when(value.get(this.context)).thenReturn(beans);
-        
+
         this.group.addBean(id, bean);
-        
+
         verify(beans).put(id, bean);
     }
 
@@ -102,11 +107,11 @@ public class InfinispanBeanGroupTestCase {
         when(this.entry.incrementUsage(id)).thenReturn(1);
 
         Object result = this.group.getBean(id, listener);
-        
+
         Assert.assertSame(bean, result);
-        
+
         verifyZeroInteractions(listener);
-        
+
         when(this.entry.incrementUsage(id)).thenReturn(0);
 
         result = this.group.getBean(id, listener);
@@ -129,7 +134,7 @@ public class InfinispanBeanGroupTestCase {
         boolean result = this.group.releaseBean(id, listener);
 
         Assert.assertFalse(result);
-        
+
         verifyZeroInteractions(listener);
         verify(this.entry, never()).getBeans();
 

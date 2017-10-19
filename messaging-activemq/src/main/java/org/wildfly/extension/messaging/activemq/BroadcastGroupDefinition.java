@@ -29,12 +29,10 @@ import static org.jboss.dmr.ModelType.LONG;
 import static org.jboss.dmr.ModelType.STRING;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.CONNECTORS;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.JGROUPS_CHANNEL;
-import static org.wildfly.extension.messaging.activemq.CommonAttributes.JGROUPS_STACK;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.SOCKET_BINDING;
 
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -52,12 +50,13 @@ import org.jboss.as.controller.SimpleAttributeDefinition;
 import org.jboss.as.controller.SimpleOperationDefinition;
 import org.jboss.as.controller.SimpleOperationDefinitionBuilder;
 import org.jboss.as.controller.StringListAttributeDefinition;
+import org.jboss.as.controller.capability.RuntimeCapability;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.operations.validation.StringLengthValidator;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
-import org.jboss.as.controller.registry.OperationEntry;
 import org.jboss.as.controller.registry.Resource;
 import org.jboss.dmr.ModelNode;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
 import org.wildfly.extension.messaging.activemq.logging.MessagingLogger;
 
 /**
@@ -67,8 +66,10 @@ import org.wildfly.extension.messaging.activemq.logging.MessagingLogger;
  */
 public class BroadcastGroupDefinition extends PersistentResourceDefinition {
 
+    public static final RuntimeCapability<Void> CHANNEL_FACTORY_CAPABILITY = RuntimeCapability.Builder.of("org.wildfly.messaging.activemq.broadcast-group.channel-factory", true).build();
+
     public static final PrimitiveListAttributeDefinition CONNECTOR_REFS = new StringListAttributeDefinition.Builder(CONNECTORS)
-            .setAllowNull(true)
+            .setRequired(false)
             .setElementValidator(new StringLengthValidator(1))
             .setAttributeParser(AttributeParser.STRING_LIST)
             .setAttributeMarshaller(AttributeMarshaller.STRING_LIST)
@@ -76,13 +77,16 @@ public class BroadcastGroupDefinition extends PersistentResourceDefinition {
             .setRestartAllServices()
             .build();
 
-
     public static final SimpleAttributeDefinition BROADCAST_PERIOD = create("broadcast-period", LONG)
             .setDefaultValue(new ModelNode(ActiveMQDefaultConfiguration.getDefaultBroadcastPeriod()))
             .setMeasurementUnit(MILLISECONDS)
-            .setAllowNull(true)
+            .setRequired(false)
             .setAllowExpression(true)
             .setRestartAllServices()
+            .build();
+
+    public static final SimpleAttributeDefinition JGROUPS_STACK = create(CommonAttributes.JGROUPS_STACK)
+            .setCapabilityReference(JGroupsRequirement.CHANNEL_FACTORY.getName(), CHANNEL_FACTORY_CAPABILITY)
             .build();
 
     public static final AttributeDefinition[] ATTRIBUTES = { JGROUPS_STACK, JGROUPS_CHANNEL, SOCKET_BINDING,
@@ -90,13 +94,14 @@ public class BroadcastGroupDefinition extends PersistentResourceDefinition {
 
     public static final String GET_CONNECTOR_PAIRS_AS_JSON = "get-connector-pairs-as-json";
 
-    static final BroadcastGroupDefinition INSTANCE = new BroadcastGroupDefinition();
+    private final boolean registerRuntimeOnly;
 
-    private BroadcastGroupDefinition() {
+    BroadcastGroupDefinition(boolean registerRuntimeOnly) {
         super(MessagingExtension.BROADCAST_GROUP_PATH,
                 MessagingExtension.getResourceDescriptionResolver(CommonAttributes.BROADCAST_GROUP),
                 BroadcastGroupAdd.INSTANCE,
                 BroadcastGroupRemove.INSTANCE);
+        this.registerRuntimeOnly = registerRuntimeOnly;
     }
 
     @Override
@@ -118,13 +123,17 @@ public class BroadcastGroupDefinition extends PersistentResourceDefinition {
     @Override
     public void registerOperations(ManagementResourceRegistration registry) {
         super.registerOperations(registry);
-        BroadcastGroupControlHandler.INSTANCE.registerOperations(registry, getResourceDescriptionResolver());
 
-        SimpleOperationDefinition op = new SimpleOperationDefinitionBuilder(GET_CONNECTOR_PAIRS_AS_JSON, getResourceDescriptionResolver())
-                .withFlags(EnumSet.of(OperationEntry.Flag.READ_ONLY, OperationEntry.Flag.RUNTIME_ONLY))
-                .setReplyType(STRING)
-                .build();
-        registry.registerOperationHandler(op, BroadcastGroupControlHandler.INSTANCE);
+        if (registerRuntimeOnly) {
+            BroadcastGroupControlHandler.INSTANCE.registerOperations(registry, getResourceDescriptionResolver());
+
+            SimpleOperationDefinition op = new SimpleOperationDefinitionBuilder(GET_CONNECTOR_PAIRS_AS_JSON, getResourceDescriptionResolver())
+                    .setReadOnly()
+                    .setRuntimeOnly()
+                    .setReplyType(STRING)
+                    .build();
+            registry.registerOperationHandler(op, BroadcastGroupControlHandler.INSTANCE);
+        }
     }
 
     static void validateConnectors(OperationContext context, ModelNode operation, ModelNode connectorRefs) throws OperationFailedException {
@@ -142,12 +151,17 @@ public class BroadcastGroupDefinition extends PersistentResourceDefinition {
     private static Set<String> getAvailableConnectors(final OperationContext context,final ModelNode operation) throws OperationFailedException{
         PathAddress address = PathAddress.pathAddress(operation.get(ModelDescriptionConstants.OP_ADDR));
         PathAddress active = MessagingServices.getActiveMQServerPathAddress(address);
-        Resource activeMQServerResource = context.readResourceFromRoot(active);
+        Resource activeMQServerResource = context.readResourceFromRoot(active, false);
         Set<String> availableConnectors = new HashSet<String>();
         availableConnectors.addAll(activeMQServerResource.getChildrenNames(CommonAttributes.HTTP_CONNECTOR));
         availableConnectors.addAll(activeMQServerResource.getChildrenNames(CommonAttributes.IN_VM_CONNECTOR));
         availableConnectors.addAll(activeMQServerResource.getChildrenNames(CommonAttributes.REMOTE_CONNECTOR));
         availableConnectors.addAll(activeMQServerResource.getChildrenNames(CommonAttributes.CONNECTOR));
         return availableConnectors;
+    }
+
+    @Override
+    public void registerCapabilities(ManagementResourceRegistration registration) {
+        registration.registerCapability(CHANNEL_FACTORY_CAPABILITY);
     }
 }

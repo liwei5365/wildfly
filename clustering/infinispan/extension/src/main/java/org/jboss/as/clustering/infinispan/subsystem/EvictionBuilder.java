@@ -29,34 +29,42 @@ import org.infinispan.configuration.cache.ConfigurationBuilder;
 import org.infinispan.configuration.cache.EvictionConfiguration;
 import org.infinispan.configuration.cache.EvictionConfigurationBuilder;
 import org.infinispan.eviction.EvictionStrategy;
-import org.jboss.as.clustering.controller.ResourceServiceBuilder;
+import org.infinispan.eviction.EvictionType;
 import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.wildfly.clustering.service.Builder;
 
 /**
  * @author Paul Ferraro
  */
-public class EvictionBuilder extends CacheComponentBuilder<EvictionConfiguration> implements ResourceServiceBuilder<EvictionConfiguration> {
+public class EvictionBuilder extends ComponentBuilder<EvictionConfiguration> {
 
-    private final EvictionConfigurationBuilder builder = new ConfigurationBuilder().eviction();
+    private volatile EvictionStrategy strategy;
+    private volatile long maxEntries;
 
-    EvictionBuilder(String containerName, String cacheName) {
-        super(CacheComponent.EVICTION, containerName, cacheName);
+    EvictionBuilder(PathAddress cacheAddress) {
+        super(CacheComponent.EVICTION, cacheAddress);
     }
 
     @Override
     public Builder<EvictionConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        EvictionStrategy strategy = ModelNodes.asEnum(STRATEGY.getDefinition().resolveModelAttribute(context, model), EvictionStrategy.class);
-        this.builder.strategy(strategy);
-        this.builder.maxEntries(strategy.isEnabled() ? MAX_ENTRIES.getDefinition().resolveModelAttribute(context, model).asLong() : -1L);
+        this.strategy = ModelNodes.asEnum(STRATEGY.resolveModelAttribute(context, model), EvictionStrategy.class);
+        this.maxEntries = MAX_ENTRIES.resolveModelAttribute(context, model).asLong();
         return this;
     }
 
     @Override
     public EvictionConfiguration getValue() {
-        return this.builder.create();
+        EvictionConfigurationBuilder builder = new ConfigurationBuilder().eviction()
+                // Use MANUAL instead of NONE to silence log WARNs on cache configuration validation
+                .strategy(this.strategy.isEnabled() ? this.strategy : EvictionStrategy.MANUAL)
+                ;
+        if (this.strategy.isEnabled()) {
+            builder.type(EvictionType.COUNT).size(this.maxEntries);
+        }
+        return builder.create();
     }
 }

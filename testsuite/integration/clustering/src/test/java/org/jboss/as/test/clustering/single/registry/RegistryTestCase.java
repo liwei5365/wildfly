@@ -21,22 +21,20 @@
  */
 package org.jboss.as.test.clustering.single.registry;
 
-import static org.junit.Assert.*;
 import static org.jboss.as.test.clustering.ClusteringTestConstants.*;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
+import static org.junit.Assert.*;
 
 import java.util.Collection;
+import java.util.PropertyPermission;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
-import org.jboss.as.test.clustering.EJBClientContextSelector;
 import org.jboss.as.test.clustering.cluster.registry.bean.RegistryRetriever;
 import org.jboss.as.test.clustering.cluster.registry.bean.RegistryRetrieverBean;
 import org.jboss.as.test.clustering.ejb.EJBDirectory;
 import org.jboss.as.test.clustering.ejb.RemoteEJBDirectory;
-import org.jboss.ejb.client.ContextSelector;
-import org.jboss.ejb.client.EJBClientContext;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -50,33 +48,25 @@ import org.junit.runner.RunWith;
 @RunWith(Arquillian.class)
 @RunAsClient
 public class RegistryTestCase {
-    private static final Logger log = Logger.getLogger(RegistryTestCase.class);
     private static final String MODULE_NAME = "registry";
-    private static final String CLIENT_PROPERTIES = "cluster/ejb3/stateless/jboss-ejb-client.properties";
 
     @Deployment
     public static Archive<?> createDeployment() {
         final JavaArchive jar = ShrinkWrap.create(JavaArchive.class, MODULE_NAME + ".jar");
         jar.addPackage(RegistryRetriever.class.getPackage());
-        log.info(jar.toString(true));
+        jar.addAsManifestResource(createPermissionsXmlAsset(
+                new PropertyPermission(NODE_NAME_PROPERTY, "read")
+        ), "permissions.xml");
         return jar;
     }
 
     @Test
     public void test() throws Exception {
-
-        ContextSelector<EJBClientContext> selector = EJBClientContextSelector.setup(CLIENT_PROPERTIES);
-
         try (EJBDirectory context = new RemoteEJBDirectory(MODULE_NAME)) {
             RegistryRetriever bean = context.lookupStateless(RegistryRetrieverBean.class, RegistryRetriever.class);
             Collection<String> names = bean.getNodes();
             assertEquals(1, names.size());
             assertTrue(names.toString(), names.contains(NODE_1));
-        } finally {
-            // reset the selector
-            if (selector != null) {
-                EJBClientContext.setSelector(selector);
-            }
         }
     }
 }

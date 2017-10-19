@@ -36,14 +36,14 @@ public class CountedSessionBean1 implements SessionBean {
     private static final long serialVersionUID = 1L;
     private static final Logger log = Logger.getLogger(CountedSessionBean1.class);
     protected SessionContext ctx;
-    
+
     public CountedSessionBean1() {
-        log.info("CTOR1");
+        log.trace("CTOR1");
     }
 
     // Business Methods ----------------------------------------------
     public void doSomething(long delay) {
-        log.info("doSomething(" + delay + ")");
+        log.trace("doSomething(" + delay + ")");
         if (delay > 0) {
             try {
                 Thread.sleep(delay);
@@ -52,7 +52,7 @@ public class CountedSessionBean1 implements SessionBean {
             }
         }
     }
-    
+
     public void doSomethingSync(long delay) {
         try {
             doSomething(delay);
@@ -60,30 +60,30 @@ public class CountedSessionBean1 implements SessionBean {
             EjbRemoveUnitTestCase.CDL.countDown();
         }
     }
-    
+
     // Container callbacks -------------------------------------------
     public void setSessionContext(SessionContext ctx) throws EJBException, RemoteException {
         this.ctx = ctx;
-        log.info("setSessionContext");
+        log.trace("setSessionContext");
     }
 
     public void ejbCreate() throws RemoteException  {
-        log.info("ejbCreate[1]: " + CounterSingleton.createCounter1.incrementAndGet());
+        log.trace("ejbCreate[1]: " + CounterSingleton.createCounter1.incrementAndGet());
     }
 
     public void ejbRemove() {
         try {
-            log.info("ejbRemove[1]: " + CounterSingleton.removeCounter1.incrementAndGet());
+            log.trace("ejbRemove[1]: " + CounterSingleton.removeCounter1.incrementAndGet());
         } catch (Exception e) {
             log.error("Ignored exception", e);
         }
     }
 
     public void ejbActivate() {
-        log.info("ejbActivate");
+        log.trace("ejbActivate");
     }
 
     public void ejbPassivate() {
-        log.info("ejbPassivate");
+        log.trace("ejbPassivate");
     }
 }

@@ -22,6 +22,7 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
+import static org.jboss.as.clustering.infinispan.subsystem.CacheComponent.PERSISTENCE;
 import static org.jboss.as.clustering.infinispan.subsystem.StoreResourceDefinition.Attribute.FETCH_STATE;
 import static org.jboss.as.clustering.infinispan.subsystem.StoreResourceDefinition.Attribute.PASSIVATION;
 import static org.jboss.as.clustering.infinispan.subsystem.StoreResourceDefinition.Attribute.PRELOAD;
@@ -30,61 +31,79 @@ import static org.jboss.as.clustering.infinispan.subsystem.StoreResourceDefiniti
 import static org.jboss.as.clustering.infinispan.subsystem.StoreResourceDefinition.Attribute.SHARED;
 import static org.jboss.as.clustering.infinispan.subsystem.StoreResourceDefinition.Attribute.SINGLETON;
 
+import java.util.Properties;
+import java.util.function.Consumer;
+
+import org.infinispan.configuration.cache.AbstractStoreConfigurationBuilder;
 import org.infinispan.configuration.cache.AsyncStoreConfiguration;
+import org.infinispan.configuration.cache.ConfigurationBuilder;
 import org.infinispan.configuration.cache.PersistenceConfiguration;
-import org.infinispan.configuration.cache.StoreConfigurationBuilder;
-import org.jboss.as.clustering.controller.ResourceServiceBuilder;
+import org.infinispan.configuration.cache.StoreConfiguration;
 import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceBuilder;
+import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.msc.value.InjectedValue;
+import org.jboss.msc.service.ValueService;
 import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
-public abstract class StoreBuilder extends CacheComponentBuilder<PersistenceConfiguration> implements ResourceServiceBuilder<PersistenceConfiguration> {
+public abstract class StoreBuilder<C extends StoreConfiguration, B extends AbstractStoreConfigurationBuilder<C, B>> extends ComponentBuilder<PersistenceConfiguration> implements Consumer<B> {
 
-    private final InjectedValue<AsyncStoreConfiguration> async = new InjectedValue<>();
-    private final String containerName;
-    private final String cacheName;
+    private final ValueDependency<AsyncStoreConfiguration> async;
+    private final Class<B> builderClass;
+    private final Properties properties = new Properties();
 
-    private volatile StoreConfigurationBuilder<?, ?> storeBuilder;
+    private volatile boolean passivation;
+    private volatile boolean fetchState;
+    private volatile boolean preload;
+    private volatile boolean purge;
+    private volatile boolean shared;
+    private volatile boolean singleton;
 
-    StoreBuilder(String containerName, String cacheName) {
-        super(CacheComponent.PERSISTENCE, containerName, cacheName);
-        this.containerName = containerName;
-        this.cacheName = cacheName;
+    StoreBuilder(PathAddress cacheAddress, Class<B> builderClass) {
+        super(PERSISTENCE, cacheAddress);
+        this.builderClass = builderClass;
+        this.async = new InjectedValueDependency<>(CacheComponent.STORE_WRITE.getServiceName(cacheAddress), AsyncStoreConfiguration.class);
     }
 
     @Override
     public ServiceBuilder<PersistenceConfiguration> build(ServiceTarget target) {
-        return super.build(target)
-                .addDependency(CacheComponent.STORE_WRITE.getServiceName(this.containerName, this.cacheName), AsyncStoreConfiguration.class, this.async)
-        ;
+        return this.async.register(target.addService(this.getServiceName(), new ValueService<>(this)).setInitialMode(ServiceController.Mode.ON_DEMAND));
     }
 
     @Override
     public Builder<PersistenceConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.storeBuilder = this.createStore(context, model);
-        this.storeBuilder.persistence().passivation(PASSIVATION.getDefinition().resolveModelAttribute(context, model).asBoolean());
-        this.storeBuilder.fetchPersistentState(FETCH_STATE.getDefinition().resolveModelAttribute(context, model).asBoolean())
-                .preload(PRELOAD.getDefinition().resolveModelAttribute(context, model).asBoolean())
-                .purgeOnStartup(PURGE.getDefinition().resolveModelAttribute(context, model).asBoolean())
-                .shared(SHARED.getDefinition().resolveModelAttribute(context, model).asBoolean())
-                .singleton().enabled(SINGLETON.getDefinition().resolveModelAttribute(context, model).asBoolean())
-                .withProperties(ModelNodes.asProperties(PROPERTIES.getDefinition().resolveModelAttribute(context, model)))
-        ;
+        this.passivation = PASSIVATION.resolveModelAttribute(context, model).asBoolean();
+        this.fetchState = FETCH_STATE.resolveModelAttribute(context, model).asBoolean();
+        this.preload = PRELOAD.resolveModelAttribute(context, model).asBoolean();
+        this.purge = PURGE.resolveModelAttribute(context, model).asBoolean();
+        this.shared = SHARED.resolveModelAttribute(context, model).asBoolean();
+        this.singleton = SINGLETON.resolveModelAttribute(context, model).asBoolean();
+        ModelNodes.optionalPropertyList(PROPERTIES.resolveModelAttribute(context, model)).ifPresent(list -> list.forEach(property -> this.properties.setProperty(property.getName(), property.getValue().asString())));
         return this;
     }
 
-    abstract StoreConfigurationBuilder<?, ?> createStore(OperationContext context, ModelNode model) throws OperationFailedException;
-
     @Override
     public PersistenceConfiguration getValue() {
-        return this.storeBuilder.async().read(this.async.getValue()).persistence().create();
+        B builder = new ConfigurationBuilder().persistence()
+                .passivation(this.passivation)
+                .addStore(this.builderClass)
+                    .fetchPersistentState(this.fetchState)
+                    .preload(this.preload)
+                    .purgeOnStartup(this.purge)
+                    .shared(this.shared)
+                    .singleton().enabled(this.singleton)
+                    .withProperties(this.properties)
+                    ;
+        this.accept(builder);
+        return builder.async().read(this.async.getValue()).persistence().create();
     }
 }

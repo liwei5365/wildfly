@@ -21,25 +21,19 @@
  */
 package org.wildfly.clustering.web.infinispan.session.fine;
 
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-
-import org.wildfly.clustering.web.infinispan.SessionKeyExternalizer;
+import org.kohsuke.MetaInfServices;
+import org.wildfly.clustering.infinispan.spi.persistence.KeyFormat;
+import org.wildfly.clustering.marshalling.Externalizer;
+import org.wildfly.clustering.web.infinispan.IndexedSessionKeyExternalizer;
 
 /**
  * Externalizer for a {@link SessionAttributeKey}.
  * @author Paul Ferraro
  */
-public class SessionAttributeKeyExternalizer extends SessionKeyExternalizer<SessionAttributeKey> {
+@MetaInfServices({ Externalizer.class, KeyFormat.class })
+public class SessionAttributeKeyExternalizer extends IndexedSessionKeyExternalizer<SessionAttributeKey> {
 
     public SessionAttributeKeyExternalizer() {
-        super(SessionAttributeKey.class, (String id, ObjectInput input) -> new SessionAttributeKey(id, input.readUTF()));
-    }
-
-    @Override
-    public void writeObject(ObjectOutput output, SessionAttributeKey key) throws IOException {
-        super.writeObject(output, key);
-        output.writeUTF(key.getAttribute());
+        super(SessionAttributeKey.class, SessionAttributeKey::getAttributeId, (sessionId, attributeId) -> new SessionAttributeKey(sessionId, attributeId));
     }
 }

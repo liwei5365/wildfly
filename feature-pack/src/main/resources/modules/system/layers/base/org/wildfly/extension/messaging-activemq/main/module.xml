@@ -22,7 +22,7 @@
   ~ 02110-1301 USA, or see the FSF site: http://www.fsf.org.
   -->
 
-<module xmlns="urn:jboss:module:1.3" name="org.wildfly.extension.messaging-activemq">
+<module xmlns="urn:jboss:module:1.5" name="org.wildfly.extension.messaging-activemq">
     <properties>
         <property name="jboss.api" value="private"/>
     </properties>
@@ -30,6 +30,7 @@
     <resources>
         <artifact name="${org.wildfly:wildfly-messaging-activemq}"/>
         <artifact name="${org.jboss.activemq.artemis.integration:artemis-wildfly-integration}"/>
+        <resource-root path="database" />
     </resources>
 
     <dependencies>
@@ -39,6 +40,7 @@
         <module name="javax.api"/>
         <module name="javax.enterprise.api"/>
         <module name="javax.jms.api"/>
+        <module name="javax.resource.api" />
         <module name="javax.transaction.api"/>
         <module name="org.apache.activemq.artemis"/>
         <module name="org.apache.activemq.artemis.ra"/>
@@ -53,7 +55,8 @@
         <module name="org.jboss.as.network"/>
         <!-- required only to access the HttpListenerRegistryService used by http-acceptor -->
         <module name="org.jboss.as.remoting" optional="true"/>
-        <module name="org.wildfly.security.elytron"/>
+        <module name="org.wildfly.security.elytron-private"/>
+        <module name="org.wildfly.common"/>
         <module name="org.jboss.as.server"/>
         <module name="org.jboss.as.weld"/>
         <module name="org.jboss.jandex"/>
@@ -66,9 +69,10 @@
         <module name="org.jboss.as.connector" />
         <module name="org.jboss.as.security"/>
         <module name="org.jboss.vfs"/>
+        <module name="org.jboss.jts"/>
         <module name="org.picketbox"/>
         <module name="org.jboss.jboss-transaction-spi"/>
-        <module name="org.jboss.remote-naming"/>
+        <module name="org.wildfly.naming-client"/>
         <module name="org.jboss.threads"/>
         <module name="org.jgroups" optional="true"/>
         <module name="org.jboss.weld.api" />

@@ -32,12 +32,13 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 import org.wildfly.clustering.ee.Batcher;
-import org.wildfly.clustering.ee.infinispan.Remover;
+import org.wildfly.clustering.ee.Remover;
 import org.wildfly.clustering.ee.infinispan.TransactionBatch;
 import org.wildfly.clustering.web.session.ImmutableSessionMetaData;
 
 /**
  * Unit test for {@link SessionExpirationScheduler}.
+ *
  * @author Paul Ferraro
  */
 public class SessionExpirationSchedulerTestCase {
@@ -62,7 +63,7 @@ public class SessionExpirationSchedulerTestCase {
         Instant now = Instant.now();
         when(expiringSessionMetaData.getLastAccessedTime()).thenReturn(now);
         when(canceledSessionMetaData.getLastAccessedTime()).thenReturn(now);
-        
+
         try (Scheduler scheduler = new SessionExpirationScheduler(batcher, remover)) {
             scheduler.schedule(immortalSessionId, immortalSessionMetaData);
             scheduler.schedule(canceledSessionId, canceledSessionMetaData);

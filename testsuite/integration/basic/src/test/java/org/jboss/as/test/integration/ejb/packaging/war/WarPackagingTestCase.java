@@ -43,7 +43,7 @@ import org.junit.runner.RunWith;
 
 /**
  * Testing packaging ejb in war.
- * 
+ *
  * @author Ondrej Chaloupka
  */
 @RunWith(Arquillian.class)
@@ -95,7 +95,7 @@ public class WarPackagingTestCase {
     @RunAsClient
     public void testServletCall(@ArquillianResource @OperateOnDeployment("test") URL baseUrl) throws Exception {
         String url = "http://" + baseUrl.getHost() + ":" + baseUrl.getPort() + "/ejbinwar/servlet?archive=jar";
-        log.info(url);
+        log.trace(url);
         String res = HttpRequest.get(url, 2, TimeUnit.SECONDS);
         Assert.assertEquals(JAR_SUCCESS_STRING, res);
     }

@@ -81,8 +81,8 @@ import org.junit.runner.RunWith;
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ LdapLoginModuleTestCase.SystemPropertiesSetup.class, LdapLoginModuleTestCase.LDAPServerSetupTask.class,
-        LdapLoginModuleTestCase.SecurityDomainsSetup.class })
+@ServerSetup({LdapLoginModuleTestCase.SystemPropertiesSetup.class, LdapLoginModuleTestCase.LDAPServerSetupTask.class,
+        LdapLoginModuleTestCase.SecurityDomainsSetup.class})
 @RunAsClient
 @Category(CommonCriteria.class)
 public class LdapLoginModuleTestCase {
@@ -159,20 +159,20 @@ public class LdapLoginModuleTestCase {
      */
     private void testAccess(@ArquillianResource URL webAppURL) throws Exception {
         final URL servletURL = new URL(webAppURL.toExternalForm() + SimpleSecuredServlet.SERVLET_PATH.substring(1));
-        LOGGER.info("Testing successful authentication - " + servletURL);
+        LOGGER.trace("Testing successful authentication - " + servletURL);
         assertEquals("Expected response body doesn't match the returned one.", SimpleSecuredServlet.RESPONSE_BODY,
                 Utils.makeCallWithBasicAuthn(servletURL, "jduke", "theduke", 200));
 
-        LOGGER.info("Testing failed authentication - " + servletURL);
+        LOGGER.trace("Testing failed authentication - " + servletURL);
         Utils.makeCallWithBasicAuthn(servletURL, "anil", "theduke", 401);
         Utils.makeCallWithBasicAuthn(servletURL, "jduke", "anil", 401);
         Utils.makeCallWithBasicAuthn(servletURL, "anil", "anil", 401);
 
-        LOGGER.info("Testing failed authorization - " + servletURL);
+        LOGGER.trace("Testing failed authorization - " + servletURL);
         Utils.makeCallWithBasicAuthn(servletURL, "tester", "password", 403);
 
         final URL unprotectedURL = new URL(webAppURL.toExternalForm() + SimpleServlet.SERVLET_PATH.substring(1));
-        LOGGER.info("Testing access to unprotected resource - " + unprotectedURL);
+        LOGGER.trace("Testing access to unprotected resource - " + unprotectedURL);
         assertEquals("Expected response body doesn't match the returned one.", SimpleServlet.RESPONSE_BODY,
                 Utils.makeCallWithBasicAuthn(unprotectedURL, null, null, 200));
     }
@@ -184,15 +184,12 @@ public class LdapLoginModuleTestCase {
      * @return
      */
     private static WebArchive createWar(final String securityDomain) {
-        LOGGER.info("Creating deployment: " + securityDomain);
+        LOGGER.trace("Creating deployment: " + securityDomain);
         final WebArchive war = ShrinkWrap.create(WebArchive.class, securityDomain + ".war");
         war.addClasses(SimpleSecuredServlet.class, SimpleServlet.class);
         war.addAsWebInfResource(LdapLoginModuleTestCase.class.getPackage(), "web-basic-authn.xml", "web.xml");
         war.addAsWebInfResource(new StringAsset("<jboss-web><security-domain>" + securityDomain
                 + "</security-domain></jboss-web>"), "jboss-web.xml");
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(war.toString(true));
-        }
         return war;
     }
 
@@ -208,7 +205,7 @@ public class LdapLoginModuleTestCase {
          */
         @Override
         protected SystemProperty[] getSystemProperties() {
-            return new SystemProperty[] { new DefaultSystemProperty("javax.net.ssl.trustStore", KEYSTORE_FILE.getAbsolutePath()) };
+            return new SystemProperty[]{new DefaultSystemProperty("javax.net.ssl.trustStore", KEYSTORE_FILE.getAbsolutePath())};
         }
     }
 
@@ -313,7 +310,7 @@ public class LdapLoginModuleTestCase {
                             new SecurityModule.Builder().name("Ldap").flag(Constants.SUFFICIENT).options(moduleOptions).build())
                     .build();
 
-            return new SecurityDomain[] { sdLdap, sdLdaps };
+            return new SecurityDomain[]{sdLdap, sdLdaps};
         }
 
     }
@@ -323,35 +320,35 @@ public class LdapLoginModuleTestCase {
      */
     //@formatter:off
     @CreateDS(
-        name = "JBossDS-LdapLoginModuleTestCase",
-        factory = org.jboss.as.test.integration.ldap.InMemoryDirectoryServiceFactory.class,
-        partitions =
-        {
-            @CreatePartition(
-                name = "jboss",
-                suffix = "dc=jboss,dc=org",
-                contextEntry = @ContextEntry(
-                    entryLdif =
-                        "dn: dc=jboss,dc=org\n" +
-                        "dc: jboss\n" +
-                        "objectClass: top\n" +
-                        "objectClass: domain\n\n" ),
-                indexes =
-                {
-                    @CreateIndex( attribute = "objectClass" ),
-                    @CreateIndex( attribute = "dc" ),
-                    @CreateIndex( attribute = "ou" )
-                })
-        },
-        additionalInterceptors = { KeyDerivationInterceptor.class })
-    @CreateLdapServer (
-        transports =
-        {
-            @CreateTransport( protocol = "LDAP",  port = LDAP_PORT, address = "0.0.0.0" ),
-            @CreateTransport( protocol = "LDAPS", port = LDAPS_PORT, address = "0.0.0.0" )
-        },
+            name = "JBossDS-LdapLoginModuleTestCase",
+            factory = org.jboss.as.test.integration.ldap.InMemoryDirectoryServiceFactory.class,
+            partitions =
+                    {
+                            @CreatePartition(
+                                    name = "jboss",
+                                    suffix = "dc=jboss,dc=org",
+                                    contextEntry = @ContextEntry(
+                                            entryLdif =
+                                                    "dn: dc=jboss,dc=org\n" +
+                                                            "dc: jboss\n" +
+                                                            "objectClass: top\n" +
+                                                            "objectClass: domain\n\n"),
+                                    indexes =
+                                            {
+                                                    @CreateIndex(attribute = "objectClass"),
+                                                    @CreateIndex(attribute = "dc"),
+                                                    @CreateIndex(attribute = "ou")
+                                            })
+                    },
+            additionalInterceptors = {KeyDerivationInterceptor.class})
+    @CreateLdapServer(
+            transports =
+                    {
+                            @CreateTransport(protocol = "LDAP", port = LDAP_PORT, address = "0.0.0.0"),
+                            @CreateTransport(protocol = "LDAPS", port = LDAPS_PORT, address = "0.0.0.0")
+                    },
 //        keyStore="localhost-ldap.jks",
-        certificatePassword="secret")
+            certificatePassword = "secret")
     //@formatter:on
     static class LDAPServerSetupTask implements ServerSetupTask {
 
@@ -366,7 +363,7 @@ public class LdapLoginModuleTestCase {
          * @param containerId
          * @throws Exception
          * @see org.jboss.as.arquillian.api.ServerSetupTask#setup(org.jboss.as.arquillian.container.ManagementClient,
-         *      java.lang.String)
+         * java.lang.String)
          */
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
             try {
@@ -407,7 +404,7 @@ public class LdapLoginModuleTestCase {
          * @param containerId
          * @throws Exception
          * @see org.jboss.as.arquillian.api.ServerSetupTask#tearDown(org.jboss.as.arquillian.container.ManagementClient,
-         *      java.lang.String)
+         * java.lang.String)
          */
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
             ldapServer.stop();

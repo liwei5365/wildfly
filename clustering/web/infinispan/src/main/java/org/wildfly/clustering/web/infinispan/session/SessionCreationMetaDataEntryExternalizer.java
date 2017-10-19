@@ -28,14 +28,16 @@ import java.io.ObjectOutput;
 import java.time.Duration;
 import java.time.Instant;
 
+import org.kohsuke.MetaInfServices;
 import org.wildfly.clustering.marshalling.Externalizer;
-import org.wildfly.clustering.marshalling.jboss.IndexExternalizer;
-import org.wildfly.clustering.marshalling.jboss.InstantExternalizer;
+import org.wildfly.clustering.marshalling.spi.IndexExternalizer;
+import org.wildfly.clustering.marshalling.spi.time.InstantExternalizer;
 
 /**
  * Externalizer for {@link SessionCreationMetaDataEntry}
  * @author Paul Ferraro
  */
+@MetaInfServices(Externalizer.class)
 public class SessionCreationMetaDataEntryExternalizer implements Externalizer<SessionCreationMetaDataEntry<Object>> {
     private static final Externalizer<Instant> INSTANT_EXTERNALIZER = new InstantExternalizer();
 
@@ -43,19 +45,19 @@ public class SessionCreationMetaDataEntryExternalizer implements Externalizer<Se
     public void writeObject(ObjectOutput output, SessionCreationMetaDataEntry<Object> entry) throws IOException {
         SessionCreationMetaData metaData = entry.getMetaData();
         INSTANT_EXTERNALIZER.writeObject(output, metaData.getCreationTime());
-        IndexExternalizer.VARIABLE.writeObject(output, (int) metaData.getMaxInactiveInterval().getSeconds());
+        IndexExternalizer.VARIABLE.writeData(output, (int) metaData.getMaxInactiveInterval().getSeconds());
     }
 
     @Override
     public SessionCreationMetaDataEntry<Object> readObject(ObjectInput input) throws IOException, ClassNotFoundException {
         SessionCreationMetaData metaData = new SimpleSessionCreationMetaData(INSTANT_EXTERNALIZER.readObject(input));
-        metaData.setMaxInactiveInterval(Duration.ofSeconds(IndexExternalizer.VARIABLE.readObject(input)));
+        metaData.setMaxInactiveInterval(Duration.ofSeconds(IndexExternalizer.VARIABLE.readData(input)));
         return new SessionCreationMetaDataEntry<>(metaData);
     }
 
-    @SuppressWarnings({ "unchecked", "rawtypes" })
+    @SuppressWarnings("unchecked")
     @Override
-    public Class getTargetClass() {
-        return SessionCreationMetaDataEntry.class;
+    public Class<SessionCreationMetaDataEntry<Object>> getTargetClass() {
+        return (Class<SessionCreationMetaDataEntry<Object>>) (Class<?>) SessionCreationMetaDataEntry.class;
     }
 }

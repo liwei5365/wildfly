@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -23,11 +23,14 @@
 package org.wildfly.extension.undertow;
 
 import java.io.IOException;
+import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
+import io.undertow.UndertowOptions;
 import io.undertow.server.HandlerWrapper;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.OpenListener;
@@ -39,6 +42,9 @@ import org.jboss.msc.service.StartContext;
 import org.jboss.msc.service.StartException;
 import org.jboss.msc.service.StopContext;
 import org.jboss.msc.value.InjectedValue;
+
+import org.wildfly.extension.undertow.logging.UndertowLogger;
+
 import org.xnio.ChannelListener;
 import org.xnio.ChannelListeners;
 import org.xnio.OptionMap;
@@ -51,7 +57,7 @@ import org.xnio.channels.AcceptingChannel;
 /**
  * @author Tomaz Cerar
  */
-public abstract class ListenerService<T> implements Service<T> {
+public abstract class ListenerService implements Service<UndertowListener>, UndertowListener {
 
     protected static final OptionMap commonOptions = OptionMap.builder()
             .set(Options.TCP_NODELAY, true)
@@ -72,7 +78,9 @@ public abstract class ListenerService<T> implements Service<T> {
     protected final OptionMap listenerOptions;
     protected final OptionMap socketOptions;
     protected volatile OpenListener openListener;
-
+    private volatile boolean enabled;
+    private volatile boolean started;
+    private Consumer<Boolean> statisticsChangeListener;
 
     protected ListenerService(String name, OptionMap listenerOptions, OptionMap socketOptions) {
         this.name = name;
@@ -109,6 +117,27 @@ public abstract class ListenerService<T> implements Service<T> {
         return name;
     }
 
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public synchronized void setEnabled(boolean enabled) {
+        if(started && enabled != this.enabled) {
+            if(enabled) {
+                final InetSocketAddress socketAddress = binding.getValue().getSocketAddress();
+                final ChannelListener<AcceptingChannel<StreamConnection>> acceptListener = ChannelListeners.openListenerAdapter(openListener);
+                try {
+                    startListening(worker.getValue(), socketAddress, acceptListener);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                stopListening();
+            }
+        }
+        this.enabled = enabled;
+    }
+
     public abstract boolean isSecure();
 
     protected void registerBinding() {
@@ -124,32 +153,55 @@ public abstract class ListenerService<T> implements Service<T> {
 
     @Override
     public void start(StartContext context) throws StartException {
+        started = true;
         preStart(context);
         serverService.getValue().registerListener(this);
         try {
-            final InetSocketAddress socketAddress = binding.getValue().getSocketAddress();
             openListener = createOpenListener();
-            final ChannelListener<AcceptingChannel<StreamConnection>> acceptListener = ChannelListeners.openListenerAdapter(openListener);
             HttpHandler handler = serverService.getValue().getRoot();
             for(HandlerWrapper wrapper : listenerHandlerWrappers) {
                 handler = wrapper.wrap(handler);
             }
             openListener.setRootHandler(handler);
-            startListening(worker.getValue(), socketAddress, acceptListener);
+            if(enabled) {
+                final InetSocketAddress socketAddress = binding.getValue().getSocketAddress();
+                final ChannelListener<AcceptingChannel<StreamConnection>> acceptListener = ChannelListeners.openListenerAdapter(openListener);
+                startListening(worker.getValue(), socketAddress, acceptListener);
+            }
             registerBinding();
         } catch (IOException e) {
             cleanFailedStart();
-            throw new StartException("Could not start http listener", e);
+            if (e instanceof BindException) {
+                final StringBuilder sb = new StringBuilder().append(e.getLocalizedMessage());
+                final InetSocketAddress socketAddress = binding.getValue().getSocketAddress();
+                if (socketAddress != null)
+                    sb.append(" ").append(socketAddress);
+                throw new StartException(sb.toString());
+            } else {
+                throw UndertowLogger.ROOT_LOGGER.couldNotStartListener(name, e);
+            }
         }
+        statisticsChangeListener = (enabled) -> {
+            OptionMap options = openListener.getUndertowOptions();
+            OptionMap.Builder builder = OptionMap.builder().addAll(options);
+            builder.set(UndertowOptions.ENABLE_STATISTICS, enabled);
+            openListener.setUndertowOptions(builder.getMap());
+        };
+        getUndertowService().registerStatisticsListener(statisticsChangeListener);
     }
 
     protected abstract void cleanFailedStart();
 
     @Override
     public void stop(StopContext context) {
+        started = false;
         serverService.getValue().unregisterListener(this);
-        stopListening();
+        if(enabled) {
+            stopListening();
+        }
         unregisterBinding();
+        getUndertowService().unregisterStatisticsListener(statisticsChangeListener);
+        statisticsChangeListener = null;
     }
 
     void addWrapperHandler(HandlerWrapper wrapper){
@@ -166,7 +218,18 @@ public abstract class ListenerService<T> implements Service<T> {
 
     abstract void stopListening();
 
-    protected abstract String getProtocol();
+    public abstract String getProtocol();
+
+    @Override
+    public boolean isShutdown() {
+        XnioWorker worker = getWorker().getOptionalValue();
+        return worker == null || worker.isShutdown();
+    }
+
+    @Override
+    public SocketBinding getSocketBinding() {
+        return binding.getValue();
+    }
 
     private static class ListenerBinding implements ManagedBinding {
 

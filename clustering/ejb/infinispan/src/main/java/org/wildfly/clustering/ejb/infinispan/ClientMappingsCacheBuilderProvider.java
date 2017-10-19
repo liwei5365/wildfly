@@ -28,51 +28,53 @@ import java.util.List;
 import java.util.ServiceLoader;
 
 import org.infinispan.configuration.cache.CacheMode;
-import org.infinispan.configuration.cache.ConfigurationBuilder;
+import org.jboss.as.clustering.controller.CapabilityServiceBuilder;
+import org.jboss.msc.service.ServiceName;
 import org.wildfly.clustering.ejb.BeanManagerFactoryBuilderConfiguration;
+import org.wildfly.clustering.infinispan.spi.InfinispanCacheRequirement;
 import org.wildfly.clustering.infinispan.spi.service.CacheBuilder;
 import org.wildfly.clustering.infinispan.spi.service.TemplateConfigurationBuilder;
-import org.wildfly.clustering.service.Builder;
-import org.wildfly.clustering.service.SubGroupServiceNameFactory;
-import org.wildfly.clustering.spi.CacheGroupAliasBuilderProvider;
-import org.wildfly.clustering.spi.CacheGroupBuilderProvider;
+import org.wildfly.clustering.spi.CacheAliasBuilderProvider;
+import org.wildfly.clustering.spi.CacheBuilderProvider;
+import org.wildfly.clustering.spi.ClusteringCacheRequirement;
+import org.wildfly.clustering.spi.ServiceNameRegistry;
 
 /**
  * Creates routing services.
  * @author Paul Ferraro
  */
-public class ClientMappingsCacheBuilderProvider implements CacheGroupBuilderProvider, CacheGroupAliasBuilderProvider {
+public class ClientMappingsCacheBuilderProvider implements CacheBuilderProvider, CacheAliasBuilderProvider {
 
-    private final Class<? extends CacheGroupBuilderProvider> providerClass;
+    private final Class<? extends CacheBuilderProvider> providerClass;
 
-    ClientMappingsCacheBuilderProvider(Class<? extends CacheGroupBuilderProvider> providerClass) {
+    ClientMappingsCacheBuilderProvider(Class<? extends CacheBuilderProvider> providerClass) {
         this.providerClass = providerClass;
     }
 
     @Override
-    public Collection<Builder<?>> getBuilders(String containerName, String cacheName) {
-        List<Builder<?>> builders = new LinkedList<>();
-        if (containerName.equals(BeanManagerFactoryBuilderConfiguration.DEFAULT_CONTAINER_NAME) && cacheName.equals(SubGroupServiceNameFactory.DEFAULT_SUB_GROUP)) {
-            builders.add(new TemplateConfigurationBuilder(containerName, BeanManagerFactoryBuilderConfiguration.CLIENT_MAPPINGS_CACHE_NAME, cacheName) {
-                @Override
-                public ConfigurationBuilder createConfigurationBuilder() {
-                    ConfigurationBuilder builder = super.createConfigurationBuilder();
-                    CacheMode mode = builder.clustering().cacheMode();
-                    builder.clustering().cacheMode(mode.isClustered() ? CacheMode.REPL_SYNC : CacheMode.LOCAL);
-                    builder.persistence().clearStores();
-                    return builder;
-                }
-            });
-            builders.add(new CacheBuilder<>(containerName, BeanManagerFactoryBuilderConfiguration.CLIENT_MAPPINGS_CACHE_NAME));
-            for (CacheGroupBuilderProvider provider : ServiceLoader.load(this.providerClass, this.providerClass.getClassLoader())) {
-                builders.addAll(provider.getBuilders(containerName, BeanManagerFactoryBuilderConfiguration.CLIENT_MAPPINGS_CACHE_NAME));
+    public Collection<CapabilityServiceBuilder<?>> getBuilders(ServiceNameRegistry<ClusteringCacheRequirement> registry, String containerName, String aliasCacheName) {
+        List<CapabilityServiceBuilder<?>> builders = new LinkedList<>();
+        if (aliasCacheName == null) {
+            String cacheName = BeanManagerFactoryBuilderConfiguration.CLIENT_MAPPINGS_CACHE_NAME;
+            builders.add(new TemplateConfigurationBuilder(ServiceName.parse(InfinispanCacheRequirement.CONFIGURATION.resolve(containerName, cacheName)), containerName, cacheName, aliasCacheName, builder -> {
+                CacheMode mode = builder.clustering().cacheMode();
+                builder.clustering().cacheMode(mode.isClustered() ? CacheMode.REPL_SYNC : CacheMode.LOCAL);
+                // don't use DefaultConsistentHashFactory for REPL caches (WFLY-9276)
+                builder.clustering().hash().consistentHashFactory(null);
+                builder.clustering().l1().disable();
+                builder.persistence().clearStores();
+            }));
+            builders.add(new CacheBuilder<>(ServiceName.parse(InfinispanCacheRequirement.CACHE.resolve(containerName, cacheName)), containerName, cacheName));
+            ServiceNameRegistry<ClusteringCacheRequirement> routingRegistry = requirement -> ServiceName.parse(requirement.resolve(containerName, cacheName));
+            for (CacheBuilderProvider provider : ServiceLoader.load(this.providerClass, this.providerClass.getClassLoader())) {
+                builders.addAll(provider.getBuilders(routingRegistry, containerName, cacheName));
             }
         }
         return builders;
     }
 
     @Override
-    public Collection<Builder<?>> getBuilders(String containerName, String aliasCacheName, String targetCacheName) {
-        return this.getBuilders(containerName, aliasCacheName);
+    public Collection<CapabilityServiceBuilder<?>> getBuilders(ServiceNameRegistry<ClusteringCacheRequirement> registry, String containerName, String aliasCacheName, String targetCacheName) {
+        return this.getBuilders(registry, containerName, aliasCacheName);
     }
 }

@@ -27,13 +27,16 @@ import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUB
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 
+import org.jberet.spi.ContextClassLoaderJobOperatorContextSelector;
 import org.jberet.spi.JobExecutor;
-import org.jboss.as.controller.AbstractAddStepHandler;
+import org.jberet.spi.JobOperatorContext;
+import org.jboss.as.controller.AbstractBoottimeAddStepHandler;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.DefaultAttributeMarshaller;
 import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.ReloadRequiredRemoveStepHandler;
 import org.jboss.as.controller.ReloadRequiredWriteAttributeHandler;
@@ -54,12 +57,15 @@ import org.jboss.as.threads.ThreadsServices;
 import org.jboss.as.threads.UnboundedQueueThreadPoolResourceDefinition;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
+import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceTarget;
 import org.wildfly.extension.batch._private.Capabilities;
 import org.wildfly.extension.batch.deployment.BatchEnvironmentProcessor;
+import org.wildfly.extension.batch.jberet.BatchConfiguration;
+import org.wildfly.extension.batch.jberet.DefaultBatchEnvironment;
 import org.wildfly.extension.batch.jberet.deployment.BatchDependencyProcessor;
 import org.wildfly.extension.batch.jberet.deployment.BatchDeploymentResourceProcessor;
-import org.wildfly.extension.batch.jberet.impl.JobExecutorService;
+import org.wildfly.extension.batch.jberet.thread.pool.JobExecutorService;
 import org.wildfly.extension.batch.job.repository.JobRepositoryFactory;
 import org.wildfly.extension.batch.job.repository.JobRepositoryType;
 import org.wildfly.extension.requestcontroller.RequestControllerExtension;
@@ -128,7 +134,7 @@ public class BatchSubsystemDefinition extends SimpleResourceDefinition {
         super.registerChildren(resourceRegistration);
         // thread-pool resource
         final UnboundedQueueThreadPoolResourceDefinition threadPoolResource = UnboundedQueueThreadPoolResourceDefinition.create(THREAD_POOL_PATH,
-                BatchThreadFactoryResolver.INSTANCE, BatchServiceNames.BASE_BATCH_THREAD_POOL_NAME, false); // TODO (jrp) verify false value
+                BatchThreadFactoryResolver.INSTANCE, BatchServiceNames.BASE_BATCH_THREAD_POOL_NAME, false);
         resourceRegistration.registerSubModel(threadPoolResource);
 
         // thread-factory resource
@@ -160,12 +166,15 @@ public class BatchSubsystemDefinition extends SimpleResourceDefinition {
     /**
      * Handler responsible for adding the subsystem resource to the model.
      */
-    static class BatchSubsystemAdd extends AbstractAddStepHandler {
+    static class BatchSubsystemAdd extends AbstractBoottimeAddStepHandler {
 
         static final BatchSubsystemAdd INSTANCE = new BatchSubsystemAdd();
+        private final ContextClassLoaderJobOperatorContextSelector selector;
 
         private BatchSubsystemAdd() {
-            super(Capabilities.DEFAULT_THREAD_POOL_CAPABILITY);
+            super(Capabilities.BATCH_CONFIGURATION_CAPABILITY);
+            selector = new ContextClassLoaderJobOperatorContextSelector(() -> JobOperatorContext.create(DefaultBatchEnvironment.INSTANCE));
+            JobOperatorContext.setJobOperatorContextSelector(selector);
         }
 
         @Override
@@ -175,17 +184,17 @@ public class BatchSubsystemDefinition extends SimpleResourceDefinition {
         }
 
         @Override
-        protected void performRuntime(final OperationContext context, final ModelNode operation, final ModelNode model)
+        protected void performBoottime(final OperationContext context, final ModelNode operation, final ModelNode model)
                 throws OperationFailedException {
             // Check if the request-controller subsystem exists
-            final boolean rcPresent = context.getOriginalRootResource().hasChild(PathElement.pathElement(ModelDescriptionConstants.SUBSYSTEM, RequestControllerExtension.SUBSYSTEM_NAME));
+            final boolean rcPresent = context.readResourceFromRoot(PathAddress.EMPTY_ADDRESS, false).hasChild(PathElement.pathElement(ModelDescriptionConstants.SUBSYSTEM, RequestControllerExtension.SUBSYSTEM_NAME));
 
             context.addStep(new AbstractDeploymentChainStep() {
                 public void execute(DeploymentProcessorTarget processorTarget) {
                     processorTarget.addDeploymentProcessor(BatchSubsystemDefinition.NAME,
                             Phase.DEPENDENCIES, Phase.DEPENDENCIES_BATCH, new BatchDependencyProcessor());
                     processorTarget.addDeploymentProcessor(BatchSubsystemDefinition.NAME,
-                            Phase.POST_MODULE, Phase.POST_MODULE_BATCH_ENVIRONMENT, new BatchEnvironmentProcessor(rcPresent));
+                            Phase.POST_MODULE, Phase.POST_MODULE_BATCH_ENVIRONMENT, new BatchEnvironmentProcessor(rcPresent, selector));
                     processorTarget.addDeploymentProcessor(BatchSubsystemDefinition.NAME,
                             Phase.INSTALL, Phase.INSTALL_BATCH_RESOURCES, new BatchDeploymentResourceProcessor(NAME));
 
@@ -194,16 +203,28 @@ public class BatchSubsystemDefinition extends SimpleResourceDefinition {
 
             final ServiceTarget target = context.getServiceTarget();
             final JobExecutorService service = new JobExecutorService();
-            target.addService(context.getCapabilityServiceName(Capabilities.DEFAULT_THREAD_POOL_CAPABILITY.getName(), JobExecutor.class), service)
+            target.addService(BatchServiceNames.BATCH_JOB_EXECUTOR_NAME, service)
                     .addDependency(BatchServiceNames.BATCH_THREAD_POOL_NAME,
                             ManagedJBossThreadPoolExecutorService.class,
                             service.getThreadPoolInjector()
                     )
+                    // Only start this service if there are deployments present, allow it to be stopped as deployments
+                    // are removed.
+                    .setInitialMode(ServiceController.Mode.ON_DEMAND)
                     .install();
 
             // Determine the repository type
             final String repositoryType = JOB_REPOSITORY_TYPE.resolveModelAttribute(context, model).asString();
             JobRepositoryFactory.getInstance().setJobRepositoryType(repositoryType);
+
+            final DefaultConfigurationService configurationService = new DefaultConfigurationService();
+            target.addService(context.getCapabilityServiceName(Capabilities.BATCH_CONFIGURATION_CAPABILITY.getName(), BatchConfiguration.class), configurationService)
+                    .addDependency(BatchServiceNames.BATCH_JOB_EXECUTOR_NAME, JobExecutor.class, configurationService.getJobExecutorInjector())
+                    // Only start this service if there are deployments present, allow it to be stopped as deployments
+                    // are removed.
+                    .setInitialMode(ServiceController.Mode.ON_DEMAND)
+                    .install();
+
         }
     }
 }

@@ -22,6 +22,7 @@
 
 package org.jboss.as.test.integration.sar.servicembean;
 
+import javax.management.MBeanPermission;
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 import javax.management.remote.JMXConnector;
@@ -34,6 +35,7 @@ import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.arquillian.api.ContainerResource;
 import org.jboss.as.arquillian.container.ManagementClient;
+import org.jboss.as.test.integration.common.DefaultConfiguration;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.system.ServiceMBean;
@@ -41,6 +43,9 @@ import org.jboss.system.ServiceMBeanSupport;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.wildfly.naming.java.permission.JndiPermission;
+
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
 /**
  * Test MBeans which implement {@link ServiceMBean} and extend {@link ServiceMBeanSupport}.
@@ -64,6 +69,12 @@ public class ServiceMBeanSupportTestCase {
         final JavaArchive sar = ShrinkWrap.create(JavaArchive.class, "service-mbean-support-test.sar");
         sar.addClasses(TestServiceMBean.class, TestService.class);
         sar.addAsManifestResource(ServiceMBeanSupportTestCase.class.getPackage(), "jboss-service.xml", "jboss-service.xml");
+        sar.addAsManifestResource(createPermissionsXmlAsset(
+                new JndiPermission("global/env/foo/legacy", "bind,unbind"),
+                new MBeanPermission(TestResultService.class.getPackage().getName() + ".*", "*")),
+                "permissions.xml");
+
+
         return sar;
     }
 
@@ -84,7 +95,7 @@ public class ServiceMBeanSupportTestCase {
     @Test
     public void testSarWithServiceMBeanSupport() throws Exception {
         // get mbean server
-        final JMXConnector connector = JMXConnectorFactory.connect(managementClient.getRemoteJMXURL());
+        final JMXConnector connector = JMXConnectorFactory.connect(managementClient.getRemoteJMXURL(), DefaultConfiguration.credentials());
         final MBeanServerConnection mBeanServerConnection = connector.getMBeanServerConnection();
         try {
             // deploy the unmanaged sar
@@ -110,5 +121,4 @@ public class ServiceMBeanSupportTestCase {
             Assert.assertTrue("Unexpected result for " + attribute + ": " + result, result);
         }
     }
-
 }

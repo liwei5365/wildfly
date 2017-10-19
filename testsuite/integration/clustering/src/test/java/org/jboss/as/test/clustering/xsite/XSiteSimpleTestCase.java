@@ -27,6 +27,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 
 import javax.servlet.http.HttpServletResponse;
 
@@ -45,8 +47,11 @@ import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
+import org.jgroups.util.StackType;
+import org.jgroups.util.Util;
 import org.junit.Assert;
-import org.junit.Ignore;
+import org.junit.Assume;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -106,6 +111,17 @@ public class XSiteSimpleTestCase extends ExtendedClusterAbstractTestCase {
         return war;
     }
 
+    @BeforeClass
+    public static void beforeClass() {
+        AccessController.doPrivileged(new PrivilegedAction<Void>() {
+            @Override
+            public Void run() {
+                Assume.assumeFalse("Disable on Windows+IPv6 until CI environment is fixed", Util.checkForWindows() && (Util.getIpStackType() == StackType.IPv6));
+                return null;
+            }
+        });
+    }
+
     /**
      * Tests that puts get relayed to their backup sites
      *
@@ -115,13 +131,11 @@ public class XSiteSimpleTestCase extends ExtendedClusterAbstractTestCase {
      *   arrives at SFO-0 on site SFO
      */
     @Test
-    @Ignore("https://issues.jboss.org/browse/WFLY-5239")
     public void testPutRelayedToBackups(
             @ArquillianResource(CacheAccessServlet.class) @OperateOnDeployment(DEPLOYMENT_1) URL baseURL1,
             @ArquillianResource(CacheAccessServlet.class) @OperateOnDeployment(DEPLOYMENT_2) URL baseURL2,
             @ArquillianResource(CacheAccessServlet.class) @OperateOnDeployment(DEPLOYMENT_3) URL baseURL3,
             @ArquillianResource(CacheAccessServlet.class) @OperateOnDeployment(DEPLOYMENT_4) URL baseURL4)
-
             throws IllegalStateException, IOException, URISyntaxException {
 
         String value = "100";
@@ -132,38 +146,38 @@ public class XSiteSimpleTestCase extends ExtendedClusterAbstractTestCase {
 
         try (CloseableHttpClient client = TestHttpClientUtils.promiscuousCookieHttpClient()) {
             // put a value to LON-0
-            System.out.println("Executing HTTP request: " + url1);
+            //System.out.println("Executing HTTP request: " + url1);
             HttpResponse response = client.execute(new HttpGet(url1));
             Assert.assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
             response.getEntity().getContent().close();
-            System.out.println("Executed HTTP request");
+            //System.out.println("Executed HTTP request");
 
             // Lets wait for the session to replicate
             waitForReplication(GRACE_TIME_TO_REPLICATE);
 
             // do a get on LON-1
-            System.out.println("Executing HTTP request: " + url2);
+            //System.out.println("Executing HTTP request: " + url2);
             response = client.execute(new HttpGet(url2));
             Assert.assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
             Assert.assertEquals(value, response.getFirstHeader("value").getValue());
             response.getEntity().getContent().close();
-            System.out.println("Executed HTTP request");
+            //System.out.println("Executed HTTP request");
 
             // do a get on NYC-0
-            System.out.println("Executing HTTP request: " + url3);
+            //System.out.println("Executing HTTP request: " + url3);
             response = client.execute(new HttpGet(url3));
             Assert.assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
             Assert.assertEquals(value, response.getFirstHeader("value").getValue());
             response.getEntity().getContent().close();
-            System.out.println("Executed HTTP request");
+            //System.out.println("Executed HTTP request");
 
             // do a get on SFO-0
-            System.out.println("Executing HTTP request: " + url4);
+            //System.out.println("Executing HTTP request: " + url4);
             response = client.execute(new HttpGet(url4));
             Assert.assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
             Assert.assertEquals(value, response.getFirstHeader("value").getValue());
             response.getEntity().getContent().close();
-            System.out.println("Executed HTTP request");
+            //System.out.println("Executed HTTP request");
         }
     }
 
@@ -187,21 +201,21 @@ public class XSiteSimpleTestCase extends ExtendedClusterAbstractTestCase {
 
         try (CloseableHttpClient client = TestHttpClientUtils.promiscuousCookieHttpClient()) {
             // put a value to NYC-0
-            System.out.println("Executing HTTP request: " + url3);
+            //System.out.println("Executing HTTP request: " + url3);
             HttpResponse response = client.execute(new HttpGet(url3));
             Assert.assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
             response.getEntity().getContent().close();
-            System.out.println("Executed HTTP request");
+            //System.out.println("Executed HTTP request");
 
             // Lets wait for the session to replicate
             waitForReplication(GRACE_TIME_TO_REPLICATE);
 
             // do a get on LON-1 - this should fail
-            System.out.println("Executing HTTP request: " + url1);
+            //System.out.println("Executing HTTP request: " + url1);
             response = client.execute(new HttpGet(url1));
             Assert.assertEquals(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, response.getStatusLine().getStatusCode());
             response.getEntity().getContent().close();
-            System.out.println("Executed HTTP request");
+            //System.out.println("Executed HTTP request");
         }
     }
 }

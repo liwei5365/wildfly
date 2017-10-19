@@ -21,11 +21,13 @@
  */
 package org.jboss.as.test.integration.ejb.security;
 
-import java.util.Map;
-import java.util.logging.Logger;
+import static org.junit.Assert.fail;
 
+import java.util.Map;
+import java.util.concurrent.Callable;
+
+import org.jboss.logging.Logger;
 import javax.ejb.EJB;
-import javax.security.auth.login.LoginContext;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
@@ -39,12 +41,9 @@ import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
-
-import static org.junit.Assert.fail;
 
 /**
  * EJB 3.1 Section 17.2.5 - This test case is to test the programmatic access to the callers's security context for the various
@@ -91,16 +90,14 @@ public class LifecycleTestCase  {
     @Test
     public void testStatefulBean() throws Exception {
         StringBuilder failureMessages = new StringBuilder();
-        LoginContext lc = Util.getCLMLoginContext("user1", "password1");
-        lc.login();
-        try {
+        final Callable<Void> callable = () -> {
             Map<String, String> result = entryBean.testStatefulBean();
             verifyResult(result, BaseBean.LIFECYCLE_CALLBACK, USER1, UNSUPPORTED_OPERATION, TRUE, ILLEGAL_STATE, failureMessages);
             verifyResult(result, BaseBean.BUSINESS, USER1, UNSUPPORTED_OPERATION, TRUE, ILLEGAL_STATE, failureMessages);
             verifyResult(result, BaseBean.AFTER_BEGIN, USER1, UNSUPPORTED_OPERATION, TRUE, ILLEGAL_STATE, failureMessages);
-        } finally {
-            lc.logout();
-        }
+            return null;
+        };
+        Util.switchIdentity("user1", "password1", callable);
 
         if (failureMessages.length() > 0) {
             fail(failureMessages.toString());
@@ -110,15 +107,13 @@ public class LifecycleTestCase  {
     @Test
     public void testStatefulBeanDependencyInjection() throws Exception {
         StringBuilder failureMessages = new StringBuilder();
-        LoginContext lc = Util.getCLMLoginContext("user1", "password1");
-        lc.login();
-        try {
+        final Callable<Void> callable = () -> {
             Map<String, String> result = entryBean.testStatefulBean();
             verifyResult(result, BaseBean.DEPENDENCY_INJECTION, ILLEGAL_STATE, UNSUPPORTED_OPERATION, ILLEGAL_STATE, ILLEGAL_STATE,
                     failureMessages);
-        } finally {
-            lc.logout();
-        }
+            return null;
+        };
+        Util.switchIdentity("user1", "password1", callable);
 
         if (failureMessages.length() > 0) {
             fail(failureMessages.toString());
@@ -128,17 +123,16 @@ public class LifecycleTestCase  {
     @Test
     public void testStatelessBean() throws Exception {
         StringBuilder failureMessages = new StringBuilder();
-        LoginContext lc = Util.getCLMLoginContext("user1", "password1");
-        lc.login();
-        try {
+        final Callable<Void> callable = () -> {
             Map<String, String> result = entryBean.testStatlessBean();
             for (String current : result.keySet()) {
-                log.info(current + " = " + result.get(current));
+                log.trace(current + " = " + result.get(current));
             }
             verifyResult(result, BaseBean.BUSINESS, USER1, UNSUPPORTED_OPERATION, TRUE, ILLEGAL_STATE, failureMessages);
-        } finally {
-            lc.logout();
-        }
+            return null;
+        };
+        Util.switchIdentity("user1", "password1", callable);
+
 
         if (failureMessages.length() > 0) {
             fail(failureMessages.toString());
@@ -148,40 +142,16 @@ public class LifecycleTestCase  {
     @Test
     public void testStatelessBeanDependencyInjection() throws Exception {
         StringBuilder failureMessages = new StringBuilder();
-        LoginContext lc = Util.getCLMLoginContext("user1", "password1");
-        lc.login();
-        try {
+        final Callable<Void> callable = () -> {
             Map<String, String> result = entryBean.testStatlessBean();
             for (String current : result.keySet()) {
-                log.info(current + " = " + result.get(current));
+                log.trace(current + " = " + result.get(current));
             }
             verifyResult(result, BaseBean.DEPENDENCY_INJECTION, ILLEGAL_STATE, UNSUPPORTED_OPERATION, ILLEGAL_STATE, ILLEGAL_STATE,
                     failureMessages);
-        } finally {
-            lc.logout();
-        }
-
-        if (failureMessages.length() > 0) {
-            fail(failureMessages.toString());
-        }
-    }
-
-    @Test
-    @Ignore("Not compatible with pooling")
-    public void testStatelessBeanLifecyleCallback() throws Exception {
-        StringBuilder failureMessages = new StringBuilder();
-        LoginContext lc = Util.getCLMLoginContext("user1", "password1");
-        lc.login();
-        try {
-            Map<String, String> result = entryBean.testStatlessBean();
-            for (String current : result.keySet()) {
-                log.info(current + " = " + result.get(current));
-            }
-            verifyResult(result, BaseBean.LIFECYCLE_CALLBACK, ILLEGAL_STATE, UNSUPPORTED_OPERATION, ILLEGAL_STATE, ILLEGAL_STATE,
-                    failureMessages);
-        } finally {
-            lc.logout();
-        }
+            return null;
+        };
+        Util.switchIdentity("user1", "password1", callable);
 
         if (failureMessages.length() > 0) {
             fail(failureMessages.toString());

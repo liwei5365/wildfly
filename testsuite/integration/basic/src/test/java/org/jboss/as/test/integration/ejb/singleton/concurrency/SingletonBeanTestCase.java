@@ -34,8 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
-
+import org.jboss.logging.Logger;
 import javax.ejb.ConcurrentAccessTimeoutException;
 import javax.ejb.EJB;
 
@@ -75,7 +74,6 @@ public class SingletonBeanTestCase {
         jar.addClass(ReadOnlySingletonBeanDescriptorWithExpression.class);
         jar.addAsManifestResource(SingletonBeanTestCase.class.getPackage(), "ejb-jar.xml", "ejb-jar.xml");
         jar.addAsManifestResource(SingletonBeanTestCase.class.getPackage(), "jboss.properties", "jboss.properties");
-        log.info(jar.toString(true));
         return jar;
     }
 
@@ -130,7 +128,7 @@ public class SingletonBeanTestCase {
 
     @EJB(mappedName = "java:global/ejb3-singleton-bean-example/LongWritesSingletonBean!org.jboss.as.test.integration.ejb.singleton.concurrency.LongWritesSingletonBean")
     private LongWritesSingletonBean longWritesSingletonBean;
-    
+
     @EJB(mappedName = "java:global/ejb3-singleton-bean-example/ReadOnlySingletonBeanDescriptor!org.jboss.as.test.integration.ejb.singleton.concurrency.ReadOnlySingletonBeanDescriptor")
     private ReadOnlySingletonBeanDescriptor readOnlySingletonBeanDescriptor;
 
@@ -157,7 +155,7 @@ public class SingletonBeanTestCase {
     public void testReadOnlySingletonDescriptorWithExpression() throws Exception {
         testReadOnlySingleton(readOnlySingletonBeanDescriptorWithExpression);
     }
-    
+
     public void testReadOnlySingleton(ReadOnlySingleton readOnlySingleton) throws Exception {
         final int NUM_THREADS = 10;
         ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
@@ -171,7 +169,7 @@ public class SingletonBeanTestCase {
             Assert.assertEquals("Unexpected value from singleton bean", String.valueOf(i), result);
         }
     }
-    
+
     /**
      * Tests that invocation on a singleton bean method with write lock results in ConcurrentAccessTimeoutException
      * for subsequent invocations, if the previous invocation(s) hasn't yet completed.
@@ -232,7 +230,7 @@ public class SingletonBeanTestCase {
 
         @Override
         public String call() throws Exception {
-            log.info("Bean: " + bean.toString());
+            log.trace("Bean: " + bean.toString());
             return bean.twoSecondEcho(String.valueOf(this.num));
         }
     }

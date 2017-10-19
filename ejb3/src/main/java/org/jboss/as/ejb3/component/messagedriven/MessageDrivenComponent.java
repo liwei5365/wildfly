@@ -25,6 +25,7 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import javax.ejb.TransactionAttributeType;
 import javax.resource.ResourceException;
 import javax.resource.spi.ActivationSpec;
 import javax.resource.spi.endpoint.MessageEndpointFactory;
@@ -68,10 +69,12 @@ public class MessageDrivenComponent extends EJBComponent implements PooledCompon
     private final ActivationSpec activationSpec;
     private final MessageEndpointFactory endpointFactory;
     private final ClassLoader classLoader;
-    private volatile boolean deliveryActive;
+    private boolean started;
+    private boolean deliveryActive;
     private final ServiceName deliveryControllerName;
     private Endpoint endpoint;
     private String activationName;
+    private volatile boolean suspended = false;
 
     /**
      * Server activity that stops delivery before suspend starts.
@@ -85,20 +88,26 @@ public class MessageDrivenComponent extends EJBComponent implements PooledCompon
     private final ServerActivity serverActivity = new ServerActivity() {
         @Override
         public void preSuspend(ServerActivityCallback listener) {
-            if(deliveryActive) {
-                deactivate();
+            synchronized (MessageDrivenComponent.this) {
+                if (deliveryActive) {
+                    deactivate();
+                }
             }
             listener.done();
         }
 
         public void suspended(ServerActivityCallback listener) {
+            suspended = true;
             listener.done();
         }
 
         @Override
         public void resume() {
-            if(deliveryActive) {
-                activate();
+            synchronized (MessageDrivenComponent.this) {
+                suspended = false;
+                if (deliveryActive) {
+                    activate();
+                }
             }
         }
     };
@@ -109,7 +118,7 @@ public class MessageDrivenComponent extends EJBComponent implements PooledCompon
      * @param ejbComponentCreateService the component configuration
      * @param deliveryActive true if the component must start delivering messages as soon as it is started
      */
-    protected MessageDrivenComponent(final MessageDrivenComponentCreateService ejbComponentCreateService, final Class<?> messageListenerInterface, final ActivationSpec activationSpec, final boolean deliveryActive, final ServiceName deliveryControllerName) {
+    protected MessageDrivenComponent(final MessageDrivenComponentCreateService ejbComponentCreateService, final Class<?> messageListenerInterface, final ActivationSpec activationSpec, final boolean deliveryActive, final ServiceName deliveryControllerName, final String activeResourceAdapterName) {
         super(ejbComponentCreateService);
 
         StatelessObjectFactory<MessageDrivenComponentInstance> factory = new StatelessObjectFactory<MessageDrivenComponentInstance>() {
@@ -136,6 +145,7 @@ public class MessageDrivenComponent extends EJBComponent implements PooledCompon
         this.classLoader = ejbComponentCreateService.getModuleClassLoader();
         this.suspendController = ejbComponentCreateService.getSuspendControllerInjectedValue().getValue();
         this.activationSpec = activationSpec;
+        this.activationName = activeResourceAdapterName + messageListenerInterface.getName();
         final ClassLoader componentClassLoader = doPrivileged(new GetClassLoaderAction(ejbComponentCreateService.getComponentClass()));
         final MessageEndpointService<?> service = new MessageEndpointService<Object>() {
             @Override
@@ -153,7 +163,17 @@ public class MessageDrivenComponent extends EJBComponent implements PooledCompon
                 if(isBeanManagedTransaction())
                     return false;
                 // an MDB doesn't expose a real view
-                return getTransactionAttributeType(MESSAGE_ENDPOINT, method) == REQUIRED;
+                TransactionAttributeType transactionAttributeType = getTransactionAttributeType(MESSAGE_ENDPOINT, method);
+                switch (transactionAttributeType) {
+                    case REQUIRED:
+                        return true;
+                    case NOT_SUPPORTED:
+                        return false;
+                    default:
+                        // WFLY-5074 - treat any other unspecified tx attribute type as NOT_SUPPORTED
+                        ROOT_LOGGER.invalidTransactionTypeForMDB(transactionAttributeType, method.getName(), getComponentName());
+                        return false;
+                }
             }
 
             @Override
@@ -179,6 +199,7 @@ public class MessageDrivenComponent extends EJBComponent implements PooledCompon
             }
         };
         this.endpointFactory = new JBossMessageEndpointFactory(componentClassLoader, service, (Class<Object>) getComponentClass(), messageListenerInterface);
+        this.started = false;
         this.deliveryActive = deliveryActive;
         this.deliveryControllerName = deliveryControllerName;
     }
@@ -210,21 +231,29 @@ public class MessageDrivenComponent extends EJBComponent implements PooledCompon
 
         super.start();
 
-        if (deliveryActive) {
-            activate();
+        suspendController.registerActivity(serverActivity);
+
+        synchronized (this) {
+            this.started = true;
+            if (this.deliveryActive && !suspended) {
+                this.activate();
+            }
         }
 
         if (this.pool != null) {
             this.pool.start();
         }
-        suspendController.registerActivity(serverActivity);
 
     }
 
     @Override
     public void done() {
-
-        deactivate();
+        synchronized (this) {
+            if (this.deliveryActive) {
+                this.deactivate();
+            }
+            this.started = false;
+        }
 
         if (this.pool != null) {
             this.pool.stop();
@@ -260,22 +289,30 @@ public class MessageDrivenComponent extends EJBComponent implements PooledCompon
     }
 
     public void startDelivery() {
-        if (!this.deliveryActive) {
-            this.deliveryActive = true;
-            activate();
-            ROOT_LOGGER.mdbDeliveryStarted(getApplicationName(), getComponentName());
+        synchronized (this) {
+            if (!this.deliveryActive) {
+                this.deliveryActive = true;
+                if (this.started) {
+                    this.activate();
+                    ROOT_LOGGER.mdbDeliveryStarted(getApplicationName(), getComponentName());
+                }
+            }
         }
     }
 
     public void stopDelivery() {
-        if (this.deliveryActive) {
-            this.deactivate();
-            this.deliveryActive = false;
-            ROOT_LOGGER.mdbDeliveryStopped(getApplicationName(), getComponentName());
+        synchronized (this) {
+            if (this.deliveryActive) {
+                if (this.started) {
+                    this.deactivate();
+                    ROOT_LOGGER.mdbDeliveryStopped(getApplicationName(), getComponentName());
+                }
+                this.deliveryActive = false;
+            }
         }
     }
 
-    public boolean isDeliveryActive() {
+    public synchronized boolean isDeliveryActive() {
         return deliveryActive;
     }
 

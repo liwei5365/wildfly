@@ -24,6 +24,7 @@ package org.jboss.as.test.integration.security.vault;
 
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SYSTEM_PROPERTY;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.VALUE;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 import static org.junit.Assert.assertEquals;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -42,14 +43,15 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.PropertyPermission;
+
 /**
  * Test whether vault can be used for system property.
- * 
+ *
  * @author olukas
- * 
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ BasicVaultServerSetupTask.class, VaultSystemPropertiesTestCase.SystemPropertySetup.class })
+@ServerSetup({BasicVaultServerSetupTask.class, VaultSystemPropertiesTestCase.SystemPropertySetup.class})
 public class VaultSystemPropertiesTestCase {
 
     public static final String TESTING_SYSTEM_PROPERTY = "vault.testing.property";
@@ -61,7 +63,7 @@ public class VaultSystemPropertiesTestCase {
         assertEquals("Vaulted system property wasn't read successfully", BasicVaultServerSetupTask.VAULT_ATTRIBUTE,
                 System.getProperty(TESTING_SYSTEM_PROPERTY));
     }
-    
+
     static class SystemPropertySetup implements ServerSetupTask {
 
         static final PathAddress SYSTEM_PROPERTIES_PATH = PathAddress.pathAddress().append(SYSTEM_PROPERTY,
@@ -69,7 +71,7 @@ public class VaultSystemPropertiesTestCase {
 
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
-            LOGGER.info("Add system property: " + TESTING_SYSTEM_PROPERTY);
+            LOGGER.trace("Add system property: " + TESTING_SYSTEM_PROPERTY);
             ModelNode op = Util.createAddOperation(SYSTEM_PROPERTIES_PATH);
             op.get(VALUE).set(BasicVaultServerSetupTask.VAULTED_PROPERTY);
             Utils.applyUpdate(op, managementClient.getControllerClient());
@@ -77,7 +79,7 @@ public class VaultSystemPropertiesTestCase {
 
         @Override
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
-            LOGGER.info("Remove system property: " + TESTING_SYSTEM_PROPERTY);
+            LOGGER.trace("Remove system property: " + TESTING_SYSTEM_PROPERTY);
             ModelNode op = Util.createRemoveOperation(SYSTEM_PROPERTIES_PATH);
             Utils.applyUpdate(op, managementClient.getControllerClient());
         }
@@ -88,6 +90,7 @@ public class VaultSystemPropertiesTestCase {
     public static WebArchive deployment() {
         final WebArchive war = ShrinkWrap.create(WebArchive.class, "vault.war");
         war.addClass(BasicVaultServerSetupTask.class);
+        war.addAsManifestResource(createPermissionsXmlAsset(new PropertyPermission("vault.testing.property", "read")), "permissions.xml");
         return war;
     }
 

@@ -22,69 +22,71 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
+import static org.jboss.as.clustering.infinispan.subsystem.JGroupsTransportResourceDefinition.Attribute.CHANNEL;
 import static org.jboss.as.clustering.infinispan.subsystem.JGroupsTransportResourceDefinition.Attribute.LOCK_TIMEOUT;
 
 import org.infinispan.configuration.global.GlobalConfigurationBuilder;
 import org.infinispan.configuration.global.TransportConfiguration;
 import org.infinispan.configuration.global.TransportConfigurationBuilder;
-import org.jboss.as.clustering.controller.ResourceServiceBuilder;
-import org.jboss.as.clustering.infinispan.ChannelTransport;
+import org.jboss.as.clustering.dmr.ModelNodes;
+import org.jboss.as.clustering.infinispan.ChannelFactoryTransport;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.msc.value.InjectedValue;
-import org.jgroups.Channel;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
 import org.wildfly.clustering.jgroups.spi.ProtocolStackConfiguration;
-import org.wildfly.clustering.jgroups.spi.service.ChannelServiceName;
-import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
-public class JGroupsTransportBuilder extends CacheContainerComponentBuilder<TransportConfiguration> implements ResourceServiceBuilder<TransportConfiguration> {
+public class JGroupsTransportBuilder extends GlobalComponentBuilder<TransportConfiguration> {
 
-    private final InjectedValue<Channel> channel = new InjectedValue<>();
-    private final InjectedValue<ChannelFactory> factory = new InjectedValue<>();
-    private final String containerName;
-
+    private volatile ValueDependency<ChannelFactory> factory;
+    private volatile ValueDependency<String> cluster;
+    private volatile String channel;
     private volatile long lockTimeout;
 
-    public JGroupsTransportBuilder(String containerName) {
-        super(CacheContainerComponent.TRANSPORT, containerName);
-        this.containerName = containerName;
+    public JGroupsTransportBuilder(PathAddress containerAddress) {
+        super(CacheContainerComponent.TRANSPORT, containerAddress);
     }
 
     @Override
     public ServiceBuilder<TransportConfiguration> build(ServiceTarget target) {
-        return super.build(target)
-                .addDependency(ChannelServiceName.CHANNEL.getServiceName(this.containerName), Channel.class, this.channel)
-                .addDependency(ChannelServiceName.FACTORY.getServiceName(this.containerName), ChannelFactory.class, this.factory)
-        ;
+        return this.factory.register(this.cluster.register(super.build(target)));
     }
 
     @Override
-    public Builder<TransportConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.lockTimeout = LOCK_TIMEOUT.getDefinition().resolveModelAttribute(context, model).asLong();
+    public JGroupsTransportBuilder configure(OperationContext context, ModelNode model) throws OperationFailedException {
+        this.lockTimeout = LOCK_TIMEOUT.resolveModelAttribute(context, model).asLong();
+        this.channel = ModelNodes.optionalString(CHANNEL.resolveModelAttribute(context, model)).orElse(null);
+        this.factory = new InjectedValueDependency<>(JGroupsRequirement.CHANNEL_FACTORY.getServiceName(context, this.channel), ChannelFactory.class);
+        this.cluster = new InjectedValueDependency<>(JGroupsRequirement.CHANNEL_CLUSTER.getServiceName(context, this.channel), String.class);
         return this;
     }
 
     @Override
-    public TransportConfiguration getValue() throws IllegalStateException, IllegalArgumentException {
-        Channel channel = this.channel.getValue();
+    public TransportConfiguration getValue() {
         ChannelFactory factory = this.factory.getValue();
         ProtocolStackConfiguration stack = factory.getProtocolStackConfiguration();
         org.wildfly.clustering.jgroups.spi.TransportConfiguration.Topology topology = stack.getTransport().getTopology();
         TransportConfigurationBuilder builder = new GlobalConfigurationBuilder().transport()
-                .clusterName(this.containerName)
+                .clusterName(this.cluster.getValue())
                 .distributedSyncTimeout(this.lockTimeout)
-                .transport(new ChannelTransport(channel, factory))
+                .transport(new ChannelFactoryTransport(factory))
         ;
         if (topology != null) {
             builder.siteId(topology.getSite()).rackId(topology.getRack()).machineId(topology.getMachine());
         }
         return builder.create();
+    }
+
+    String getChannel() {
+        return this.channel;
     }
 }

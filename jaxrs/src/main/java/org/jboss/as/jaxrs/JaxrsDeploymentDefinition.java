@@ -38,7 +38,6 @@ import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.OperationStepHandler;
 import org.jboss.as.controller.PathAddress;
-import org.jboss.as.controller.ReloadRequiredRemoveStepHandler;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
 import org.jboss.as.controller.SimpleListAttributeDefinition;
 import org.jboss.as.controller.SimpleOperationDefinition;
@@ -63,8 +62,7 @@ import org.wildfly.extension.undertow.deployment.UndertowDeploymentService;
  */
 public class JaxrsDeploymentDefinition extends SimpleResourceDefinition {
 
-    public static final JaxrsDeploymentDefinition DEPLOYMENT_INSTANCE = new JaxrsDeploymentDefinition(true);
-    public static final JaxrsDeploymentDefinition SUBSYSTEM_INSTANCE = new JaxrsDeploymentDefinition(false);
+    public static final JaxrsDeploymentDefinition INSTANCE = new JaxrsDeploymentDefinition();
 
     public static final String SHOW_RESOURCES = "show-resources";
     public static final AttributeDefinition CLASSNAME
@@ -78,50 +76,52 @@ public class JaxrsDeploymentDefinition extends SimpleResourceDefinition {
     public static final ObjectTypeAttributeDefinition JAXRS_RESOURCE
             = new ObjectTypeAttributeDefinition.Builder("jaxrs-resource", CLASSNAME, PATH, METHODS).setStorageRuntime().build();
 
-    private boolean showResources;
-    private JaxrsDeploymentDefinition(boolean showResources) {
-         super(JaxrsExtension.SUBSYSTEM_PATH, JaxrsExtension.getResolver(), JaxrsSubsystemAdd.INSTANCE,
-                ReloadRequiredRemoveStepHandler.INSTANCE);
-         this.showResources = showResources;
+    private JaxrsDeploymentDefinition() {
+         super(JaxrsExtension.SUBSYSTEM_PATH, JaxrsExtension.getResolver());
     }
 
     @Override
     public void registerOperations(ManagementResourceRegistration resourceRegistration) {
         super.registerOperations(resourceRegistration);
-        if(showResources) {
-            resourceRegistration.registerOperationHandler(ShowJaxrsResourcesHandler.DEFINITION, new ShowJaxrsResourcesHandler());
-        }
+        resourceRegistration.registerOperationHandler(ShowJaxrsResourcesHandler.DEFINITION, new ShowJaxrsResourcesHandler());
     }
 
-    static class ShowJaxrsResourcesHandler implements OperationStepHandler {
+    private static class ShowJaxrsResourcesHandler implements OperationStepHandler {
         public static final SimpleOperationDefinition DEFINITION = new SimpleOperationDefinitionBuilder(SHOW_RESOURCES,
                 JaxrsExtension.getResolver("deployment"))
                 .setReadOnly()
                 .setRuntimeOnly()
                 .setReplyType(ModelType.LIST)
+                .setDeprecated(JaxrsExtension.MODEL_VERSION_2_0_0)
                 .setReplyParameters(JAXRS_RESOURCE).build();
 
 
         void handle(ModelNode response, String contextRootPath, Collection<String> servletMappings, String mapping, List<ResourceInvoker> resources) {
             for (ResourceInvoker resourceInvoker : resources) {
-                ResourceMethodInvoker resource = (ResourceMethodInvoker) resourceInvoker;
-                final ModelNode node = new ModelNode();
-                node.get(CLASSNAME.getName()).set(resource.getResourceClass().getCanonicalName());
-                node.get(PATH.getName()).set(mapping);
-                for (String servletMapping : servletMappings) {
-                    String method = formatMethod(resource, servletMapping, mapping, contextRootPath);
-                    for (final String httpMethod : resource.getHttpMethods()) {
-                        node.get(METHODS.getName()).add(String.format(method, httpMethod));
+                if (ResourceMethodInvoker.class.isAssignableFrom(resourceInvoker.getClass())) {
+                    ResourceMethodInvoker resource = (ResourceMethodInvoker) resourceInvoker;
+                    final ModelNode node = new ModelNode();
+                    node.get(CLASSNAME.getName()).set(resource.getResourceClass().getCanonicalName());
+                    node.get(PATH.getName()).set(mapping);
+                    for (String servletMapping : servletMappings) {
+                        String method = formatMethod(resource, servletMapping, mapping, contextRootPath);
+                        for (final String httpMethod : resource.getHttpMethods()) {
+                            node.get(METHODS.getName()).add(String.format(method, httpMethod));
+                        }
                     }
+                    response.add(node);
                 }
-                response.add(node);
             }
         }
 
         private String formatMethod(ResourceMethodInvoker resource, String servletMapping, String path, String contextRootPath) {
             StringBuilder builder = new StringBuilder();
             builder.append("%1$s ");
-            builder.append(contextRootPath).append('/').append(servletMapping.replaceAll("\\*", "")).append(path);
+            String servletPath = servletMapping.replaceAll("\\*", "");
+            if(servletPath.charAt(0) == '/') {
+                servletPath = servletPath.substring(1);
+            }
+            builder.append(contextRootPath).append('/').append(servletPath).append(path);
             builder.append(" - ").append(resource.getResourceClass().getCanonicalName()).append('.').append(resource.getMethod().getName()).append('(');
             if (resource.getMethod().getParameterTypes().length > 0) {
                 builder.append("...");

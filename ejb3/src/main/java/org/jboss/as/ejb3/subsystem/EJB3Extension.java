@@ -35,7 +35,6 @@ import org.jboss.as.controller.descriptions.StandardResourceDescriptionResolver;
 import org.jboss.as.controller.parsing.ExtensionParsingContext;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.services.path.PathManager;
-import org.jboss.as.ejb3.subsystem.deployment.EntityBeanResourceDefinition;
 import org.jboss.as.ejb3.subsystem.deployment.MessageDrivenBeanResourceDefinition;
 import org.jboss.as.ejb3.subsystem.deployment.SingletonBeanDeploymentResourceDefinition;
 import org.jboss.as.ejb3.subsystem.deployment.StatefulSessionBeanDeploymentResourceDefinition;
@@ -59,10 +58,11 @@ public class EJB3Extension implements Extension {
     public static final String NAMESPACE_2_0 = EJB3SubsystemNamespace.EJB3_2_0.getUriString();
     public static final String NAMESPACE_3_0 = EJB3SubsystemNamespace.EJB3_3_0.getUriString();
     public static final String NAMESPACE_4_0 = EJB3SubsystemNamespace.EJB3_4_0.getUriString();
+    public static final String NAMESPACE_5_0 = EJB3SubsystemNamespace.EJB3_5_0.getUriString();
 
     static final PathElement SUBSYSTEM_PATH = PathElement.pathElement(ModelDescriptionConstants.SUBSYSTEM, SUBSYSTEM_NAME);
 
-    private static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(4, 0, 0);
+    static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(5, 0, 0);
 
     private static final String RESOURCE_NAME = EJB3Extension.class.getPackage().getName() + ".LocalDescriptions";
 
@@ -89,17 +89,12 @@ public class EJB3Extension implements Extension {
             ResourceDefinition deploymentsDef = new SimpleResourceDefinition(PathElement.pathElement(ModelDescriptionConstants.SUBSYSTEM, SUBSYSTEM_NAME),
                     getResourceDescriptionResolver("deployed"));
             final ManagementResourceRegistration deploymentsRegistration = subsystem.registerDeploymentModel(deploymentsDef);
-            deploymentsRegistration.registerSubModel(EntityBeanResourceDefinition.INSTANCE);
             deploymentsRegistration.registerSubModel(MessageDrivenBeanResourceDefinition.INSTANCE);
             deploymentsRegistration.registerSubModel(SingletonBeanDeploymentResourceDefinition.INSTANCE);
             deploymentsRegistration.registerSubModel(StatelessSessionBeanDeploymentResourceDefinition.INSTANCE);
             deploymentsRegistration.registerSubModel(StatefulSessionBeanDeploymentResourceDefinition.INSTANCE);
         }
 
-        // Transformers
-        if (context.isRegisterTransformers()) {
-            EJB3SubsystemRootResourceDefinition.registerTransformers(subsystem);
-        }
     }
 
     /**
@@ -107,14 +102,15 @@ public class EJB3Extension implements Extension {
      */
     @Override
     public void initializeParsers(ExtensionParsingContext context) {
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_0, EJB3Subsystem10Parser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_1, EJB3Subsystem11Parser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_2, EJB3Subsystem12Parser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_3, EJB3Subsystem13Parser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_4, EJB3Subsystem14Parser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_5, EJB3Subsystem15Parser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_2_0, EJB3Subsystem20Parser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_3_0, EJB3Subsystem30Parser.INSTANCE);
-        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_4_0, EJB3Subsystem40Parser.INSTANCE);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_0, EJB3Subsystem10Parser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_1, EJB3Subsystem11Parser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_2, EJB3Subsystem12Parser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_3, EJB3Subsystem13Parser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_4, EJB3Subsystem14Parser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_1_5, EJB3Subsystem15Parser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_2_0, EJB3Subsystem20Parser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_3_0, EJB3Subsystem30Parser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_4_0, EJB3Subsystem40Parser::new);
+        context.setSubsystemXmlMapping(SUBSYSTEM_NAME, NAMESPACE_5_0, EJB3Subsystem50Parser::new);
     }
 }

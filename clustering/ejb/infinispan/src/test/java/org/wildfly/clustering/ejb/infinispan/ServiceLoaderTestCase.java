@@ -24,30 +24,33 @@ package org.wildfly.clustering.ejb.infinispan;
 
 import java.util.ServiceLoader;
 
+import org.infinispan.persistence.keymappers.TwoWayKey2StringMapper;
 import org.junit.Test;
 import org.wildfly.clustering.ejb.BeanManagerFactoryBuilderFactoryProvider;
 import org.wildfly.clustering.marshalling.Externalizer;
-import org.wildfly.clustering.spi.CacheGroupAliasBuilderProvider;
-import org.wildfly.clustering.spi.DistributedCacheGroupBuilderProvider;
-import org.wildfly.clustering.spi.LocalCacheGroupBuilderProvider;
+import org.wildfly.clustering.spi.CacheAliasBuilderProvider;
+import org.wildfly.clustering.spi.DistributedCacheBuilderProvider;
+import org.wildfly.clustering.spi.LocalCacheBuilderProvider;
 
 /**
  * Validates loading of services.
+ *
  * @author Paul Ferraro
  */
 public class ServiceLoaderTestCase {
+
+    private static <T> void load(Class<T> targetClass) {
+        System.out.println(targetClass.getName() + ":");
+        ServiceLoader.load(targetClass, ServiceLoaderTestCase.class.getClassLoader()).forEach(object -> System.out.println("\t" + object.getClass().getName()));
+    }
 
     @Test
     public void load() {
         load(Externalizer.class);
         load(BeanManagerFactoryBuilderFactoryProvider.class);
-        load(DistributedCacheGroupBuilderProvider.class);
-        load(LocalCacheGroupBuilderProvider.class);
-        load(CacheGroupAliasBuilderProvider.class);
-    }
-
-    private static <T> void load(Class<T> targetClass) {
-        System.out.println(targetClass.getName() + ":");
-        ServiceLoader.load(targetClass, ServiceLoaderTestCase.class.getClassLoader()).forEach(object -> System.out.println("\t" + object.getClass().getName()));
+        load(DistributedCacheBuilderProvider.class);
+        load(LocalCacheBuilderProvider.class);
+        load(CacheAliasBuilderProvider.class);
+        load(TwoWayKey2StringMapper.class);
     }
 }

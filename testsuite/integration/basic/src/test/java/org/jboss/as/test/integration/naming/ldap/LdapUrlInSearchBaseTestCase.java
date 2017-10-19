@@ -21,8 +21,10 @@
  */
 package org.jboss.as.test.integration.naming.ldap;
 
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 import static org.junit.Assert.assertEquals;
 
+import java.net.SocketPermission;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.security.Security;
@@ -76,19 +78,17 @@ public class LdapUrlInSearchBaseTestCase {
     // Public methods --------------------------------------------------------
 
     /**
-     * Creates {@link WebArchive} with the {@link OKServlet}.
+     * Creates {@link WebArchive} with the {@link LdapUrlTestServlet}.
      *
      * @return
      */
     @Deployment
     public static WebArchive deployment() {
-        LOGGER.info("Creating deployment");
         final WebArchive war = ShrinkWrap.create(WebArchive.class, "ldap-test.war");
         war.addClasses(LdapUrlTestServlet.class);
 
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(war.toString(true));
-        }
+        war.addAsManifestResource(createPermissionsXmlAsset(new SocketPermission("*:10389", "connect,resolve")), "permissions.xml");
+
         return war;
     }
 
@@ -126,10 +126,6 @@ public class LdapUrlInSearchBaseTestCase {
     public static void main(String[] args) throws Exception {
         LDAPServerSetupTask ldapSetup = new LDAPServerSetupTask();
         ldapSetup.setup(null, null);
-        /*System.out.println("InitialDirContext used:");
-        System.out.println(LdapUrlTestServlet.runSearch(null, false));
-        System.out.println("InitialLdapContext used:");
-        System.out.println(LdapUrlTestServlet.runSearch(null, true));*/
         ldapSetup.tearDown(null, null);
     }
 

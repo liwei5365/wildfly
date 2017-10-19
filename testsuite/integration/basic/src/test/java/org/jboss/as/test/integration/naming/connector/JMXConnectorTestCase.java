@@ -21,6 +21,7 @@ import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.arquillian.container.ManagementClient;
+import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.After;
@@ -35,9 +36,12 @@ import javax.management.remote.JMXConnectorServerFactory;
 import javax.management.remote.JMXServiceURL;
 import javax.naming.Context;
 import java.lang.management.ManagementFactory;
+import java.net.SocketPermission;
 import java.rmi.registry.LocateRegistry;
 import java.util.Properties;
-import java.util.logging.Logger;
+
+
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
 /**
  * Tests that JMX Connector work properly from container.
@@ -85,7 +89,7 @@ public class JMXConnectorTestCase {
         final JavaArchive archive = ShrinkWrap.create(JavaArchive.class, CB_DEPLOYMENT_NAME);
         archive.addClass(ConnectedBean.class);
         archive.addClass(ConnectedBeanInterface.class);
-        log.info(archive.toString(true));
+        archive.addAsManifestResource(createPermissionsXmlAsset(new SocketPermission("*:*", "connect,resolve")), "permissions.xml");
         return archive;
     }
 
@@ -100,9 +104,9 @@ public class JMXConnectorTestCase {
         try {
             ConnectedBeanInterface connectedBean = (ConnectedBeanInterface) initialContext.lookup(CB_DEPLOYMENT_NAME + "/" + ConnectedBean.class.getSimpleName() + "!" + ConnectedBeanInterface.class.getName());
             int mBeanCountFromJNDI = connectedBean.getMBeanCountFromJNDI(rmiServerJndiName);
-            log.info("MBean server count from jndi: " + mBeanCountFromJNDI);
+            log.trace("MBean server count from jndi: " + mBeanCountFromJNDI);
             int mBeanCountFromConnector = connectedBean.getMBeanCountFromConnector(jmxServiceURL);
-            log.info("MBean server count from connector: " + mBeanCountFromConnector);
+            log.trace("MBean server count from connector: " + mBeanCountFromConnector);
             Assert.assertEquals(mBeanCountFromConnector, mBeanCountFromJNDI);
         } finally {
             initialContext.close();

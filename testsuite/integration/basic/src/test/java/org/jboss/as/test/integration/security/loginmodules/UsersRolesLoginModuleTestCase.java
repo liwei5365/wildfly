@@ -67,7 +67,7 @@ import org.junit.runner.RunWith;
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ UsersRolesLoginModuleTestCase.PropertyFilesSetup.class, UsersRolesLoginModuleTestCase.SecurityDomainsSetup.class })
+@ServerSetup({UsersRolesLoginModuleTestCase.PropertyFilesSetup.class, UsersRolesLoginModuleTestCase.SecurityDomainsSetup.class})
 @RunAsClient
 @Category(CommonCriteria.class)
 public class UsersRolesLoginModuleTestCase {
@@ -178,9 +178,9 @@ public class UsersRolesLoginModuleTestCase {
     /**
      * testExternalFiles
      *
+     * @throws Exception
      * @see #USERS_EXT
      * @see #ROLES_EXT
-     * @throws Exception
      */
     @OperateOnDeployment(DEP1)
     @Test
@@ -322,7 +322,7 @@ public class UsersRolesLoginModuleTestCase {
      * @throws IOException
      * @throws URISyntaxException
      */
-    private void testAccess(URL url, boolean ignoreCase) throws MalformedURLException, ClientProtocolException, IOException,
+    private void testAccess(URL url, boolean ignoreCase) throws IOException,
             URISyntaxException {
         final URL servletUrl = new URL(url.toExternalForm() + SimpleSecuredServlet.SERVLET_PATH.substring(1));
         //successful authentication and authorization
@@ -354,7 +354,7 @@ public class UsersRolesLoginModuleTestCase {
      * @return
      */
     private static WebArchive createWar(final String deployment, Coding coding) {
-        LOGGER.info("Starting deployment " + deployment);
+        LOGGER.trace("Starting deployment " + deployment);
 
         final String users = ANIL + "=" + Utils.hashMD5(ANIL_PWD, coding) + "\n" + MARCUS + "="
                 + Utils.hashMD5(MARCUS_PWD, coding);
@@ -368,9 +368,6 @@ public class UsersRolesLoginModuleTestCase {
                 "<security-domain>" + deployment + "</security-domain>" + //
                 "</jboss-web>"), "jboss-web.xml");
 
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(war.toString(true));
-        }
         return war;
     }
 
@@ -437,7 +434,7 @@ public class UsersRolesLoginModuleTestCase {
             final SecurityDomain sd7b = new SecurityDomain.Builder().name(DEP7b).loginModules(loginModuleBuilder.build())
                     .build();
 
-            return new SecurityDomain[] { sd1, sd2, sd3, sd4, sd5a, sd5b, sd6a, sd6b, sd7a, sd7b };
+            return new SecurityDomain[]{sd1, sd2, sd3, sd4, sd5a, sd5b, sd6a, sd6b, sd7a, sd7b};
         }
     }
 

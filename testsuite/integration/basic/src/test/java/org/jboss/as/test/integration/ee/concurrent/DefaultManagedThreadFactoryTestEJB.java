@@ -22,8 +22,9 @@
 
 package org.jboss.as.test.integration.ee.concurrent;
 
-import org.jboss.logging.Logger;
-
+import java.security.Principal;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Resource;
 import javax.annotation.security.RolesAllowed;
 import javax.ejb.EJBContext;
@@ -32,8 +33,10 @@ import javax.ejb.Stateless;
 import javax.ejb.TransactionManagement;
 import javax.ejb.TransactionManagementType;
 import javax.enterprise.concurrent.ManagedThreadFactory;
-import java.security.Principal;
-import java.util.concurrent.CountDownLatch;
+
+import org.jboss.as.test.shared.TimeoutUtil;
+import org.jboss.logging.Logger;
+import org.junit.Assert;
 
 /**
  * @author Eduardo Martins
@@ -70,7 +73,9 @@ public class DefaultManagedThreadFactoryTestEJB {
             }
         };
         managedThreadFactory.newThread(r).start();
-        latch.await();
+        if (! latch.await(TimeoutUtil.adjust(5000), TimeUnit.MILLISECONDS)) {
+            Assert.fail("Thread not finished correctly");
+        }
     }
 
 }

@@ -70,7 +70,6 @@ public class DeploymentDescriptorTestCase extends AbstractBatchTestCase {
 
     // JDBC deployment names
     private static final String NAMED_JDBC_DEPLOYMENT = "batch-named-jdbc.war";
-    private static final String DEFINED_JDBC_DEPLOYMENT = "batch-defined-jdbc.war";
 
     @Deployment(name = NAMED_IN_MEMORY_DEPLOYMENT)
     public static WebArchive createNamedInMemoryDeployment() {
@@ -93,13 +92,6 @@ public class DeploymentDescriptorTestCase extends AbstractBatchTestCase {
                 .addAsManifestResource(DeploymentDescriptorTestCase.class.getPackage(), "named-jdbc-jboss-all.xml", "jboss-all.xml");
     }
 
-    @Deployment(name = DEFINED_JDBC_DEPLOYMENT)
-    public static WebArchive createDefinedJdbcDeployment() {
-        return createDefaultWar(DEFINED_JDBC_DEPLOYMENT, DeploymentDescriptorTestCase.class.getPackage(), "test-chunk.xml")
-                .addClasses(CountingItemReader.class, CountingItemWriter.class)
-                .addAsManifestResource(DeploymentDescriptorTestCase.class.getPackage(), "defined-jdbc-jboss-all.xml", "jboss-all.xml");
-    }
-
     @OperateOnDeployment(NAMED_IN_MEMORY_DEPLOYMENT)
     @Test
     public void namedInMemoryTest(@ArquillianResource final URL url) throws Exception {
@@ -120,14 +112,6 @@ public class DeploymentDescriptorTestCase extends AbstractBatchTestCase {
     @Test
     public void namedJdbcTest(@ArquillianResource final URL url) throws Exception {
         // Test the default batch defined, ExampleDS, repository is isolated
-        testCompletion(1L, url);
-        testCompletion(2L, url);
-    }
-
-    @OperateOnDeployment(DEFINED_JDBC_DEPLOYMENT)
-    @Test
-    public void definedJdbcTest(@ArquillianResource final URL url) throws Exception {
-        // Test that a newly named
         testCompletion(1L, url);
         testCompletion(2L, url);
     }
@@ -155,7 +139,7 @@ public class DeploymentDescriptorTestCase extends AbstractBatchTestCase {
             ModelNode op = Operations.createAddOperation(address);
             op.get("driver-name").set("h2");
             op.get("jndi-name").set("java:jboss/datasources/batch");
-            op.get("connection-url").set("jdbc:h2:batch-test");
+            op.get("connection-url").set("jdbc:h2:mem:batch-test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
             operationBuilder.addStep(op);
 
             // Add a new JDBC job repository with the new data-source

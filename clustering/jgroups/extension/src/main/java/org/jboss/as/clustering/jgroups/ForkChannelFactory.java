@@ -22,18 +22,15 @@
 package org.jboss.as.clustering.jgroups;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.jboss.as.clustering.jgroups.logging.JGroupsLogger;
-import org.jboss.modules.ModuleLoader;
 import org.jgroups.Channel;
 import org.jgroups.fork.ForkChannel;
-import org.jgroups.stack.Configurator;
+import org.jgroups.protocols.TP;
 import org.jgroups.stack.Protocol;
-import org.jgroups.stack.ProtocolStack;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
 import org.wildfly.clustering.jgroups.spi.ProtocolConfiguration;
 import org.wildfly.clustering.jgroups.spi.ProtocolStackConfiguration;
@@ -47,17 +44,13 @@ import org.wildfly.clustering.jgroups.spi.TransportConfiguration;
 public class ForkChannelFactory implements ChannelFactory {
 
     private final ChannelFactory parentFactory;
-    private final List<ProtocolConfiguration> protocols;
+    private final List<ProtocolConfiguration<? extends Protocol>> protocols;
     private final Channel channel;
 
-    public ForkChannelFactory(Channel channel, ChannelFactory parentFactory, List<ProtocolConfiguration> protocols) {
+    public ForkChannelFactory(Channel channel, ChannelFactory parentFactory, List<ProtocolConfiguration<? extends Protocol>> protocols) {
         this.channel = channel;
         this.parentFactory = parentFactory;
         this.protocols = protocols;
-    }
-
-    public ForkChannelFactory(Channel channel, ChannelFactory parentFactory, ProtocolConfiguration... protocols) {
-        this(channel, parentFactory, Arrays.asList(protocols));
     }
 
     @Override
@@ -65,19 +58,14 @@ public class ForkChannelFactory implements ChannelFactory {
         JGroupsLogger.ROOT_LOGGER.debugf("Creating fork channel %s from channel %s", id, this.channel.getClusterName());
 
         String stackName = this.protocols.isEmpty() ? this.channel.getClusterName() : id;
-        ProtocolStackConfiguration forkStack = new ForkProtocolStackConfiguration(stackName, this.parentFactory.getProtocolStackConfiguration(), this.protocols);
-        List<Protocol> protocols = Configurator.createProtocols(JChannelFactory.createProtocols(forkStack, this.channel.getProtocolStack().getTransport().isMulticastCapable()), new ProtocolStack());
 
-        return new ForkChannel(this.channel, stackName, id, protocols.toArray(new Protocol[protocols.size()]));
+        return new ForkChannel(this.channel, stackName, id, this.protocols.stream().map(pc -> pc.createProtocol(this.parentFactory.getProtocolStackConfiguration())).toArray(Protocol[]::new));
     }
 
     @Override
     public ProtocolStackConfiguration getProtocolStackConfiguration() {
-        List<ProtocolConfiguration> parentProtocols = this.parentFactory.getProtocolStackConfiguration().getProtocols();
-        List<ProtocolConfiguration> protocols = new ArrayList<>(parentProtocols.size() + this.protocols.size());
-        protocols.addAll(parentProtocols);
-        protocols.addAll(this.protocols);
-        return new ForkProtocolStackConfiguration(this.channel.getClusterName(), this.parentFactory.getProtocolStackConfiguration(), protocols);
+        ProtocolStackConfiguration parentStack = this.parentFactory.getProtocolStackConfiguration();
+        return new ForkProtocolStackConfiguration(this.channel.getClusterName(), parentStack, Stream.concat(parentStack.getProtocols().stream(), this.protocols.stream()).collect(Collectors.toList()));
     }
 
     @Override
@@ -87,10 +75,10 @@ public class ForkChannelFactory implements ChannelFactory {
 
     private static class ForkProtocolStackConfiguration implements ProtocolStackConfiguration {
         private final String name;
-        private final List<ProtocolConfiguration> protocols;
+        private final List<ProtocolConfiguration<? extends Protocol>> protocols;
         private final ProtocolStackConfiguration parentStack;
 
-        ForkProtocolStackConfiguration(String name, ProtocolStackConfiguration parentStack, List<ProtocolConfiguration> protocols) {
+        ForkProtocolStackConfiguration(String name, ProtocolStackConfiguration parentStack, List<ProtocolConfiguration<? extends Protocol>> protocols) {
             this.name = name;
             this.protocols = protocols;
             this.parentStack = parentStack;
@@ -102,23 +90,18 @@ public class ForkChannelFactory implements ChannelFactory {
         }
 
         @Override
-        public List<ProtocolConfiguration> getProtocols() {
+        public boolean isStatisticsEnabled() {
+            return this.parentStack.isStatisticsEnabled();
+        }
+
+        @Override
+        public List<ProtocolConfiguration<? extends Protocol>> getProtocols() {
             return this.protocols;
         }
 
         @Override
-        public Map<String, String> getDefaultProperties(String protocol) {
-            return this.parentStack.getDefaultProperties(protocol);
-        }
-
-        @Override
-        public TransportConfiguration getTransport() {
+        public TransportConfiguration<? extends TP> getTransport() {
             return this.parentStack.getTransport();
-        }
-
-        @Override
-        public ModuleLoader getModuleLoader() {
-            return this.parentStack.getModuleLoader();
         }
 
         @Override

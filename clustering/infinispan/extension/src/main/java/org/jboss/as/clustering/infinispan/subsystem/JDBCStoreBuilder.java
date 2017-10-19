@@ -27,47 +27,50 @@ import static org.jboss.as.clustering.infinispan.subsystem.JDBCStoreResourceDefi
 
 import javax.sql.DataSource;
 
-import org.infinispan.configuration.cache.ConfigurationBuilder;
 import org.infinispan.configuration.cache.PersistenceConfiguration;
 import org.infinispan.persistence.jdbc.DatabaseType;
 import org.infinispan.persistence.jdbc.configuration.AbstractJdbcStoreConfiguration;
 import org.infinispan.persistence.jdbc.configuration.AbstractJdbcStoreConfigurationBuilder;
-import org.jboss.as.clustering.controller.CapabilityDependency;
-import org.jboss.as.clustering.controller.RequiredCapability;
+import org.jboss.as.clustering.controller.CommonUnaryRequirement;
 import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.clustering.infinispan.DataSourceConnectionFactoryConfigurationBuilder;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
+import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.InjectedValueDependency;
 import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
-public abstract class JDBCStoreBuilder<C extends AbstractJdbcStoreConfiguration, B extends AbstractJdbcStoreConfigurationBuilder<C, B>> extends StoreBuilder {
+public abstract class JDBCStoreBuilder<C extends AbstractJdbcStoreConfiguration, B extends AbstractJdbcStoreConfigurationBuilder<C, B>> extends StoreBuilder<C, B> {
 
-    private final Class<B> builderClass;
+    private volatile ValueDependency<DataSource> dataSource;
+    private volatile DatabaseType dialect;
 
-    private volatile ValueDependency<DataSource> dataSourceDepencency;
-
-    JDBCStoreBuilder(Class<B> builderClass, String containerName, String cacheName) {
-        super(containerName, cacheName);
-        this.builderClass = builderClass;
+    JDBCStoreBuilder(PathAddress cacheAddress, Class<B> builderClass) {
+        super(cacheAddress, builderClass);
     }
 
     @Override
     public ServiceBuilder<PersistenceConfiguration> build(ServiceTarget target) {
-        return this.dataSourceDepencency.register(super.build(target));
+        return this.dataSource.register(super.build(target));
     }
 
     @Override
-    B createStore(OperationContext context, ModelNode model) throws OperationFailedException {
-        String dataSource = DATA_SOURCE.getDefinition().resolveModelAttribute(context, model).asString();
-        this.dataSourceDepencency = new CapabilityDependency<>(context, RequiredCapability.DATA_SOURCE, dataSource, DataSource.class);
-        B storeBuilder = new ConfigurationBuilder().persistence().addStore(this.builderClass).dialect(ModelNodes.asEnum(DIALECT.getDefinition().resolveModelAttribute(context, model), DatabaseType.class));
-        storeBuilder.connectionFactory(DataSourceConnectionFactoryConfigurationBuilder.class).setDataSourceDependency(this.dataSourceDepencency);
-        return storeBuilder;
+    public Builder<PersistenceConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
+        String dataSource = DATA_SOURCE.resolveModelAttribute(context, model).asString();
+        this.dataSource = new InjectedValueDependency<>(CommonUnaryRequirement.DATA_SOURCE.getServiceName(context, dataSource), DataSource.class);
+        this.dialect = ModelNodes.optionalEnum(DIALECT.resolveModelAttribute(context, model), DatabaseType.class).orElse(null);
+        return super.configure(context, model);
+    }
+
+    @Override
+    public void accept(B builder) {
+        builder.dialect(this.dialect).connectionFactory(DataSourceConnectionFactoryConfigurationBuilder.class).setDataSourceDependency(this.dataSource);
     }
 }

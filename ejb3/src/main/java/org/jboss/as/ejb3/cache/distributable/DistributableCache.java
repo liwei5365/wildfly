@@ -21,7 +21,7 @@
  */
 package org.jboss.as.ejb3.cache.distributable;
 
-import java.util.UUID;
+import javax.transaction.TransactionSynchronizationRegistry;
 
 import org.jboss.as.ejb3.cache.Cache;
 import org.jboss.as.ejb3.cache.Contextual;
@@ -30,6 +30,7 @@ import org.jboss.as.ejb3.cache.StatefulObjectFactory;
 import org.jboss.ejb.client.Affinity;
 import org.wildfly.clustering.ee.Batch;
 import org.wildfly.clustering.ee.BatchContext;
+import org.wildfly.clustering.ee.Batcher;
 import org.wildfly.clustering.ejb.Bean;
 import org.wildfly.clustering.ejb.BeanManager;
 import org.wildfly.clustering.ejb.RemoveListener;
@@ -47,14 +48,15 @@ import org.wildfly.clustering.ejb.RemoveListener;
  * @param <V> the cache value type
  */
 public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>> implements Cache<K, V> {
-
-    private final BeanManager<UUID, K, V, Batch> manager;
+    private final BeanManager<K, V, Batch> manager;
     private final StatefulObjectFactory<V> factory;
+    private final TransactionSynchronizationRegistry tsr;
     private final RemoveListener<V> listener;
 
-    public DistributableCache(BeanManager<UUID, K, V, Batch> manager, StatefulObjectFactory<V> factory) {
+    public DistributableCache(BeanManager<K, V, Batch> manager, StatefulObjectFactory<V> factory, TransactionSynchronizationRegistry tsr) {
         this.manager = manager;
         this.factory = factory;
+        this.tsr = tsr;
         this.listener = new RemoveListenerAdapter<>(factory);
     }
 
@@ -68,61 +70,69 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
         return this.manager.getWeakAffinity(id);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public K createIdentifier() {
-        return this.manager.getBeanIdentifierFactory().createIdentifier();
+        K id = this.manager.getIdentifierFactory().createIdentifier();
+        K group = (K) CURRENT_GROUP.get();
+        if (group == null) {
+            group = id;
+            CURRENT_GROUP.set(group);
+        }
+        return id;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public V create() {
-        boolean newGroup = false;
-        boolean success = false;
-        UUID group = CURRENT_GROUP.get();
-        Batch batch = this.manager.getBatcher().createBatch();
-        try {
-            if (group == null) {
-                newGroup = true;
-                group = this.manager.getGroupIdentifierFactory().createIdentifier();
-                CURRENT_GROUP.set(group);
-            }
-
+        boolean newGroup = CURRENT_GROUP.get() == null;
+        try (Batch batch = this.manager.getBatcher().createBatch()) {
             try {
                 // This will invoke Cache.create() for nested beans
                 // Nested beans will share the same group identifier
                 V instance = this.factory.createInstance();
                 K id = instance.getId();
-                this.manager.createBean(id, group, instance).close();
-                success = true;
+                this.manager.createBean(id, (K) CURRENT_GROUP.get(), instance).close();
                 return instance;
-            } finally {
-                if (newGroup) {
-                    CURRENT_GROUP.remove();
-                }
+            } catch (RuntimeException | Error e) {
+                batch.discard();
+                throw e;
             }
         } finally {
-            if (success) {
-                batch.close();
-            } else {
-                batch.discard();
+            if (newGroup) {
+                CURRENT_GROUP.remove();
             }
         }
     }
 
+    @SuppressWarnings("resource")
     @Override
     public V get(K id) {
-        Batch batch = this.manager.getBatcher().createBatch();
-        try {
-            Bean<UUID, K, V> bean = this.manager.findBean(id);
-            if (bean == null) {
+        Batcher<Batch> batcher = this.manager.getBatcher();
+        boolean transactional = (this.tsr.getTransactionKey() != null);
+        // Batch may already be associated with this tx
+        Batch existingBatch = transactional ? (Batch) this.tsr.getResource(Batch.class) : null;
+        try (BatchContext context = (existingBatch != null) ? batcher.resumeBatch(existingBatch) : null) {
+            // Batch is not closed here - it will be closed during release(...) or discard(...)
+            Batch batch = batcher.createBatch();
+            try {
+                Bean<K, V> bean = this.manager.findBean(id);
+                if (bean == null) {
+                    batch.close();
+                    return null;
+                }
+                V result = bean.acquire();
+                result.setCacheContext(batch);
+                if (transactional && (existingBatch == null)) {
+                    // Leverage TSR to propagate Batch reference across calls to Cache.get(...) by different threads for the same tx
+                    this.tsr.putResource(Batch.class, batch);
+                }
+                return result;
+            } catch (RuntimeException | Error e) {
+                batch.discard();
                 batch.close();
-                return null;
+                throw e;
             }
-            V result = bean.acquire();
-            result.setCacheContext(batch);
-            return result;
-        } catch (RuntimeException | Error e) {
-            batch.discard();
-            throw e;
         }
     }
 
@@ -130,11 +140,16 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
     public void release(V value) {
         try (BatchContext context = this.manager.getBatcher().resumeBatch(value.getCacheContext())) {
             try (Batch batch = value.getCacheContext()) {
-                Bean<UUID, K, V> bean = this.manager.findBean(value.getId());
-                if (bean != null) {
-                    if (bean.release()) {
-                        bean.close();
+                try {
+                    Bean<K, V> bean = this.manager.findBean(value.getId());
+                    if (bean != null) {
+                        if (bean.release()) {
+                            bean.close();
+                        }
                     }
+                } catch (RuntimeException | Error e) {
+                    batch.discard();
+                    throw e;
                 }
             }
         }
@@ -143,9 +158,14 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
     @Override
     public void remove(K id) {
         try (Batch batch = this.manager.getBatcher().createBatch()) {
-            Bean<UUID, K, V> bean = this.manager.findBean(id);
-            if (bean != null) {
-                bean.remove(this.listener);
+            try {
+                Bean<K, V> bean = this.manager.findBean(id);
+                if (bean != null) {
+                    bean.remove(this.listener);
+                }
+            } catch (RuntimeException | Error e) {
+                batch.discard();
+                throw e;
             }
         }
     }
@@ -154,9 +174,14 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
     public void discard(V value) {
         try (BatchContext context = this.manager.getBatcher().resumeBatch(value.getCacheContext())) {
             try (Batch batch = value.getCacheContext()) {
-                Bean<UUID, K, V> bean = this.manager.findBean(value.getId());
-                if (bean != null) {
-                    bean.remove(null);
+                try {
+                    Bean<K, V> bean = this.manager.findBean(value.getId());
+                    if (bean != null) {
+                        bean.remove(null);
+                    }
+                } catch (RuntimeException | Error e) {
+                    batch.discard();
+                    throw e;
                 }
             }
         }
@@ -164,7 +189,9 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
 
     @Override
     public boolean contains(K id) {
-        return this.manager.containsBean(id);
+        try (Batch batch = this.manager.getBatcher().createBatch()) {
+            return this.manager.containsBean(id);
+        }
     }
 
     @Override
@@ -190,5 +217,10 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
     @Override
     public int getTotalSize() {
         return this.manager.getActiveCount() + this.manager.getPassiveCount();
+    }
+
+    @Override
+    public boolean isRemotable(Throwable throwable) {
+        return this.manager.isRemotable(throwable);
     }
 }

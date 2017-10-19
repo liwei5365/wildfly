@@ -23,10 +23,10 @@
 package org.jboss.as.test.integration.ejb.ejb2.reference.eararchive;
 
 import javax.naming.InitialContext;
+
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.EnterpriseArchive;
@@ -37,12 +37,11 @@ import org.junit.runner.RunWith;
 
 /**
  * Migration test from EJB Testsuite (reference21_30) to AS7 [JIRA JBQA-5483]. Test for EJB3.0/EJB2.1 references
- * 
+ *
  * @author William DeCoste, Ondrej Chaloupka
  */
 @RunWith(Arquillian.class)
 public class ReferenceEarTestCase {
-    private static final Logger log = Logger.getLogger(ReferenceEarTestCase.class);
 
     @ArquillianResource
     InitialContext ctx;
@@ -54,7 +53,7 @@ public class ReferenceEarTestCase {
         final JavaArchive jar1 = ShrinkWrap.create(JavaArchive.class, "multideploy-ejb2.jar")
                 .addClasses(
                         Test2.class,
-                        Test2Bean.class, 
+                        Test2Bean.class,
                         Test2Home.class);
         jar1.addClass(ReferenceEarTestCase.class);
         jar1.addAsManifestResource(ReferenceEarTestCase.class.getPackage(), "jboss-ejb3-ejb2.xml", "jboss-ejb3.xml");
@@ -63,13 +62,12 @@ public class ReferenceEarTestCase {
         final JavaArchive jar2 = ShrinkWrap.create(JavaArchive.class, "multideploy-ejb3.jar")
                 .addClasses(
                         Test3.class,
-                        Test3Business.class, 
-                        Test3Home.class, 
+                        Test3Business.class,
+                        Test3Home.class,
                         Test3Bean.class);
         jar2.addAsManifestResource(ReferenceEarTestCase.class.getPackage(), "jboss-ejb3-ejb3.xml", "jboss-ejb3.xml");
         jar2.addAsManifestResource(ReferenceEarTestCase.class.getPackage(), "ejb-jar-ejb3.xml", "ejb-jar.xml");
 
-        log.info(ear.toString(true));
         ear.addAsModule(jar1);
         ear.addAsModule(jar2);
         return ear;

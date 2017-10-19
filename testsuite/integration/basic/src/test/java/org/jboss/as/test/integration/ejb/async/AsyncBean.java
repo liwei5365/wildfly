@@ -25,7 +25,6 @@ package org.jboss.as.test.integration.ejb.async;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
 import javax.annotation.Resource;
 import javax.ejb.AsyncResult;
 import javax.ejb.Asynchronous;
@@ -48,10 +47,10 @@ public class AsyncBean implements AsyncBeanCancelRemoteInterface {
 
     @Inject
     private RequestScopedBean requestScopedBean;
-    
+
     @Resource
     SessionContext ctx;
-    
+
     @EJB
     AsyncBeanSynchronizeSingletonRemote synchronizeBean;
 
@@ -76,30 +75,35 @@ public class AsyncBean implements AsyncBeanCancelRemoteInterface {
     public Future<String> asyncCancelMethod(CountDownLatch latch, CountDownLatch latch2) throws InterruptedException {
         String result;
         result = ctx.wasCancelCalled() ? "true" : "false";
-        
+
         latch.countDown();
         latch2.await(5, TimeUnit.SECONDS);
-        
+
         result += ";";
         result += ctx.wasCancelCalled() ? "true" : "false";
         return new AsyncResult<String>(result);
     }
-    
+
     public Future<String> asyncRemoteCancelMethod() throws InterruptedException {
-        String result = "";
+        String result;
         result = ctx.wasCancelCalled() ? "true" : "false";
-        
+
         synchronizeBean.latchCountDown();
-        synchronizeBean.latch2AwaitSeconds(5);
-        
+        long end = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < end) {
+            if (ctx.wasCancelCalled()) {
+                break;
+            }
+            Thread.sleep(50);
+        }
         result += ";";
 
         result += ctx.wasCancelCalled() ? "true" : "false";
         return new AsyncResult<String>(result);
     }
-    
+
     public Future<String> asyncMethodWithException(boolean isException) {
-        if(isException) {
+        if (isException) {
             throw new IllegalArgumentException(); //some exception is thrown
         }
         return new AsyncResult<String>("Hi");

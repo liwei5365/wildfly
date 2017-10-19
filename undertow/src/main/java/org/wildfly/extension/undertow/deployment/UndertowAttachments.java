@@ -1,6 +1,6 @@
-/**
+/*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -21,16 +21,18 @@
  */
 package org.wildfly.extension.undertow.deployment;
 
-import io.undertow.server.HandlerWrapper;
-import io.undertow.servlet.ServletExtension;
-import io.undertow.servlet.api.ThreadSetupAction;
-import io.undertow.websockets.jsr.WebSocketDeploymentInfo;
+import java.io.File;
+
 import org.jboss.as.server.deployment.AttachmentKey;
 import org.jboss.as.server.deployment.AttachmentList;
 import org.wildfly.extension.undertow.ServletContainerService;
 import org.wildfly.extension.undertow.session.SharedSessionManagerConfig;
 
-import java.io.File;
+import io.undertow.predicate.Predicate;
+import io.undertow.server.HandlerWrapper;
+import io.undertow.servlet.ServletExtension;
+import io.undertow.servlet.api.ThreadSetupHandler;
+import io.undertow.websockets.jsr.WebSocketDeploymentInfo;
 
 /**
  * Class defining {@link AttachmentKey}s for Undertow-specific attachments.
@@ -47,7 +49,7 @@ public final class UndertowAttachments {
 
     public static final AttachmentKey<AttachmentList<HandlerWrapper>> UNDERTOW_OUTER_HANDLER_CHAIN_WRAPPERS = AttachmentKey.createList(HandlerWrapper.class);
 
-    public static final AttachmentKey<AttachmentList<ThreadSetupAction>> UNDERTOW_THREAD_SETUP_ACTIONS = AttachmentKey.createList(ThreadSetupAction.class);
+    public static final AttachmentKey<AttachmentList<ThreadSetupHandler>> UNDERTOW_THREAD_SETUP_ACTIONS = AttachmentKey.createList(ThreadSetupHandler.class);
 
     public static final AttachmentKey<AttachmentList<ServletExtension>> UNDERTOW_SERVLET_EXTENSIONS = AttachmentKey.createList(ServletExtension.class);
 
@@ -58,6 +60,8 @@ public final class UndertowAttachments {
     public static final AttachmentKey<AttachmentList<File>> EXTERNAL_RESOURCES = AttachmentKey.createList(File.class);
 
     public static final AttachmentKey<ServletContainerService> SERVLET_CONTAINER_SERVICE = AttachmentKey.create(ServletContainerService.class);
+
+    public static final AttachmentKey<AttachmentList<Predicate>> ALLOW_REQUEST_WHEN_SUSPENDED = AttachmentKey.createList(Predicate.class);
 
     private UndertowAttachments() {
     }

@@ -21,7 +21,12 @@
  */
 package org.wildfly.clustering.ejb.infinispan.bean;
 
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
@@ -30,7 +35,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Matchers;
-import org.wildfly.clustering.ee.infinispan.Mutator;
+import org.wildfly.clustering.ee.Mutator;
 import org.wildfly.clustering.ejb.Bean;
 import org.wildfly.clustering.ejb.PassivationListener;
 import org.wildfly.clustering.ejb.RemoveListener;
@@ -42,14 +47,14 @@ import org.wildfly.clustering.ejb.infinispan.BeanRemover;
 public class InfinispanBeanTestCase {
 
     private final String id = "id";
-    private final BeanEntry<Integer> entry = mock(BeanEntry.class);
-    private final BeanGroup<Integer, String, Object> group = mock(BeanGroup.class);
+    private final BeanEntry<String> entry = mock(BeanEntry.class);
+    private final BeanGroup<String, Object> group = mock(BeanGroup.class);
     private final Mutator mutator = mock(Mutator.class);
     private final BeanRemover<String, Object> remover = mock(BeanRemover.class);
     private final Time timeout = new Time(1, TimeUnit.MINUTES);
     private final PassivationListener<Object> listener = mock(PassivationListener.class);
 
-    private final Bean<Integer, String, Object> bean = new InfinispanBean<>(this.id, this.entry, this.group, this.mutator, this.remover, this.timeout, this.listener);
+    private final Bean<String, Object> bean = new InfinispanBean<>(this.id, this.entry, this.group, this.mutator, this.remover, this.timeout, this.listener);
 
     @After
     public void tearDown() {
@@ -63,9 +68,9 @@ public class InfinispanBeanTestCase {
 
     @Test
     public void getGroupId() {
-        Integer groupId = 1;
+        String groupId = "group";
         when(this.entry.getGroupId()).thenReturn(groupId);
-        Integer result = this.bean.getGroupId();
+        String result = this.bean.getGroupId();
         Assert.assertSame(groupId, result);
     }
 
@@ -92,7 +97,7 @@ public class InfinispanBeanTestCase {
         long now = System.currentTimeMillis();
         when(this.entry.getLastAccessedTime()).thenReturn(new Date(now));
         Assert.assertFalse(this.bean.isExpired());
-        
+
         when(this.entry.getLastAccessedTime()).thenReturn(new Date(now - this.timeout.convert(TimeUnit.MILLISECONDS) - 1));
         Assert.assertTrue(this.bean.isExpired());
     }
@@ -116,9 +121,9 @@ public class InfinispanBeanTestCase {
     public void close() {
         when(this.entry.getLastAccessedTime()).thenReturn(null);
         when(this.group.isCloseable()).thenReturn(false);
-        
+
         this.bean.close();
-        
+
         verify(this.entry).setLastAccessedTime(Matchers.<Date>any());
         verify(this.mutator, never()).mutate();
         verify(this.group, never()).close();
@@ -127,7 +132,7 @@ public class InfinispanBeanTestCase {
 
         when(this.entry.getLastAccessedTime()).thenReturn(new Date());
         when(this.group.isCloseable()).thenReturn(true);
-        
+
         this.bean.close();
 
         verify(this.entry).setLastAccessedTime(Matchers.<Date>any());

@@ -24,7 +24,7 @@ package org.wildfly.extension.rts;
 import java.io.IOException;
 
 import org.jboss.as.subsystem.test.AbstractSubsystemBaseTest;
-import org.wildfly.extension.rts.RTSSubsystemExtension;
+import org.junit.Test;
 
 /**
  * @author <a href="mailto:gytis@redhat.com">Gytis Trikleris</a>
@@ -50,5 +50,11 @@ public class RTSSubsystemTestCase extends AbstractSubsystemBaseTest {
         return new String[] {
                 "/subsystem-templates/rts.xml"
         };
+    }
+
+    @Test
+    @Override
+    public void testSchemaOfSubsystemTemplates() throws Exception {
+        super.testSchemaOfSubsystemTemplates();
     }
 }

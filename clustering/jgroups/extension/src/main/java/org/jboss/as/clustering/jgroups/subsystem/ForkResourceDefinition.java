@@ -22,28 +22,29 @@
 
 package org.jboss.as.clustering.jgroups.subsystem;
 
-import org.jboss.as.clustering.controller.AddStepHandler;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.Map;
+
+import org.jboss.as.clustering.controller.CapabilityProvider;
 import org.jboss.as.clustering.controller.ChildResourceDefinition;
-import org.jboss.as.clustering.controller.RemoveStepHandler;
 import org.jboss.as.clustering.controller.ResourceDescriptor;
+import org.jboss.as.clustering.controller.SimpleResourceRegistration;
 import org.jboss.as.clustering.controller.ResourceServiceBuilderFactory;
 import org.jboss.as.clustering.controller.ResourceServiceHandler;
-import org.jboss.as.controller.OperationContext;
-import org.jboss.as.controller.OperationFailedException;
-import org.jboss.as.controller.PathAddress;
+import org.jboss.as.clustering.controller.UnaryRequirementCapability;
 import org.jboss.as.controller.PathElement;
-import org.jboss.as.controller.RunningMode;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
-import org.jboss.as.controller.registry.Resource;
-import org.jboss.as.controller.registry.Resource.ResourceEntry;
-import org.jboss.dmr.ModelNode;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
+import org.wildfly.clustering.service.UnaryRequirement;
+import org.wildfly.clustering.spi.ClusteringRequirement;
 
 /**
  * Definition of a fork resource.
  * @author Paul Ferraro
  */
-public class ForkResourceDefinition extends ChildResourceDefinition {
+public class ForkResourceDefinition extends ChildResourceDefinition<ManagementResourceRegistration> {
 
     public static final PathElement WILDCARD_PATH = pathElement(PathElement.WILDCARD_VALUE);
 
@@ -51,35 +52,46 @@ public class ForkResourceDefinition extends ChildResourceDefinition {
         return PathElement.pathElement("fork", name);
     }
 
-    private final ResourceServiceBuilderFactory<ChannelFactory> builderFactory = new ForkChannelFactoryBuilderFactory();
-    final boolean allowRuntimeOnlyRegistration;
+    enum Capability implements CapabilityProvider {
+        FORK_CHANNEL(JGroupsRequirement.CHANNEL),
+        FORK_CHANNEL_CLUSTER(JGroupsRequirement.CHANNEL_CLUSTER),
+        FORK_CHANNEL_FACTORY(JGroupsRequirement.CHANNEL_FACTORY),
+        FORK_CHANNEL_MODULE(JGroupsRequirement.CHANNEL_MODULE),
+        FORK_CHANNEL_SOURCE(JGroupsRequirement.CHANNEL_SOURCE),
+        ;
+        private final org.jboss.as.clustering.controller.Capability capability;
 
-    ForkResourceDefinition(boolean allowRuntimeOnlyRegistration) {
-        super(WILDCARD_PATH, new JGroupsResourceDescriptionResolver(WILDCARD_PATH));
-        this.allowRuntimeOnlyRegistration = allowRuntimeOnlyRegistration;
+        Capability(UnaryRequirement requirement) {
+            this.capability = new UnaryRequirementCapability(requirement);
+        }
+
+        @Override
+        public org.jboss.as.clustering.controller.Capability getCapability() {
+            return this.capability;
+        }
+    }
+
+    static final Map<ClusteringRequirement, org.jboss.as.clustering.controller.Capability> CLUSTERING_CAPABILITIES = new EnumMap<>(ClusteringRequirement.class);
+    static {
+        EnumSet.allOf(ClusteringRequirement.class).forEach(requirement -> CLUSTERING_CAPABILITIES.put(requirement, new UnaryRequirementCapability(requirement)));
+    }
+
+    ForkResourceDefinition() {
+        super(WILDCARD_PATH, JGroupsExtension.SUBSYSTEM_RESOLVER.createChildResolver(WILDCARD_PATH));
     }
 
     @Override
     public void register(ManagementResourceRegistration parentRegistration) {
         ManagementResourceRegistration registration = parentRegistration.registerSubModel(this);
 
-        ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver());
-        ResourceServiceHandler handler = new ForkServiceHandler(this.builderFactory);
-        new AddStepHandler(descriptor, handler).register(registration);
-        new RemoveStepHandler(descriptor, handler) {
-            @Override
-            protected void performRemove(OperationContext context, ModelNode operation, ModelNode model) throws OperationFailedException {
-                super.performRemove(context, operation, model);
-                if (ForkResourceDefinition.this.allowRuntimeOnlyRegistration && (context.getRunningMode() == RunningMode.NORMAL)) {
-                    Resource resource = context.readResource(PathAddress.EMPTY_ADDRESS);
-                    for (ResourceEntry entry: resource.getChildren(ProtocolResourceDefinition.WILDCARD_PATH.getKey())) {
-                        context.removeResource(PathAddress.pathAddress(entry.getPathElement()));
-                    }
-                    context.getResourceRegistrationForUpdate().unregisterOverrideModel(context.getCurrentAddressValue());
-                }
-            }
-        }.register(registration);
+        ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver())
+                .addCapabilities(Capability.class)
+                .addCapabilities(CLUSTERING_CAPABILITIES.values())
+                ;
+        ResourceServiceBuilderFactory<ChannelFactory> builderFactory = address -> new ForkChannelFactoryBuilder(Capability.FORK_CHANNEL_FACTORY, address);
+        ResourceServiceHandler handler = new ForkServiceHandler(builderFactory);
+        new SimpleResourceRegistration(descriptor, handler).register(registration);
 
-        new ForkProtocolResourceDefinition(this.builderFactory, this.allowRuntimeOnlyRegistration).register(registration);
+        new ProtocolRegistration(builderFactory, new ForkProtocolRuntimeResourceRegistration()).register(registration);
     }
 }

@@ -22,27 +22,34 @@
 
 package org.jboss.as.naming.subsystem;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.OperationStepHandler;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PropertiesAttributeDefinition;
 import org.jboss.as.controller.ReloadRequiredWriteAttributeHandler;
 import org.jboss.as.controller.SimpleAttributeDefinition;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
+import org.jboss.as.controller.SimpleOperationDefinitionBuilder;
 import org.jboss.as.controller.SimpleResourceDefinition;
 import org.jboss.as.controller.access.management.AccessConstraintDefinition;
 import org.jboss.as.controller.operations.validation.EnumValidator;
 import org.jboss.as.controller.registry.AttributeAccess;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.registry.Resource;
+import org.jboss.as.naming.ManagedReferenceFactory;
+import org.jboss.as.naming.deployment.ContextNames;
 import org.jboss.as.naming.logging.NamingLogger;
+import org.jboss.as.naming.service.BinderService;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
+import org.jboss.msc.service.ServiceController;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.List;
 
 /**
  * A {@link org.jboss.as.controller.ResourceDefinition} for JNDI bindings
@@ -82,7 +89,6 @@ public class NamingBindingResourceDefinition extends SimpleResourceDefinition {
             .build();
 
     static final PropertiesAttributeDefinition ENVIRONMENT = new PropertiesAttributeDefinition.Builder(NamingSubsystemModel.ENVIRONMENT, true)
-            .setXmlName("property")
             .setAllowExpression(true)
             .build();
 
@@ -90,6 +96,7 @@ public class NamingBindingResourceDefinition extends SimpleResourceDefinition {
             .setAllowExpression(true)
             .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
             .build();
+
 
     static final AttributeDefinition[] ATTRIBUTES = {BINDING_TYPE, VALUE, TYPE, CLASS, MODULE, LOOKUP, ENVIRONMENT, CACHE};
 
@@ -101,6 +108,8 @@ public class NamingBindingResourceDefinition extends SimpleResourceDefinition {
         constraints.add(NamingExtension.NAMING_BINDING_SENSITIVITY_CONSTRAINT);
         ACCESS_CONSTRAINTS = Collections.unmodifiableList(constraints);
     }
+
+    static final OperationStepHandler VALIDATE_RESOURCE_MODEL_OPERATION_STEP_HANDLER = (context, op) -> validateResourceModel(context.readResource(PathAddress.EMPTY_ADDRESS).getModel(), true);
 
     private NamingBindingResourceDefinition() {
         super(NamingSubsystemModel.BINDING_PATH,
@@ -117,6 +126,53 @@ public class NamingBindingResourceDefinition extends SimpleResourceDefinition {
     }
 
     @Override
+    public void registerOperations(ManagementResourceRegistration resourceRegistration) {
+        super.registerOperations(resourceRegistration);
+        SimpleOperationDefinitionBuilder builder = new SimpleOperationDefinitionBuilder(NamingSubsystemModel.REBIND, getResourceDescriptionResolver())
+                // disallow rebind op for external-context
+                .addParameter(SimpleAttributeDefinitionBuilder.create(BINDING_TYPE)
+                        .setValidator(new EnumValidator<>(BindingType.class, EnumSet.complementOf(EnumSet.of(BindingType.EXTERNAL_CONTEXT))))
+                        .build())
+                .addParameter(TYPE)
+                .addParameter(VALUE)
+                .addParameter(CLASS)
+                .addParameter(MODULE)
+                .addParameter(LOOKUP)
+                .addParameter(ENVIRONMENT);
+        resourceRegistration.registerOperationHandler(builder.build(), new OperationStepHandler() {
+            @Override
+            public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
+                context.addStep(new OperationStepHandler() {
+                    @Override
+                    public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
+
+                        validateResourceModel(operation, false);
+                        Resource resource = context.readResourceForUpdate(PathAddress.EMPTY_ADDRESS);
+                        ModelNode model = resource.getModel();
+                        for (AttributeDefinition attr : ATTRIBUTES) {
+                            attr.validateAndSet(operation, model);
+                        }
+
+                        context.addStep(new OperationStepHandler() {
+                            @Override
+                            public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
+                                final String name = context.getCurrentAddressValue();
+                                final ContextNames.BindInfo bindInfo = ContextNames.bindInfoFor(name);
+                                ServiceController<ManagedReferenceFactory> service = (ServiceController<ManagedReferenceFactory>) context.getServiceRegistry(false).getService(bindInfo.getBinderServiceName());
+                                if (service == null) {
+                                    context.reloadRequired();
+                                    return;
+                                }
+                                NamingBindingAdd.INSTANCE.doRebind(context, operation, (BinderService) service.getService());
+                            }
+                        }, OperationContext.Stage.RUNTIME);
+                    }
+                }, OperationContext.Stage.MODEL);
+            }
+        });
+    }
+
+    @Override
     public List<AccessConstraintDefinition> getAccessConstraints() {
         return ACCESS_CONSTRAINTS;
     }
@@ -128,17 +184,18 @@ public class NamingBindingResourceDefinition extends SimpleResourceDefinition {
         @Override
         protected void validateUpdatedModel(OperationContext context, Resource model) throws OperationFailedException {
             super.validateUpdatedModel(context, model);
-            validateResourceModel(model.getModel());
+            context.addStep(VALIDATE_RESOURCE_MODEL_OPERATION_STEP_HANDLER, OperationContext.Stage.MODEL);
         }
     }
 
-    static void validateResourceModel(ModelNode modelNode) throws OperationFailedException {
+    static void validateResourceModel(ModelNode modelNode, boolean allowExternal) throws OperationFailedException {
         final BindingType type = BindingType.forName(modelNode.require(NamingSubsystemModel.BINDING_TYPE).asString());
         if (type == BindingType.SIMPLE) {
             if(!modelNode.hasDefined(NamingBindingResourceDefinition.VALUE.getName())) {
                 throw NamingLogger.ROOT_LOGGER.bindingTypeRequiresAttributeDefined(type, NamingBindingResourceDefinition.VALUE.getName());
             }
-            if (modelNode.hasDefined(NamingBindingResourceDefinition.CACHE.getName())) {
+            if (modelNode.hasDefined(NamingBindingResourceDefinition.CACHE.getName())
+                    && modelNode.get(NamingBindingResourceDefinition.CACHE.getName()).asBoolean()) {
                 throw NamingLogger.ROOT_LOGGER.cacheNotValidForBindingType(type);
             }
         } else if (type == BindingType.OBJECT_FACTORY) {
@@ -148,10 +205,14 @@ public class NamingBindingResourceDefinition extends SimpleResourceDefinition {
             if(!modelNode.hasDefined(NamingBindingResourceDefinition.CLASS.getName())) {
                 throw NamingLogger.ROOT_LOGGER.bindingTypeRequiresAttributeDefined(type, NamingBindingResourceDefinition.CLASS.getName());
             }
-            if (modelNode.hasDefined(NamingBindingResourceDefinition.CACHE.getName())) {
+            if (modelNode.hasDefined(NamingBindingResourceDefinition.CACHE.getName())
+                    && modelNode.get(NamingBindingResourceDefinition.CACHE.getName()).asBoolean()) {
                 throw NamingLogger.ROOT_LOGGER.cacheNotValidForBindingType(type);
             }
         } else if (type == BindingType.EXTERNAL_CONTEXT) {
+            if(!allowExternal) {
+                throw NamingLogger.ROOT_LOGGER.cannotRebindExternalContext();
+            }
             if(!modelNode.hasDefined(NamingBindingResourceDefinition.MODULE.getName())) {
                 throw NamingLogger.ROOT_LOGGER.bindingTypeRequiresAttributeDefined(type, NamingBindingResourceDefinition.MODULE.getName());
             }
@@ -162,7 +223,8 @@ public class NamingBindingResourceDefinition extends SimpleResourceDefinition {
             if(!modelNode.hasDefined(NamingBindingResourceDefinition.LOOKUP.getName())) {
                 throw NamingLogger.ROOT_LOGGER.bindingTypeRequiresAttributeDefined(type, NamingBindingResourceDefinition.LOOKUP.getName());
             }
-            if (modelNode.hasDefined(NamingBindingResourceDefinition.CACHE.getName())) {
+            if (modelNode.hasDefined(NamingBindingResourceDefinition.CACHE.getName())
+                    && modelNode.get(NamingBindingResourceDefinition.CACHE.getName()).asBoolean()) {
                 throw NamingLogger.ROOT_LOGGER.cacheNotValidForBindingType(type);
             }
         } else {

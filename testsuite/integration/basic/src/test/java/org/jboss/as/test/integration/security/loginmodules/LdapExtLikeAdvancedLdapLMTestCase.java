@@ -27,19 +27,16 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import javax.naming.Context;
 import javax.security.auth.login.LoginException;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.http.client.ClientProtocolException;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
@@ -55,7 +52,6 @@ import org.jboss.as.test.integration.security.common.config.SecurityDomain;
 import org.jboss.as.test.integration.security.common.config.SecurityModule;
 import org.jboss.as.test.integration.security.common.servlets.PrincipalPrintingServlet;
 import org.jboss.as.test.integration.security.common.servlets.RolePrintingServlet;
-import org.jboss.logging.Logger;
 import org.jboss.security.negotiation.AdvancedLdapLoginModule;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
@@ -72,16 +68,16 @@ import org.junit.runner.RunWith;
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ BasicVaultServerSetupTask.class, LdapExtLDAPServerSetupTask.SystemPropertiesSetup.class, LdapExtLDAPServerSetupTask.class,
-        LdapExtLikeAdvancedLdapLMTestCase.SecurityDomainsSetup.class })
+@ServerSetup({BasicVaultServerSetupTask.class, LdapExtLDAPServerSetupTask.SystemPropertiesSetup.class, LdapExtLDAPServerSetupTask.class,
+        LdapExtLikeAdvancedLdapLMTestCase.SecurityDomainsSetup.class})
 @RunAsClient
 @Category(CommonCriteria.class)
 public class LdapExtLikeAdvancedLdapLMTestCase {
 
-    /** The SECURITY_DOMAIN_NAME_PREFIX */
+    /**
+     * The SECURITY_DOMAIN_NAME_PREFIX
+     */
     public static final String SECURITY_DOMAIN_NAME_PREFIX = "test-";
-
-    private static Logger LOGGER = Logger.getLogger(LdapExtLikeAdvancedLdapLMTestCase.class);
 
     private static final String DEP1 = "DEP1";
     private static final String DEP2 = "DEP2";
@@ -273,8 +269,8 @@ public class LdapExtLikeAdvancedLdapLMTestCase {
     /**
      * Tests role assignment for given deployment (web-app URL).
      */
-    private void testDeployment(URL webAppURL, String username, String password, String... assignedRoles) throws MalformedURLException,
-            ClientProtocolException, IOException, URISyntaxException, LoginException {
+    private void testDeployment(URL webAppURL, String username, String password, String... assignedRoles) throws
+            IOException, URISyntaxException, LoginException {
         final URL rolesPrintingURL = new URL(webAppURL.toExternalForm() + RolePrintingServlet.SERVLET_PATH.substring(1) + "?"
                 + LdapExtLDAPServerSetupTask.QUERY_ROLES);
         final String rolesResponse = Utils.makeCallWithBasicAuthn(rolesPrintingURL, username, password, 200);
@@ -301,7 +297,6 @@ public class LdapExtLikeAdvancedLdapLMTestCase {
      * @return
      */
     private static WebArchive createWar(String securityDomainName) {
-        LOGGER.info("Start deployment for security-domain " + securityDomainName);
         final WebArchive war = ShrinkWrap.create(WebArchive.class, securityDomainName + ".war");
         war.addClasses(RolePrintingServlet.class, PrincipalPrintingServlet.class);
         war.addAsWebInfResource(LdapExtLoginModuleTestCase.class.getPackage(), LdapExtLoginModuleTestCase.class.getSimpleName()
@@ -309,9 +304,6 @@ public class LdapExtLikeAdvancedLdapLMTestCase {
         war.addAsWebInfResource(Utils.getJBossWebXmlAsset(securityDomainName), "jboss-web.xml");
         war.addAsManifestResource(Utils.getJBossDeploymentStructure("org.jboss.security.negotiation"),
                 "jboss-deployment-structure.xml");
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(war.toString(true));
-        }
         return war;
     }
 
@@ -387,8 +379,8 @@ public class LdapExtLikeAdvancedLdapLMTestCase {
             final SecurityDomain sd2 = new SecurityDomain.Builder().name(SECURITY_DOMAIN_NAME_PREFIX + DEP2)
                     .loginModules(sd2LoginModuleBuilder.build()).build();
             sd2LoginModuleBuilder
-            .putOption(Context.REFERRAL, "throw")
-            .putOption("referralUserAttributeIDToCheck", "cn");
+                    .putOption(Context.REFERRAL, "throw")
+                    .putOption("referralUserAttributeIDToCheck", "cn");
             final SecurityDomain sd2throw = new SecurityDomain.Builder().name(SECURITY_DOMAIN_NAME_PREFIX + DEP2_THROW)
                     .loginModules(sd2LoginModuleBuilder.build()).build();
             final SecurityDomain sd3 = new SecurityDomain.Builder()
@@ -465,7 +457,7 @@ public class LdapExtLikeAdvancedLdapLMTestCase {
                                     .putOption("roleAttributeID", "cn")
                                     .build()) //
                     .build();
-            return new SecurityDomain[] { sd1, sd2, sd2throw, sd3, sd4, sd4_direct, sd5, sd6 };
+            return new SecurityDomain[]{sd1, sd2, sd2throw, sd3, sd4, sd4_direct, sd5, sd6};
         }
 
         private Map<String, String> getCommonOptions() {

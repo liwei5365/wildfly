@@ -22,10 +22,12 @@
 
 package org.jboss.as.test.integration.ejb.security.runas.ejb2mdb;
 
+import javax.annotation.Resource;
+import javax.annotation.security.RunAs;
+import javax.annotation.security.PermitAll;
+import javax.ejb.ActivationConfigProperty;
 import javax.ejb.EJB;
 import javax.ejb.MessageDriven;
-import javax.ejb.ActivationConfigProperty;
-
 import javax.jms.DeliveryMode;
 import javax.jms.JMSException;
 import javax.jms.Message;
@@ -36,22 +38,21 @@ import javax.jms.QueueConnectionFactory;
 import javax.jms.QueueSender;
 import javax.jms.QueueSession;
 import javax.jms.TextMessage;
-import javax.annotation.security.RunAs;
-import javax.annotation.Resource;
-import org.jboss.ejb3.annotation.ResourceAdapter;
+
 import org.jboss.logging.Logger;
 
 /**
  * MDB with RunAs annotation. Takes data from in queue and replies to reply queue.
- * 
+ *
  * @author Ondrej Chaloupka
  */
 @MessageDriven(activationConfig = {
         @ActivationConfigProperty(propertyName = "destinationType", propertyValue = "javax.jms.Queue"),
         @ActivationConfigProperty(propertyName = "destination", propertyValue = "java:jboss/exported/queue/TestQueue"),
         @ActivationConfigProperty(propertyName = "acknowledgeMode", propertyValue = "Auto-acknowledge"),
-        @ActivationConfigProperty(propertyName = "maxSession", propertyValue = "1") })
+        @ActivationConfigProperty(propertyName = "maxSession", propertyValue = "1")})
 @RunAs("INTERNAL_ROLE")
+@PermitAll // needed for access not being denied, see WFLY-8560
 public class HelloMDB implements MessageListener {
     private static final Logger log = Logger.getLogger(HowdyBean.class);
 
@@ -63,24 +64,16 @@ public class HelloMDB implements MessageListener {
 
     @Resource(lookup = "java:global/runasmdbejb-ejb2/GoodBye!org.jboss.as.test.integration.ejb.security.runas.ejb2mdb.GoodByeLocalHome")
     GoodByeLocalHome goodByeHome;
-    GoodByeLocal goodBye;
 
     public void onMessage(Message message) {
         try {
-            log.debug("[HelloMDB] calling goodByeHome.create()");
-            goodBye = goodByeHome.create();
-            log.debug("[HelloMDB] returned from goodByeHome.create()");
-            String replyMsg = this.callEJB() + goodBye.sayGoodBye("user1");
-            log.info("[HelloMDB] calling sayHowdy: " + replyMsg);
+            GoodByeLocal goodBye = goodByeHome.create();
+            String messageToReply = String.format("%s! %s.", howdy.sayHowdy(), goodBye.sayGoodBye());
 
-            sendReply(replyMsg, (Queue) message.getJMSReplyTo(), message.getJMSMessageID());
+            sendReply(messageToReply, (Queue) message.getJMSReplyTo(), message.getJMSMessageID());
         } catch (Exception e) {
-            log.error("EXCEPTION: ", e);
+            log.errorf(e, "Can't process message '%s'", message);
         }
-    }
-
-    private final String callEJB() {
-        return howdy.sayHowdy();
     }
 
     private void sendReply(String msg, Queue destination, String messageID) throws JMSException {

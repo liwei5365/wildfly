@@ -25,7 +25,6 @@ package org.jboss.as.test.integration.security.loginmodules.databases;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
-
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.ejb.Singleton;
@@ -38,7 +37,7 @@ import org.jboss.logging.Logger;
 
 /**
  * This bean will create users and roles in ExampleDS datasource on startup.
- * 
+ *
  * @author Filip Bogyai
  */
 
@@ -81,7 +80,7 @@ public class DatabaseCreatorBean {
         try {
             statement = connection.createStatement();
             final int updateResult = statement.executeUpdate(query);
-            LOGGER.info("Result: " + updateResult + ".  SQL statement: " + query);
+            LOGGER.trace("Result: " + updateResult + ".  SQL statement: " + query);
         } catch (SQLException e) {
             LOGGER.error("SQL execution failed", e);
         } finally {

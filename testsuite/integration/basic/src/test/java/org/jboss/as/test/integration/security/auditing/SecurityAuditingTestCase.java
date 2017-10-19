@@ -22,12 +22,14 @@
 
 package org.jboss.as.test.integration.security.auditing;
 
-import static org.junit.Assert.assertTrue;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.ADD;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.REMOVE;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.UNDEFINE_ATTRIBUTE_OPERATION;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.WRITE_ATTRIBUTE_OPERATION;
+import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -50,6 +52,7 @@ import org.jboss.as.test.integration.security.common.AbstractSecurityDomainsServ
 import org.jboss.as.test.integration.security.common.Utils;
 import org.jboss.as.test.integration.security.common.config.SecurityDomain;
 import org.jboss.as.test.integration.security.common.config.SecurityModule;
+import org.jboss.as.test.shared.ServerReload;
 import org.jboss.dmr.ModelNode;
 import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
@@ -107,7 +110,23 @@ public class SecurityAuditingTestCase extends AnnSBTest {
             ModelNode list = op.get("handlers");
             list.add("AUDIT");
             updates.add(op);
+
+            if (System.getProperty("elytron") != null) {
+                // /subsystem=elytron/security-domain=ApplicationDomain:write-attribute(name=security-event-listener, value=local-audit)
+                op = new ModelNode();
+                op.get(OP).set(WRITE_ATTRIBUTE_OPERATION);
+                op.get(OP_ADDR).add(SUBSYSTEM, "elytron");
+                op.get(OP_ADDR).add("security-domain", "ApplicationDomain");
+                op.get("name").set("security-event-listener");
+                op.get("value").set("local-audit");
+                updates.add(op);
+            }
+
             executeOperations(updates);
+
+            if (System.getProperty("elytron") != null) {
+                ServerReload.executeReloadAndWaitForCompletion(managementClient.getControllerClient(), 50000);
+            }
         }
 
         @Override
@@ -121,14 +140,28 @@ public class SecurityAuditingTestCase extends AnnSBTest {
             op.get(OP_ADDR).add("logger", "org.jboss.security.audit");
             updates.add(op);
 
-            // /subsystem=logging/periodic-rotating-file-handler=AUDIT:remove            
+            // /subsystem=logging/periodic-rotating-file-handler=AUDIT:remove
             op = new ModelNode();
             op.get(OP).set(REMOVE);
             op.get(OP_ADDR).add(SUBSYSTEM, LOGGING);
             op.get(OP_ADDR).add("periodic-rotating-file-handler", "AUDIT");
             updates.add(op);
+
+            if (System.getProperty("elytron") != null) {
+                // /subsystem=elytron/security-domain=ApplicationDomain:undefine-attribute(name=security-event-listener)
+                op = new ModelNode();
+                op.get(OP).set(UNDEFINE_ATTRIBUTE_OPERATION);
+                op.get(OP_ADDR).add(SUBSYSTEM, "elytron");
+                op.get(OP_ADDR).add("security-domain", "ApplicationDomain");
+                op.get("name").set("security-event-listener");
+                updates.add(op);
+            }
+
             executeOperations(updates);
 
+            if (System.getProperty("elytron") != null) {
+                ServerReload.executeReloadAndWaitForCompletion(managementClient.getControllerClient(), 50000);
+            }
         }
     }
 
@@ -180,7 +213,7 @@ public class SecurityAuditingTestCase extends AnnSBTest {
 
         testSingleMethodAnnotationsUser1Template(MODULE, log, beanClass());
 
-        checkAuditLog(reader, "TRACE.+org.jboss.security.audit.+Success.+user1");
+        checkAuditLog(reader, "(TRACE.+org.jboss.security.audit.+Success.+user1|SecurityAuthenticationSuccessfulEvent.*\"name\":\"user1\")");
 
     }
 
@@ -235,14 +268,14 @@ public class SecurityAuditingTestCase extends AnnSBTest {
 
     /*
      * A {@link ServerSetupTask} instance which creates security domains for this test case.
-     * 
+     *
      * @author Josef Cacek
      */
     static class SecurityDomainsSetup extends AbstractSecurityDomainsServerSetupTask {
 
         /*
          * Returns SecurityDomains configuration for this testcase.
-         * 
+         *
          * @see org.jboss.as.test.integration.security.common.AbstractSecurityDomainsServerSetupTask#getSecurityDomains()
          */
         @Override

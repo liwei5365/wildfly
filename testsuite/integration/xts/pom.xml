@@ -3,11 +3,10 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-ts-integ</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Final-SNAPSHOT</version>
     </parent>
 
     <!-- ********************************************************************************** -->
@@ -24,7 +23,6 @@
     </properties>
 
     <profiles>
-
         <profile>
             <id>xts.integration.tests.profile</id>
             <activation>
@@ -54,6 +52,12 @@
                     <version>${version.org.jboss.narayana}</version>
                     <scope>test</scope>
                 </dependency>
+                <dependency>
+                    <groupId>org.jboss.narayana.xts</groupId>
+                    <artifactId>jbossxts</artifactId>
+                    <classifier>api</classifier>
+                    <scope>test</scope>
+                </dependency>
             </dependencies>
 
             <build>
@@ -76,6 +80,25 @@
                             </execution>
                         </executions>
                     </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>process-test-resources</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <target>
+                                <ant antfile="${jbossas.ts.integ.dir}/src/test/scripts/xts-build.xml">
+                                    <target name="build-xts"/>
+                                </ant>
+                            </target>
+                        </configuration>
+                    </plugin>
                     <!--
                        Surefire test executions
                     -->
@@ -87,6 +110,10 @@
                             <includes>
                                 <include>org/jboss/as/test/xts/**/*TestCase.java</include>
                             </includes>
+                            <systemPropertyVariables combine.children="append">
+                                <arquillian.launch>xts-servers</arquillian.launch>
+                            </systemPropertyVariables>
+                            <!--<argLine>${surefire.system.args}</argLine>-->
                         </configuration>
                     </plugin>
                 </plugins>
@@ -109,6 +136,7 @@
                                 <!-- This test uses Byteman and requires permission on a random port every time -->
                                 <exclude>**/BAParticipantCompletionTestCase.java</exclude>
                             </excludes>
+                            <!--<argLine>${surefire.system.args}</argLine>-->
                         </configuration>
                     </plugin>
                 </plugins>

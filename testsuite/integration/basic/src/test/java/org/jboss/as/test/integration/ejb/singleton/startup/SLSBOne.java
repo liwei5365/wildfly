@@ -22,12 +22,12 @@
 
 package org.jboss.as.test.integration.ejb.singleton.startup;
 
-import org.jboss.logging.Logger;
-
 import javax.annotation.PostConstruct;
 import javax.ejb.EJB;
 import javax.ejb.Local;
 import javax.ejb.Stateless;
+
+import org.jboss.logging.Logger;
 
 /**
  * User: jpai
@@ -48,7 +48,7 @@ public class SLSBOne implements DoSomethingView {
 
     @Override
     public void doSomething() {
-        logger.info(this.getClass().getName() + "#doSomething()");
+        logger.trace(this.getClass().getName() + "#doSomething()");
     }
 
 }

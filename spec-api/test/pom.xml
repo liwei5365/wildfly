@@ -28,11 +28,14 @@
   <parent>
     <groupId>org.wildfly</groupId>
     <artifactId>wildfly-spec-api</artifactId>
-    <version>10.0.0.CR5-SNAPSHOT</version>
+    <version>11.0.0.Final-SNAPSHOT</version>
   </parent>
 
   <artifactId>wildfly-spec-api-test</artifactId>
   <name>WildFly: Validation Tests for Exported Java EE Specification APIs</name>
   <description>Validation Tests for Java EE Specification APIs exported by the Application Server</description>
-
+  <properties>
+    <!-- we want unused imports in tish case, so lets skip checkstyle-->
+    <checkstyle.skip>true</checkstyle.skip>
+  </properties>
 </project>

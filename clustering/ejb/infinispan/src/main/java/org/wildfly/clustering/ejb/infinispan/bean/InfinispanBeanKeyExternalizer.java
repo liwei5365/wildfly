@@ -26,33 +26,32 @@ import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
 import org.jboss.ejb.client.SessionID;
-import org.wildfly.clustering.ejb.infinispan.BasicSessionIDExternalizer;
+import org.kohsuke.MetaInfServices;
+import org.wildfly.clustering.ejb.infinispan.SessionIDExternalizer;
+import org.wildfly.clustering.infinispan.spi.persistence.KeyFormat;
+import org.wildfly.clustering.infinispan.spi.persistence.SimpleKeyFormat;
 import org.wildfly.clustering.marshalling.Externalizer;
 
 /**
  * @author Paul Ferraro
  */
-public class InfinispanBeanKeyExternalizer implements Externalizer<InfinispanBeanKey<SessionID>> {
+@MetaInfServices({ Externalizer.class, KeyFormat.class })
+public class InfinispanBeanKeyExternalizer extends SimpleKeyFormat<InfinispanBeanKey<SessionID>> implements Externalizer<InfinispanBeanKey<SessionID>> {
 
-    private final Externalizer<SessionID> externalizer = new BasicSessionIDExternalizer();
+    private static final SessionIDExternalizer<SessionID> EXTERNALIZER = new SessionIDExternalizer<>(SessionID.class);
+
+    @SuppressWarnings("unchecked")
+    public InfinispanBeanKeyExternalizer() {
+        super((Class<InfinispanBeanKey<SessionID>>) (Class<?>) InfinispanBeanKey.class, value -> new InfinispanBeanKey<>(EXTERNALIZER.parse(value)), key -> EXTERNALIZER.format(key.getId()));
+    }
 
     @Override
     public void writeObject(ObjectOutput output, InfinispanBeanKey<SessionID> key) throws IOException {
-        output.writeUTF(key.getBeanName());
-        this.externalizer.writeObject(output, key.getId());
+        EXTERNALIZER.writeObject(output, key.getId());
     }
 
     @Override
     public InfinispanBeanKey<SessionID> readObject(ObjectInput input) throws IOException, ClassNotFoundException {
-        String beanName = input.readUTF();
-        SessionID id = this.externalizer.readObject(input);
-        return new InfinispanBeanKey<>(beanName, id);
-    }
-
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    @Override
-    public Class<InfinispanBeanKey<SessionID>> getTargetClass() {
-        Class targetClass = InfinispanBeanKey.class;
-        return targetClass;
+        return new InfinispanBeanKey<>(EXTERNALIZER.readObject(input));
     }
 }

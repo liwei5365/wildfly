@@ -27,16 +27,15 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.jboss.as.controller.AttributeDefinition;
+import org.jboss.as.controller.ReloadRequiredRemoveStepHandler;
 import org.jboss.as.controller.ReloadRequiredWriteAttributeHandler;
 import org.jboss.as.controller.SimpleAttributeDefinition;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
 import org.jboss.as.controller.SimpleResourceDefinition;
+import org.jboss.as.controller.capability.RuntimeCapability;
 import org.jboss.as.controller.registry.AttributeAccess;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.registry.OperationEntry;
-import org.jboss.as.controller.transform.description.DiscardAttributeChecker;
-import org.jboss.as.controller.transform.description.RejectAttributeChecker;
-import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
 import org.wildfly.clustering.ejb.BeanManagerFactoryBuilderConfiguration;
@@ -49,6 +48,9 @@ import org.wildfly.clustering.ejb.BeanManagerFactoryBuilderConfiguration;
 public class EJB3RemoteResourceDefinition extends SimpleResourceDefinition {
 
     public static final EJB3RemoteResourceDefinition INSTANCE = new EJB3RemoteResourceDefinition();
+    public static final String EJB_REMOTE_CAPABILITY_NAME = "org.wildfly.ejb.remote";
+
+    static final RuntimeCapability<Void> EJB_REMOTE_CAPABILITY = RuntimeCapability.Builder.of(EJB_REMOTE_CAPABILITY_NAME).setServiceType(Void.class).build();
 
     static final SimpleAttributeDefinition CLIENT_MAPPINGS_CLUSTER_NAME =
             new SimpleAttributeDefinitionBuilder(EJB3SubsystemModel.CLIENT_MAPPINGS_CLUSTER_NAME, ModelType.STRING, true)
@@ -69,6 +71,12 @@ public class EJB3RemoteResourceDefinition extends SimpleResourceDefinition {
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
                     .build();
 
+    static final SimpleAttributeDefinition EXECUTE_IN_WORKER =
+            new SimpleAttributeDefinitionBuilder(EJB3SubsystemModel.EXECUTE_IN_WORKER, ModelType.BOOLEAN, true)
+                    .setAllowExpression(true)
+                    .setDefaultValue(new ModelNode(true))
+                    .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
+                    .build();
 
     private static final Map<String, AttributeDefinition> ATTRIBUTES;
 
@@ -77,17 +85,18 @@ public class EJB3RemoteResourceDefinition extends SimpleResourceDefinition {
         map.put(CLIENT_MAPPINGS_CLUSTER_NAME.getName(), CLIENT_MAPPINGS_CLUSTER_NAME);
         map.put(CONNECTOR_REF.getName(), CONNECTOR_REF);
         map.put(THREAD_POOL_NAME.getName(), THREAD_POOL_NAME);
+        map.put(EXECUTE_IN_WORKER.getName(), EXECUTE_IN_WORKER);
 
         ATTRIBUTES = Collections.unmodifiableMap(map);
     }
 
 
     private EJB3RemoteResourceDefinition() {
-        super(EJB3SubsystemModel.REMOTE_SERVICE_PATH,
-                EJB3Extension.getResourceDescriptionResolver(EJB3SubsystemModel.REMOTE),
-                EJB3RemoteServiceAdd.INSTANCE, EJB3RemoteServiceRemove.INSTANCE,
-                // WFLY-3438
-                OperationEntry.Flag.RESTART_ALL_SERVICES, OperationEntry.Flag.RESTART_ALL_SERVICES);
+        super(new Parameters(EJB3SubsystemModel.REMOTE_SERVICE_PATH, EJB3Extension.getResourceDescriptionResolver(EJB3SubsystemModel.REMOTE))
+                .setAddHandler(EJB3RemoteServiceAdd.INSTANCE)
+                .setAddRestartLevel(OperationEntry.Flag.RESTART_ALL_SERVICES)
+                .setRemoveHandler(ReloadRequiredRemoveStepHandler.INSTANCE)
+                .setRemoveRestartLevel(OperationEntry.Flag.RESTART_ALL_SERVICES));
     }
 
     @Override
@@ -105,24 +114,8 @@ public class EJB3RemoteResourceDefinition extends SimpleResourceDefinition {
         resourceRegistration.registerSubModel(new RemoteConnectorChannelCreationOptionResource());
     }
 
-    static void registerTransformers_1_1_0(ResourceTransformationDescriptionBuilder builder) {
-        RemoteConnectorChannelCreationOptionResource.registerTransformers_1_1_0(builder.addChildResource(EJB3SubsystemModel.REMOTE_SERVICE_PATH));
+    @Override
+    public void registerCapabilities(ManagementResourceRegistration registration) {
+        registration.registerCapability(EJB_REMOTE_CAPABILITY);
     }
-
-    static void registerTransformers_1_2_0_and_1_3_0(ResourceTransformationDescriptionBuilder parent) {
-        ResourceTransformationDescriptionBuilder remoteService = parent.addChildResource(EJB3SubsystemModel.REMOTE_SERVICE_PATH);
-        remoteService.getAttributeBuilder()
-                .setDiscard(new DiscardAttributeChecker.DiscardAttributeValueChecker(new ModelNode(BeanManagerFactoryBuilderConfiguration.DEFAULT_CONTAINER_NAME)),CLIENT_MAPPINGS_CLUSTER_NAME)
-                .addRejectCheck(RejectAttributeChecker.DEFINED, CLIENT_MAPPINGS_CLUSTER_NAME)
-                .end();
-    }
-
-    static void registerTransformers_3_0(ResourceTransformationDescriptionBuilder parent) {
-        ResourceTransformationDescriptionBuilder remoteService = parent.addChildResource(EJB3SubsystemModel.REMOTE_SERVICE_PATH);
-        remoteService.getAttributeBuilder()
-                .setDiscard(new DiscardAttributeChecker.DiscardAttributeValueChecker(new ModelNode(BeanManagerFactoryBuilderConfiguration.DEFAULT_CONTAINER_NAME)),CLIENT_MAPPINGS_CLUSTER_NAME)
-                .addRejectCheck(RejectAttributeChecker.DEFINED, CLIENT_MAPPINGS_CLUSTER_NAME)
-                .end();
-    }
-
 }

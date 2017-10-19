@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -30,10 +30,12 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 import io.undertow.server.HttpHandler;
+import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.CanonicalPathHandler;
 import io.undertow.server.handlers.NameVirtualHostHandler;
 import io.undertow.server.handlers.ResponseCodeHandler;
 import io.undertow.server.handlers.error.SimpleErrorPageHandler;
+import io.undertow.util.Headers;
 import org.jboss.as.network.SocketBinding;
 import org.jboss.msc.inject.Injector;
 import org.jboss.msc.service.Service;
@@ -53,7 +55,7 @@ public class Server implements Service<Server> {
     private final InjectedValue<ServletContainerService> servletContainer = new InjectedValue<>();
     private final InjectedValue<UndertowService> undertowService = new InjectedValue<>();
     private volatile HttpHandler root;
-    private final List<ListenerService<?>> listeners = new CopyOnWriteArrayList<>();
+    private final List<ListenerService> listeners = new CopyOnWriteArrayList<>();
     private final Set<Host> hosts = new CopyOnWriteArraySet<>();
 
     private final HashMap<Integer,Integer> securePortMappings = new HashMap<>();
@@ -68,16 +70,17 @@ public class Server implements Service<Server> {
         root = virtualHostHandler;
         root = new SimpleErrorPageHandler(root);
         root = new CanonicalPathHandler(root);
+        root = new DefaultHostHandler(root);
 
         UndertowLogger.ROOT_LOGGER.startedServer(name);
         undertowService.getValue().registerServer(this);
     }
 
-    protected void registerListener(ListenerService<?> listener) {
+    protected void registerListener(ListenerService listener) {
            listeners.add(listener);
            if (!listener.isSecure()) {
-               SocketBinding binding = (SocketBinding) listener.getBinding().getValue();
-               SocketBinding redirectBinding = (SocketBinding) listener.getRedirectSocket().getOptionalValue();
+               SocketBinding binding = listener.getBinding().getValue();
+               SocketBinding redirectBinding = listener.getRedirectSocket().getOptionalValue();
                if (redirectBinding!=null) {
                    securePortMappings.put(binding.getAbsolutePort(), redirectBinding.getAbsolutePort());
                }else{
@@ -86,10 +89,10 @@ public class Server implements Service<Server> {
            }
        }
 
-       protected void unregisterListener(ListenerService<?> listener) {
+       protected void unregisterListener(ListenerService listener) {
            listeners.remove(listener);
            if (!listener.isSecure()) {
-               SocketBinding binding = (SocketBinding) listener.getBinding().getValue();
+               SocketBinding binding = listener.getBinding().getValue();
                securePortMappings.remove(binding.getAbsolutePort());
            }
        }
@@ -140,7 +143,7 @@ public class Server implements Service<Server> {
         return root;
     }
 
-    Injector<UndertowService> getUndertowServiceInjector() {
+    protected Injector<UndertowService> getUndertowServiceInjector() {
         return undertowService;
     }
 
@@ -160,7 +163,30 @@ public class Server implements Service<Server> {
         return Collections.unmodifiableSet(hosts);
     }
 
-    public List<ListenerService<?>> getListeners() {
-        return listeners;
+    public List<UndertowListener> getListeners() {
+        return (List)listeners;
+    }
+
+    public String getRoute() {
+        UndertowService service = this.undertowService.getValue();
+        String defaultServerRoute = service.getInstanceId();
+        return this.name.equals(service.getDefaultServer()) ? defaultServerRoute : String.join("-", defaultServerRoute, this.name);
+    }
+
+    private final class DefaultHostHandler implements HttpHandler {
+
+        private final HttpHandler next;
+
+        private DefaultHostHandler(HttpHandler next) {
+            this.next = next;
+        }
+
+        @Override
+        public void handleRequest(HttpServerExchange exchange) throws Exception {
+            if(!exchange.getRequestHeaders().contains(Headers.HOST)) {
+                exchange.getRequestHeaders().put(Headers.HOST, defaultHost + ":" + exchange.getDestinationAddress().getPort());
+            }
+            next.handleRequest(exchange);
+        }
     }
 }

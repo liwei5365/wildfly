@@ -35,7 +35,7 @@ import org.junit.runner.RunWith;
 
 /**
  * Test migrated from EJB3 testsuite [JBQA-5451] - from test ejbthree1852
- * 
+ *
  * @author Carlo de Wolf, Ondrej Chaloupka
  */
 @RunWith(Arquillian.class)
@@ -46,7 +46,6 @@ public class InterceptorOrderUnitTestCase {
         JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "interceptor-descriptor-test.jar");
         jar.addPackage(InterceptorOrderUnitTestCase.class.getPackage());
         jar.addAsManifestResource(InterceptorOrderUnitTestCase.class.getPackage(), "ejb-jar.xml", "ejb-jar.xml");
-        //System.out.println(jar.toString(true));
         return jar;
     }
 

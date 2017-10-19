@@ -23,25 +23,27 @@
 package org.wildfly.extension.clustering.singleton;
 
 import static org.wildfly.extension.clustering.singleton.ElectionPolicyResourceDefinition.Attribute.*;
+import static org.wildfly.extension.clustering.singleton.ElectionPolicyResourceDefinition.Capability.*;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import org.jboss.as.clustering.controller.CapabilityDependency;
-import org.jboss.as.clustering.controller.RequiredCapability;
+import org.jboss.as.clustering.controller.CapabilityServiceNameProvider;
+import org.jboss.as.clustering.controller.CommonUnaryRequirement;
 import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.as.network.OutboundSocketBinding;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceBuilder;
-import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceTarget;
 import org.jboss.msc.service.ValueService;
 import org.jboss.msc.value.Value;
 import org.wildfly.clustering.service.Builder;
 import org.wildfly.clustering.service.Dependency;
+import org.wildfly.clustering.service.InjectedValueDependency;
 import org.wildfly.clustering.singleton.SingletonElectionPolicy;
 import org.wildfly.clustering.singleton.election.NamePreference;
 import org.wildfly.clustering.singleton.election.Preference;
@@ -52,29 +54,20 @@ import org.wildfly.extension.clustering.singleton.election.OutboundSocketBinding
  * Builds a service that provides an election policy.
  * @author Paul Ferraro
  */
-public abstract class ElectionPolicyBuilder extends ElectionPolicyServiceNameProvider implements ResourceServiceBuilder<SingletonElectionPolicy>, Value<SingletonElectionPolicy> {
+public abstract class ElectionPolicyBuilder extends CapabilityServiceNameProvider implements ResourceServiceBuilder<SingletonElectionPolicy>, Value<SingletonElectionPolicy> {
 
     private final List<Preference> preferences = new CopyOnWriteArrayList<>();
     private final List<Dependency> dependencies = new CopyOnWriteArrayList<>();
 
-    protected ElectionPolicyBuilder(String name) {
-        super(name);
+    protected ElectionPolicyBuilder(PathAddress address) {
+        super(ELECTION_POLICY, address);
     }
 
     @Override
     public ServiceBuilder<SingletonElectionPolicy> build(ServiceTarget target) {
-        final List<Preference> preferences = this.preferences;
-        Value<SingletonElectionPolicy> value = new Value<SingletonElectionPolicy>() {
-            @Override
-            public SingletonElectionPolicy getValue() {
-                SingletonElectionPolicy policy = ElectionPolicyBuilder.this.getValue();
-                return preferences.isEmpty() ? policy : new PreferredSingletonElectionPolicy(policy, preferences);
-            }
-        };
-        ServiceBuilder<SingletonElectionPolicy> builder = target.addService(this.getServiceName(), new ValueService<>(value)).setInitialMode(ServiceController.Mode.ON_DEMAND);
-        for (Dependency dependency : this.dependencies) {
-            dependency.register(builder);
-        }
+        Value<SingletonElectionPolicy> value = () -> this.preferences.isEmpty() ? this.getValue() : new PreferredSingletonElectionPolicy(this.getValue(), this.preferences);
+        ServiceBuilder<SingletonElectionPolicy> builder = target.addService(this.getServiceName(), new ValueService<>(value));
+        this.dependencies.forEach(dependency -> dependency.register(builder));
         return builder;
     }
 
@@ -82,14 +75,16 @@ public abstract class ElectionPolicyBuilder extends ElectionPolicyServiceNamePro
     public Builder<SingletonElectionPolicy> configure(OperationContext context, ModelNode model) throws OperationFailedException {
         this.preferences.clear();
         this.dependencies.clear();
-        for (String bindingName : ModelNodes.asStringList(SOCKET_BINDING_PREFERENCES.getDefinition().resolveModelAttribute(context, model))) {
-            CapabilityDependency<OutboundSocketBinding> binding = new CapabilityDependency<>(context, RequiredCapability.OUTBOUND_SOCKET_BINDING, bindingName, OutboundSocketBinding.class);
-            this.preferences.add(new OutboundSocketBindingPreference(binding));
-            this.dependencies.add(binding);
-        }
-        for (String nodeName : ModelNodes.asStringList(NAME_PREFERENCES.getDefinition().resolveModelAttribute(context, model))) {
-            this.preferences.add(new NamePreference(nodeName));
-        }
+        ModelNodes.optionalList(SOCKET_BINDING_PREFERENCES.resolveModelAttribute(context, model)).ifPresent(bindings -> {
+            bindings.stream().map(ModelNode::asString).forEach(bindingName -> {
+                InjectedValueDependency<OutboundSocketBinding> binding = new InjectedValueDependency<>(CommonUnaryRequirement.OUTBOUND_SOCKET_BINDING.getServiceName(context, bindingName), OutboundSocketBinding.class);
+                this.preferences.add(new OutboundSocketBindingPreference(binding));
+                this.dependencies.add(binding);
+            });
+        });
+        ModelNodes.optionalList(NAME_PREFERENCES.resolveModelAttribute(context, model)).ifPresent(names -> {
+            names.stream().map(ModelNode::asString).forEach(name -> this.preferences.add(new NamePreference(name)));
+        });
         return this;
     }
 }

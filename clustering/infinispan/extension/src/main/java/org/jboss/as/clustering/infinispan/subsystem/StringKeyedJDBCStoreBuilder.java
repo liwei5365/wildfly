@@ -22,49 +22,49 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
+import java.util.ServiceLoader;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+
 import org.infinispan.configuration.cache.PersistenceConfiguration;
 import org.infinispan.persistence.jdbc.configuration.JdbcStringBasedStoreConfiguration;
 import org.infinispan.persistence.jdbc.configuration.JdbcStringBasedStoreConfigurationBuilder;
 import org.infinispan.persistence.jdbc.configuration.TableManipulationConfiguration;
-import org.jboss.as.controller.OperationContext;
-import org.jboss.as.controller.OperationFailedException;
-import org.jboss.dmr.ModelNode;
+import org.infinispan.persistence.keymappers.TwoWayKey2StringMapper;
+import org.jboss.as.controller.PathAddress;
+import org.jboss.modules.Module;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.msc.value.InjectedValue;
+import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
 public class StringKeyedJDBCStoreBuilder extends JDBCStoreBuilder<JdbcStringBasedStoreConfiguration, JdbcStringBasedStoreConfigurationBuilder> {
 
-    private final InjectedValue<TableManipulationConfiguration> table = new InjectedValue<>();
+    private final ValueDependency<TableManipulationConfiguration> table;
+    private final ValueDependency<Module> module;
 
-    private final String containerName;
-    private final String cacheName;
-
-    private volatile JdbcStringBasedStoreConfigurationBuilder builder;
-
-    public StringKeyedJDBCStoreBuilder(String containerName, String cacheName) {
-        super(JdbcStringBasedStoreConfigurationBuilder.class, containerName, cacheName);
-        this.containerName = containerName;
-        this.cacheName = cacheName;
+    StringKeyedJDBCStoreBuilder(PathAddress cacheAddress) {
+        super(cacheAddress, JdbcStringBasedStoreConfigurationBuilder.class);
+        PathAddress containerAddress = cacheAddress.getParent();
+        this.table = new InjectedValueDependency<>(CacheComponent.STRING_TABLE.getServiceName(cacheAddress), TableManipulationConfiguration.class);
+        this.module = new InjectedValueDependency<>(CacheContainerComponent.MODULE.getServiceName(containerAddress), Module.class);
     }
 
     @Override
     public ServiceBuilder<PersistenceConfiguration> build(ServiceTarget target) {
-        return super.build(target).addDependency(CacheComponent.STRING_TABLE.getServiceName(this.containerName, this.cacheName), TableManipulationConfiguration.class, this.table);
+        ServiceBuilder<PersistenceConfiguration> builder = super.build(target);
+        Stream.of(this.table, this.module).forEach(dependency -> dependency.register(builder));
+        return builder;
     }
 
     @Override
-    public PersistenceConfiguration getValue() {
-        this.builder.table().read(this.table.getValue());
-        return super.getValue();
-    }
-
-    @Override
-    JdbcStringBasedStoreConfigurationBuilder createStore(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.builder = super.createStore(context, model);
-        return this.builder;
+    public void accept(JdbcStringBasedStoreConfigurationBuilder builder) {
+        builder.table().read(this.table.getValue());
+        StreamSupport.stream(ServiceLoader.load(TwoWayKey2StringMapper.class, this.module.getValue().getClassLoader()).spliterator(), false).findFirst()
+                .ifPresent(impl -> builder.key2StringMapper(impl.getClass()));
+        super.accept(builder);
     }
 }

@@ -25,6 +25,7 @@ package org.jboss.as.test.integration.ejb.mdb.cdi;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
 
+import java.io.IOException;
 import java.util.Hashtable;
 import java.util.List;
 
@@ -37,11 +38,15 @@ import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.as.arquillian.api.ServerSetup;
 import org.jboss.as.arquillian.api.ServerSetupTask;
 import org.jboss.as.arquillian.container.ManagementClient;
+import org.jboss.as.controller.PathAddress;
+import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
+import org.jboss.as.controller.operations.common.Util;
 import org.jboss.as.test.integration.common.jms.JMSOperations;
 import org.jboss.as.test.integration.common.jms.JMSOperationsProvider;
 import org.jboss.as.test.integration.ejb.mdb.JMSMessagingUtil;
 import org.jboss.as.test.integration.jca.ear.RarInsideEarReDeploymentTestCase;
 import org.jboss.as.test.integration.jca.rar.MultipleAdminObject1;
+import org.jboss.as.test.integration.management.ManagementOperations;
 import org.jboss.as.test.integration.management.base.AbstractMgmtTestBase;
 import org.jboss.as.test.integration.management.base.ContainerResourceMgmtTestBase;
 import org.jboss.as.test.integration.management.util.MgmtOperationException;
@@ -63,16 +68,16 @@ import org.junit.runner.RunWith;
 
 /**
  * Tests that the CDI request scope is active in MDB invocations.
- * 
+ *
  * @author baranowb
  */
 @RunWith(Arquillian.class)
 @ServerSetup({ MDBRAScopeCdiIntegrationTestCase.JmsQueueSetup.class })
 public class MDBRAScopeCdiIntegrationTestCase extends ContainerResourceMgmtTestBase {
 
-    public final static String testDeploymentName = "test.jar";
-    public final static String deploymentName = "test-ear.ear";
-    public final static String subDeploymentName = "ear_packaged.rar";
+    public static final String testDeploymentName = "test.jar";
+    public static final String deploymentName = "test-ear.ear";
+    public static final String subDeploymentName = "ear_packaged.rar";
 
     private ModelNode raAddress_subdeployment;
     private ModelNode raAddress_regular;
@@ -104,8 +109,15 @@ public class MDBRAScopeCdiIntegrationTestCase extends ContainerResourceMgmtTestB
         setupSubdeployedRA();
     }
 
+    @Override
+    protected void remove(ModelNode address) throws IOException, MgmtOperationException {
+        ModelNode operation = Util.createRemoveOperation(PathAddress.pathAddress(address));
+        operation.get(ModelDescriptionConstants.OPERATION_HEADERS, ModelDescriptionConstants.ALLOW_RESOURCE_SERVICE_RESTART).set(true);
+        ManagementOperations.executeOperation(getModelControllerClient(), operation);
+    }
+
     /**
-     * 
+     *
      */
     private void setupSubdeployedRA() throws Exception {
         // since it is created after deployment it needs activation
@@ -117,7 +129,7 @@ public class MDBRAScopeCdiIntegrationTestCase extends ContainerResourceMgmtTestB
     }
 
     /**
-     * 
+     *
      */
     private void setupStandaloneRA() throws Exception {
         raAddress_regular = new ModelNode();
@@ -238,7 +250,7 @@ public class MDBRAScopeCdiIntegrationTestCase extends ContainerResourceMgmtTestB
         final Hashtable env = new Hashtable();
         env.put(Context.URL_PKG_PREFIXES, "org.jboss.ejb.client.naming");
         env.put(Context.INITIAL_CONTEXT_FACTORY, org.jboss.naming.remote.client.InitialContextFactory.class.getName());
-        env.put(Context.PROVIDER_URL, "remote://" + TestSuiteEnvironment.getServerAddress() + ":" + 4447);
+        env.put(Context.PROVIDER_URL, "remote+http://" + TestSuiteEnvironment.getServerAddress() + ":" + 8080);
         return new InitialContext(env);
     }
 }

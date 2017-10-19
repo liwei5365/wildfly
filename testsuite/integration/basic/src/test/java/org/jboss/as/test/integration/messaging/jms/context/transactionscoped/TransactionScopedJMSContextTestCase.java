@@ -22,6 +22,7 @@
 
 package org.jboss.as.test.integration.messaging.jms.context.transactionscoped;
 
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 import static org.junit.Assert.assertEquals;
 
 import javax.annotation.Resource;
@@ -37,13 +38,12 @@ import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.as.test.integration.messaging.jms.context.transactionscoped.auxiliary.AppScopedBean;
 import org.jboss.as.test.integration.messaging.jms.context.transactionscoped.auxiliary.ThreadLauncher;
-import org.jboss.as.test.shared.TimeoutUtil;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.wildfly.security.permission.ElytronPermission;
 
 /**
  * @author <a href="http://jmesnil.net/">Jeff Mesnil</a> (c) 2013 Red Hat inc.
@@ -65,10 +65,12 @@ public class TransactionScopedJMSContextTestCase {
     @Deployment
     public static JavaArchive createTestArchive() {
         return ShrinkWrap.create(JavaArchive.class, "TransactionScopedJMSContextTestCase.jar")
-                .addClass(TimeoutUtil.class)
                 .addPackage(AppScopedBean.class.getPackage())
                 .addAsManifestResource(EmptyAsset.INSTANCE,
-                        "beans.xml");
+                        "beans.xml")
+                .addAsManifestResource(createPermissionsXmlAsset(
+                        new ElytronPermission("getSecurityDomain")
+                        ), "permissions.xml");
     }
 
     @Test

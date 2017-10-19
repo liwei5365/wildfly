@@ -22,25 +22,46 @@
 package org.wildfly.clustering.ee;
 
 /**
- * Exposes a mechanism to close or discard a batch.
+ * Exposes a mechanism to close a batch, and potentially discard it.
  * @author Paul Ferraro
  */
 public interface Batch extends AutoCloseable {
 
     /**
-     * Indicates whether or not this batch is active.
-     * @return true if this batch is active, false otherwise.
+     * The possible states of a batch.
      */
-    boolean isActive();
+    enum State {
+        /**
+         * The initial state of a batch.
+         * A batch remains active until it is discarded or closed.
+         */
+        ACTIVE,
+        /**
+         * Indicates that an active batch was discarded, but not yet closed.
+         * An active batch moves to this state following {@link Batch#discard()}.
+         */
+        DISCARDED,
+        /**
+         * The terminal state of a batch.
+         * A batch moves to this state following {@link Batch#close()}.
+         */
+        CLOSED
+    }
 
     /**
-     * End this batch.
+     * Closes this batch.  Batch may or may not have been discarded.
      */
     @Override
     void close();
 
     /**
-     * Discards this batch.
+     * Discards this batch.  A discarded batch must still be closed.
      */
     void discard();
+
+    /**
+     * Returns the state of this batch.
+     * @return the state of this batch.
+     */
+    State getState();
 }

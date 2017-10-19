@@ -27,10 +27,10 @@ import org.jboss.as.controller.descriptions.ResourceDescriptionResolver;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 
 /**
- * Resource definition for child resources that performs all registration via {@link #register(ManagementResourceRegistration)}.
+ * Resource definition for child resources that performs all registration via {@link Registration#register(Object)}.
  * @author Paul Ferraro
  */
-public abstract class ChildResourceDefinition extends AbstractResourceDefinition<ManagementResourceRegistration> {
+public abstract class ChildResourceDefinition<R extends ManagementResourceRegistration> extends AbstractResourceDefinition<R> {
 
     protected ChildResourceDefinition(PathElement path, ResourceDescriptionResolver resolver) {
         super(new Parameters(path, resolver));

@@ -23,7 +23,7 @@
 package org.jboss.as.test.integration.ws.anonymousPojos;
 
 import java.net.URL;
-import java.util.logging.Logger;
+import org.jboss.logging.Logger;
 
 import javax.xml.namespace.QName;
 import javax.xml.ws.Service;
@@ -57,7 +57,7 @@ public class Usecase1TestCase {
         final WebArchive war = ShrinkWrap.create(WebArchive.class, "anonymous-pojo-usecase1.war");
         war.addPackage(AnonymousPOJO.class.getPackage());
         war.addClass(AnonymousPOJO.class);
-        war.addAsWebInfResource(AnonymousPOJO.class.getPackage(),"web.xml","web.xml");
+        war.addAsWebInfResource(AnonymousPOJO.class.getPackage(), "web.xml", "web.xml");
         return war;
     }
 

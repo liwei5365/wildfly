@@ -22,31 +22,36 @@
 
 package org.wildfly.extension.clustering.singleton;
 
+import java.util.EnumSet;
+
+import org.jboss.as.clustering.controller.descriptions.SubsystemResourceDescriptionResolver;
 import org.jboss.as.controller.Extension;
 import org.jboss.as.controller.ExtensionContext;
 import org.jboss.as.controller.SubsystemRegistration;
 import org.jboss.as.controller.parsing.ExtensionParsingContext;
+import org.kohsuke.MetaInfServices;
 
 /**
  * Extension point for singleton subsystem.
  * @author Paul Ferraro
  */
+@MetaInfServices(Extension.class)
 public class SingletonExtension implements Extension {
 
     public static final String SUBSYSTEM_NAME = "singleton";
+
+    static final SubsystemResourceDescriptionResolver SUBSYSTEM_RESOLVER = new SubsystemResourceDescriptionResolver(SUBSYSTEM_NAME, SingletonExtension.class);
 
     @Override
     public void initialize(ExtensionContext context) {
         SubsystemRegistration registration = context.registerSubsystem(SUBSYSTEM_NAME, SingletonModel.CURRENT.getVersion());
 
         new SingletonResourceDefinition().register(registration);
-        registration.registerXMLElementWriter(new SingletonXMLWriter());
+        registration.registerXMLElementWriter(() -> new SingletonXMLWriter());
     }
 
     @Override
     public void initializeParsers(ExtensionParsingContext context) {
-        for (SingletonSchema schema: SingletonSchema.values()) {
-            context.setSubsystemXmlMapping(SUBSYSTEM_NAME, schema.getNamespaceUri(), new SingletonXMLReader(schema));
-        }
+        EnumSet.allOf(SingletonSchema.class).forEach(schema -> context.setSubsystemXmlMapping(SUBSYSTEM_NAME, schema.getNamespaceUri(), () -> new SingletonXMLReader(schema)));
     }
 }

@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2014, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -87,7 +87,7 @@ public class UndertowHandlersDeploymentProcessor implements DeploymentUnitProces
             try {
                 ClassLoader cl = module.getClassLoader();
                 if (hander.getModule() != null) {
-                    Module handlerModule = deploymentUnit.getAttachment(Attachments.SERVICE_MODULE_LOADER).loadModule(ModuleIdentifier.create(hander.getModule()));
+                    Module handlerModule = deploymentUnit.getAttachment(Attachments.SERVICE_MODULE_LOADER).loadModule(ModuleIdentifier.fromString(hander.getModule()));
                     cl = handlerModule.getClassLoader();
 
                 }

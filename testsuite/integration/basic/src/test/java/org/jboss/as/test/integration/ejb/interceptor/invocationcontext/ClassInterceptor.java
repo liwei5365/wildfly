@@ -40,7 +40,7 @@ public class ClassInterceptor {
         String ret = InvocationContextChecker.checkBeanInterceptorContext(ctx, "Default", "Class");
         return ret + ctx.proceed();
     }
-    
+
     @AroundTimeout
     Object interceptTimeout(InvocationContext ctx) throws Exception {
         String ret = InvocationContextChecker.checkTimeoutInterceptorContext(ctx, "Default", "Class");
@@ -50,7 +50,7 @@ public class ClassInterceptor {
 
     @PostConstruct
     void postConstruct(InvocationContext ctx) {
-        log.info("PostConstruct on ClassInterceptor called");
+        log.trace("PostConstruct on ClassInterceptor called");
         if (ctx.getMethod() != null) {
             throw new RuntimeException("InvocationContext.getMethod() on lifecycle event has to be null");
         }

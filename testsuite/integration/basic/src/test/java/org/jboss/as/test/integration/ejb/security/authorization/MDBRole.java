@@ -54,10 +54,10 @@ public class MDBRole implements MessageListener {
 
    @EJB
    Simple simple;
-   
+
    private String createResponse(){
       String response;
-      try{ 
+      try{
          response = simple.testAuthorizedRole();
       } catch (EJBAccessException ex) {
          response = "UNAUTHORIZED: testAuthorizedRole()";
@@ -91,7 +91,6 @@ public class MDBRole implements MessageListener {
 
    public void onMessage(Message message) {
       try {
-         //System.out.println("Message " + message);
          if (!"Let's test it!".equals(((TextMessage) message).getText())){
             throw new AssertionError("Unexpected message: " + ((TextMessage) message).getText() + " ; expected:\"Let's test it!\"");
          }

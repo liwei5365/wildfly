@@ -27,6 +27,7 @@ import java.util.concurrent.ScheduledExecutorService;
 
 import org.infinispan.Cache;
 import org.infinispan.remoting.transport.Address;
+import org.jboss.as.controller.capability.CapabilityServiceSupport;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
@@ -41,20 +42,21 @@ import org.wildfly.clustering.ejb.BeanManagerFactory;
 import org.wildfly.clustering.ejb.BeanManagerFactoryBuilderConfiguration;
 import org.wildfly.clustering.ejb.BeanPassivationConfiguration;
 import org.wildfly.clustering.group.NodeFactory;
+import org.wildfly.clustering.infinispan.spi.InfinispanCacheRequirement;
+import org.wildfly.clustering.infinispan.spi.InfinispanRequirement;
 import org.wildfly.clustering.infinispan.spi.affinity.KeyAffinityServiceFactory;
-import org.wildfly.clustering.infinispan.spi.service.CacheContainerServiceName;
-import org.wildfly.clustering.infinispan.spi.service.CacheServiceName;
 import org.wildfly.clustering.marshalling.jboss.MarshallingConfigurationRepository;
 import org.wildfly.clustering.registry.Registry;
 import org.wildfly.clustering.service.Builder;
-import org.wildfly.clustering.spi.CacheGroupServiceName;
-import org.wildfly.clustering.spi.GroupServiceName;
+import org.wildfly.clustering.spi.ClusteringCacheRequirement;
+import org.wildfly.clustering.spi.ClusteringRequirement;
 
 /**
  * @author Paul Ferraro
  */
-public class InfinispanBeanManagerFactoryBuilder<G, I, T> implements Builder<BeanManagerFactory<G, I, T, TransactionBatch>>, Value<BeanManagerFactory<G, I, T, TransactionBatch>>, InfinispanBeanManagerFactoryConfiguration {
+public class InfinispanBeanManagerFactoryBuilder<I, T> implements Builder<BeanManagerFactory<I, T, TransactionBatch>>, Value<BeanManagerFactory<I, T, TransactionBatch>>, InfinispanBeanManagerFactoryConfiguration {
 
+    private final CapabilityServiceSupport support;
     private final String name;
     private final BeanContext context;
     private final BeanManagerFactoryBuilderConfiguration configuration;
@@ -71,7 +73,8 @@ public class InfinispanBeanManagerFactoryBuilder<G, I, T> implements Builder<Bea
     private final InjectedValue<Registry> registry = new InjectedValue<>();
     private final InjectedValue<CommandDispatcherFactory> dispatcherFactory = new InjectedValue<>();
 
-    public InfinispanBeanManagerFactoryBuilder(String name, BeanContext context, BeanManagerFactoryBuilderConfiguration configuration) {
+    public InfinispanBeanManagerFactoryBuilder(CapabilityServiceSupport support, String name, BeanContext context, BeanManagerFactoryBuilderConfiguration configuration) {
+        this.support = support;
         this.name = name;
         this.context = context;
         this.configuration = configuration;
@@ -83,24 +86,24 @@ public class InfinispanBeanManagerFactoryBuilder<G, I, T> implements Builder<Bea
     }
 
     @Override
-    public ServiceBuilder<BeanManagerFactory<G, I, T, TransactionBatch>> build(ServiceTarget target) {
+    public ServiceBuilder<BeanManagerFactory<I, T, TransactionBatch>> build(ServiceTarget target) {
         String containerName = this.configuration.getContainerName();
         ServiceName deploymentUnitServiceName = this.context.getDeploymentUnitServiceName();
         return target.addService(this.getServiceName(), new ValueService<>(this))
-                .addDependency(CacheServiceName.CACHE.getServiceName(containerName, InfinispanBeanManagerFactoryBuilderFactory.getCacheName(deploymentUnitServiceName)), Cache.class, this.cache)
-                .addDependency(CacheContainerServiceName.AFFINITY.getServiceName(containerName), KeyAffinityServiceFactory.class, this.affinityFactory)
+                .addDependency(InfinispanCacheRequirement.CACHE.getServiceName(this.support, containerName, InfinispanBeanManagerFactoryBuilderFactory.getCacheName(deploymentUnitServiceName)), Cache.class, this.cache)
+                .addDependency(InfinispanRequirement.KEY_AFFINITY_FACTORY.getServiceName(this.support, containerName), KeyAffinityServiceFactory.class, this.affinityFactory)
                 .addDependency(deploymentUnitServiceName.append("marshalling"), MarshallingConfigurationRepository.class, this.repository)
                 .addDependency(deploymentUnitServiceName.append(this.name, "expiration"), ScheduledExecutorService.class, this.scheduler)
                 .addDependency(deploymentUnitServiceName.append(this.name, "eviction"), Executor.class, this.executor)
-                .addDependency(GroupServiceName.COMMAND_DISPATCHER.getServiceName(containerName), CommandDispatcherFactory.class, this.dispatcherFactory)
-                .addDependency(CacheGroupServiceName.REGISTRY.getServiceName(containerName, BeanManagerFactoryBuilderConfiguration.CLIENT_MAPPINGS_CACHE_NAME), Registry.class, this.registry)
-                .addDependency(CacheGroupServiceName.NODE_FACTORY.getServiceName(containerName, BeanManagerFactoryBuilderConfiguration.CLIENT_MAPPINGS_CACHE_NAME), NodeFactory.class, this.nodeFactory)
+                .addDependency(ClusteringRequirement.COMMAND_DISPATCHER_FACTORY.getServiceName(this.support, containerName), CommandDispatcherFactory.class, this.dispatcherFactory)
+                .addDependency(ClusteringCacheRequirement.REGISTRY.getServiceName(this.support, containerName, BeanManagerFactoryBuilderConfiguration.CLIENT_MAPPINGS_CACHE_NAME), Registry.class, this.registry)
+                .addDependency(ClusteringCacheRequirement.NODE_FACTORY.getServiceName(this.support, containerName, BeanManagerFactoryBuilderConfiguration.CLIENT_MAPPINGS_CACHE_NAME), NodeFactory.class, this.nodeFactory)
                 .setInitialMode(ServiceController.Mode.ON_DEMAND)
         ;
     }
 
     @Override
-    public BeanManagerFactory<G, I, T, TransactionBatch> getValue() {
+    public BeanManagerFactory<I, T, TransactionBatch> getValue() {
         return new InfinispanBeanManagerFactory<>(this);
     }
 

@@ -24,8 +24,8 @@ package org.jboss.as.ejb3.component.singleton;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 import javax.ejb.ConcurrencyManagementType;
@@ -39,10 +39,12 @@ import org.jboss.as.ee.component.EEApplicationClasses;
 import org.jboss.as.ee.component.ViewConfiguration;
 import org.jboss.as.ee.component.ViewConfigurator;
 import org.jboss.as.ee.component.ViewDescription;
+import org.jboss.as.ee.component.deployers.StartupCountdown;
 import org.jboss.as.ee.component.interceptors.InterceptorClassDescription;
 import org.jboss.as.ee.component.interceptors.InterceptorOrder;
 import org.jboss.as.ee.component.serialization.WriteReplaceInterface;
 import org.jboss.as.ee.metadata.MetadataCompleteMarker;
+import org.jboss.as.ejb3.component.EJBComponentDescription;
 import org.jboss.as.ejb3.logging.EjbLogger;
 import org.jboss.as.ejb3.component.EJBViewDescription;
 import org.jboss.as.ejb3.component.MethodIntf;
@@ -57,9 +59,12 @@ import org.jboss.as.ejb3.tx.EjbBMTInterceptor;
 import org.jboss.as.ejb3.tx.LifecycleCMTTxInterceptor;
 import org.jboss.as.ejb3.tx.TimerCMTTxInterceptor;
 import org.jboss.as.server.deployment.DeploymentPhaseContext;
+import org.jboss.as.server.deployment.DeploymentUnit;
 import org.jboss.as.server.deployment.DeploymentUnitProcessingException;
 import org.jboss.as.server.deployment.reflect.ClassReflectionIndex;
 import org.jboss.as.server.deployment.reflect.DeploymentReflectionIndex;
+import org.jboss.invocation.InterceptorFactory;
+import org.jboss.invocation.ImmediateInterceptorFactory;
 import org.jboss.metadata.ejb.spec.SessionBeanMetaData;
 import org.jboss.modules.ModuleLoader;
 import org.jboss.msc.service.ServiceName;
@@ -112,11 +117,32 @@ public class SingletonComponentDescription extends SessionBeanComponentDescripti
             getConfigurators().add(new ComponentConfigurator() {
                     @Override
                     public void configure(final DeploymentPhaseContext context, final ComponentDescription description, final ComponentConfiguration configuration) throws DeploymentUnitProcessingException {
-                        configuration.addPostConstructInterceptor(new SecurityContextInterceptorFactory(isExplicitSecurityDomainConfigured(), false,
-                                SecurityContextInterceptorFactory.contextIdForDeployment(context.getDeploymentUnit())), InterceptorOrder.View.SECURITY_CONTEXT);
+                        final DeploymentUnit deploymentUnit = context.getDeploymentUnit();
+                        String contextID = deploymentUnit.getName();
+                        if (deploymentUnit.getParent() != null) {
+                            contextID = deploymentUnit.getParent().getName() + "!" + contextID;
+                        }
+                        EJBComponentDescription ejbComponentDescription = (EJBComponentDescription) description;
+                        final boolean securityRequired = isExplicitSecurityDomainConfigured();
+                        ejbComponentDescription.setSecurityRequired(securityRequired);
+                        if (isSecurityDomainKnown()) {
+                            final HashMap<Integer, InterceptorFactory> elytronInterceptorFactories = getElytronInterceptorFactories(contextID, ejbComponentDescription.isEnableJacc(), false);
+                            elytronInterceptorFactories.forEach((priority, elytronInterceptorFactory) -> configuration.addPostConstructInterceptor(elytronInterceptorFactory, priority));
+                        } else {
+                            configuration.addPostConstructInterceptor(new SecurityContextInterceptorFactory(securityRequired, false, contextID), InterceptorOrder.View.SECURITY_CONTEXT);
+                        }
                     }
                 });
         }
+        getConfigurators().add(new ComponentConfigurator() {
+            @Override
+            public void configure(DeploymentPhaseContext context, ComponentDescription description, ComponentConfiguration configuration) throws DeploymentUnitProcessingException {
+                if (isInitOnStartup()) {
+                    final StartupCountdown startupCountdown = context.getDeploymentUnit().getAttachment(Attachments.STARTUP_COUNTDOWN);
+                    configuration.addPostConstructInterceptor(new ImmediateInterceptorFactory(new StartupCountDownInterceptor(startupCountdown)), InterceptorOrder.ComponentPostConstruct.STARTUP_COUNTDOWN_INTERCEPTOR);
+                }
+            }
+        });
         if (getTransactionManagementType().equals(TransactionManagementType.CONTAINER)) {
             //we need to add the transaction interceptor to the lifecycle methods
             getConfigurators().add(new ComponentConfigurator() {
@@ -231,7 +257,7 @@ public class SingletonComponentDescription extends SessionBeanComponentDescripti
             public void configure(final DeploymentPhaseContext context, final ComponentConfiguration componentConfiguration, final ViewDescription description, final ViewConfiguration configuration) throws DeploymentUnitProcessingException {
                 final DeploymentReflectionIndex index = context.getDeploymentUnit().getAttachment(org.jboss.as.server.deployment.Attachments.REFLECTION_INDEX);
                 ClassReflectionIndex classIndex = index.getClassIndex(WriteReplaceInterface.class);
-                for (Method method : (Collection<Method>)classIndex.getMethods()) {
+                for (Method method : classIndex.getMethods()) {
                     configuration.addClientInterceptor(method, StatelessWriteReplaceInterceptor.factory(configuration.getViewServiceName().getCanonicalName()), InterceptorOrder.Client.WRITE_REPLACE);
                 }
             }

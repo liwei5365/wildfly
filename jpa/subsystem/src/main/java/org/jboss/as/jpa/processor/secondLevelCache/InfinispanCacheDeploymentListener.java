@@ -22,12 +22,16 @@
 
 package org.jboss.as.jpa.processor.secondLevelCache;
 
+import static org.jboss.as.jpa.messages.JpaLogger.ROOT_LOGGER;
+
 import java.security.AccessController;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import org.infinispan.manager.EmbeddedCacheManager;
 import org.jboss.as.clustering.msc.ServiceContainerHelper;
+import org.jboss.as.controller.capability.CapabilityServiceSupport;
 import org.jboss.as.server.CurrentServiceContainer;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceContainer;
@@ -38,8 +42,8 @@ import org.jipijapa.cache.spi.Classification;
 import org.jipijapa.cache.spi.Wrapper;
 import org.jipijapa.event.spi.EventListener;
 import org.jipijapa.plugin.spi.PersistenceUnitMetadata;
-import org.wildfly.clustering.infinispan.spi.service.CacheContainerServiceName;
-import org.wildfly.clustering.infinispan.spi.service.CacheServiceName;
+import org.wildfly.clustering.infinispan.spi.InfinispanCacheRequirement;
+import org.wildfly.clustering.infinispan.spi.InfinispanRequirement;
 import org.wildfly.clustering.service.AliasServiceBuilder;
 
 /**
@@ -55,9 +59,13 @@ public class InfinispanCacheDeploymentListener implements EventListener {
     public static final String CONTAINER = "container";
     public static final String COLLECTION = "collection";
     public static final String ENTITY = "entity";
+    public static final String IMMUTABLE_ENTITY = "immutable-entity";
     public static final String NAME = "name";
+    public static final String NATURAL_ID = "natural-id";
     public static final String QUERY = "query";
     public static final String TIMESTAMPS = "timestamps";
+    public static final String PENDING_PUTS = "pending-puts";
+    public static final String CUSTOM = "custom";
 
     public static final String DEFAULT_CACHE_CONTAINER = "hibernate";
 
@@ -75,6 +83,8 @@ public class InfinispanCacheDeploymentListener implements EventListener {
     public Wrapper startCache(Classification classification, Properties properties) throws Exception {
         String cache_type = properties.getProperty(CACHE_TYPE);
         String container = properties.getProperty(CONTAINER);
+        // TODO Figure out how to access CapabilityServiceSupport from here
+        ServiceName containerServiceName = ServiceName.parse(InfinispanRequirement.CONTAINER.resolve(container));
         EmbeddedCacheManager embeddedCacheManager;
         ServiceName serviceName;
         if (CACHE_PRIVATE.equals(cache_type)) {
@@ -84,14 +94,14 @@ public class InfinispanCacheDeploymentListener implements EventListener {
 
             ServiceContainer target = currentServiceContainer();
             // Create a mock service that represents this session factory instance
-            ServiceBuilder<EmbeddedCacheManager> builder = new AliasServiceBuilder<>(serviceName, CacheContainerServiceName.CACHE_CONTAINER.getServiceName(container), EmbeddedCacheManager.class).build(target)
+            ServiceBuilder<EmbeddedCacheManager> builder = new AliasServiceBuilder<>(serviceName, containerServiceName, EmbeddedCacheManager.class).build(target)
                     .setInitialMode(ServiceController.Mode.ACTIVE)
             ;
             embeddedCacheManager = ServiceContainerHelper.getValue(builder.install());
 
         } else {
             // need a shared cache for jpa applications
-            serviceName = CacheContainerServiceName.CACHE_CONTAINER.getServiceName(container);
+            serviceName = containerServiceName;
             ServiceRegistry registry = currentServiceContainer();
             embeddedCacheManager = (EmbeddedCacheManager) registry.getRequiredService(serviceName).getValue();
         }
@@ -100,17 +110,37 @@ public class InfinispanCacheDeploymentListener implements EventListener {
 
     @Override
     public void addCacheDependencies(Classification classification, Properties properties) {
+        CapabilityServiceSupport support = CacheDeploymentListener.getInternalDeploymentCapablityServiceSupport();
         String container = properties.getProperty(CONTAINER);
         String entity = properties.getProperty(ENTITY);
+        String immutableEntity = properties.getProperty(IMMUTABLE_ENTITY);
+        String naturalId = properties.getProperty(NATURAL_ID);
         String collection = properties.getProperty(COLLECTION);
         String query = properties.getProperty(QUERY);
         String timestamps  = properties.getProperty(TIMESTAMPS);
-        CacheDeploymentListener.getInternalDeploymentServiceBuilder().addDependency(CacheServiceName.CONFIGURATION.getServiceName(container, entity));
-        CacheDeploymentListener.getInternalDeploymentServiceBuilder().addDependency(CacheServiceName.CONFIGURATION.getServiceName(container, collection));
-        if (query != null) {
-            CacheDeploymentListener.getInternalDeploymentServiceBuilder().addDependency(CacheServiceName.CONFIGURATION.getServiceName(container, timestamps));
-            CacheDeploymentListener.getInternalDeploymentServiceBuilder().addDependency(CacheServiceName.CONFIGURATION.getServiceName(container, query));
+        String pendingPuts = properties.getProperty(PENDING_PUTS);
+        String custom = properties.getProperty(CUSTOM);
+        addDependency(InfinispanCacheRequirement.CONFIGURATION.getServiceName(support, container, entity));
+        addDependency(InfinispanCacheRequirement.CONFIGURATION.getServiceName(support, container, immutableEntity));
+        addDependency(InfinispanCacheRequirement.CONFIGURATION.getServiceName(support, container, collection));
+        addDependency(InfinispanCacheRequirement.CONFIGURATION.getServiceName(support, container, naturalId));
+        if (pendingPuts != null) {
+            addDependency(InfinispanCacheRequirement.CONFIGURATION.getServiceName(support, container, pendingPuts));
         }
+        if (query != null) {
+            addDependency(InfinispanCacheRequirement.CONFIGURATION.getServiceName(support, container, timestamps));
+            addDependency(InfinispanCacheRequirement.CONFIGURATION.getServiceName(support, container, query));
+        }
+        if (custom != null) {
+            Stream.of(custom.split("\\s+")).forEach(config -> addDependency(InfinispanCacheRequirement.CONFIGURATION.getServiceName(support, container, config)));
+        }
+    }
+
+    private void addDependency(ServiceName dependency) {
+        if(ROOT_LOGGER.isTraceEnabled()) {
+            ROOT_LOGGER.tracef("add second level cache dependency on service '%s'", dependency.getCanonicalName());
+        }
+        CacheDeploymentListener.getInternalDeploymentServiceBuilder().addDependency(dependency);
     }
 
     @Override
@@ -118,7 +148,13 @@ public class InfinispanCacheDeploymentListener implements EventListener {
         if (!ignoreStop) {
             // Remove the service created in createCacheManager(...)
             CacheWrapper cacheWrapper = (CacheWrapper) wrapper;
+            if(ROOT_LOGGER.isTraceEnabled()) {
+                ROOT_LOGGER.tracef("stop second level cache by removing dependency on service '%s'", cacheWrapper.serviceName.getCanonicalName());
+            }
             ServiceContainerHelper.remove(currentServiceContainer().getRequiredService(cacheWrapper.serviceName));
+        } else if(ROOT_LOGGER.isTraceEnabled()){
+            CacheWrapper cacheWrapper = (CacheWrapper) wrapper;
+            ROOT_LOGGER.tracef("skipping stop of second level cache, will keep dependency on service '%s'", cacheWrapper.serviceName.getCanonicalName());
         }
     }
 

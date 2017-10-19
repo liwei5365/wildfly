@@ -24,7 +24,7 @@
   ~
   -->
 
-<domain xmlns="urn:jboss:domain:4.0">
+<domain xmlns="urn:jboss:domain:5.0">
 
     <extensions>
         <?EXTENSIONS?>
@@ -63,6 +63,7 @@
     <interfaces>
         <interface name="management"/>
         <interface name="public"/>
+        <interface name="private"/>
         <interface name="unsecure"/>
     </interfaces>
 
@@ -80,6 +81,28 @@
             </jvm>
             <socket-binding-group ref="standard-sockets"/>
         </server-group>
+        <server-group name="other-server-group" profile="default">
+            <socket-binding-group ref="standard-sockets"/>
+        </server-group>
     </server-groups>
+
+    <host-excludes>
+        <host-exclude name="WildFly10.0">
+            <host-release id="WildFly10.0"/>
+            <excluded-extensions>
+                <extension module="org.wildfly.extension.core-management"/>
+                <extension module="org.wildfly.extension.discovery"/>
+                <extension module="org.wildfly.extension.elytron"/>
+            </excluded-extensions>
+        </host-exclude>
+        <host-exclude name="WildFly10.1">
+            <host-release id="WildFly10.1"/>
+            <excluded-extensions>
+                <extension module="org.wildfly.extension.core-management"/>
+                <extension module="org.wildfly.extension.discovery"/>
+                <extension module="org.wildfly.extension.elytron"/>
+            </excluded-extensions>
+        </host-exclude>
+    </host-excludes>
 
 </domain>

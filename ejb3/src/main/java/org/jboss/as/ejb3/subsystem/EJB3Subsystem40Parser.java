@@ -57,8 +57,6 @@ import static org.jboss.as.ejb3.subsystem.EJB3SubsystemModel.STRICT_MAX_BEAN_INS
  */
 public class EJB3Subsystem40Parser extends EJB3Subsystem30Parser {
 
-    public static final EJB3Subsystem40Parser INSTANCE = new EJB3Subsystem40Parser();
-
     protected EJB3Subsystem40Parser() {
     }
 
@@ -88,6 +86,9 @@ public class EJB3Subsystem40Parser extends EJB3Subsystem30Parser {
                     break;
                 case THREAD_POOL_NAME:
                     EJB3RemoteResourceDefinition.THREAD_POOL_NAME.parseAndSetParameter(value, operation, reader);
+                    break;
+                case EXECUTE_IN_WORKER:
+                    EJB3RemoteResourceDefinition.EXECUTE_IN_WORKER.parseAndSetParameter(value, operation, reader);
                     break;
                 default:
                     throw unexpectedAttribute(reader, i);
@@ -148,7 +149,6 @@ public class EJB3Subsystem40Parser extends EJB3Subsystem30Parser {
                 }
             }
         }
-
     }
 
     private void parseDeliveryGroups(final XMLExtendedStreamReader reader, final List<ModelNode> operations) throws XMLStreamException {

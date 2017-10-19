@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -39,9 +39,11 @@ public interface Constants {
     String SETTING = "setting";
     String SECURITY_REALM = "security-realm";
     String SOCKET_BINDING = "socket-binding";
+    String SSL_CONTEXT = "ssl-context";
     String PATH = "path";
     String HTTP_LISTENER = "http-listener";
     String HTTPS_LISTENER = "https-listener";
+    String HTTP_INVOKER = "http-invoker";
     String LISTENER = "listener";
     String INSTANCE_ID = "instance-id";
     String NAME = "name";
@@ -148,7 +150,6 @@ public interface Constants {
     String MANAGEMENT_SOCKET_BINDING = "management-socket-binding";
     String ADVERTISE_SOCKET_BINDING = "advertise-socket-binding";
     String SECURITY_KEY = "security-key";
-    String ADVERTISE_MULTICAST_SOCKET_BINDING = "advertise-multicast-socket-binding";
     String ADVERTISE_PROTOCOL = "advertise-protocol";
     String ADVERTISE_PATH = "advertise-path";
     String ADVERTISE_FREQUENCY = "advertise-frequency";
@@ -158,6 +159,7 @@ public interface Constants {
     String REQUEST_QUEUE_SIZE = "request-queue-size";
     String CACHED_CONNECTIONS_PER_THREAD = "cached-connections-per-thread";
     String CONNECTION_IDLE_TIMEOUT = "connection-idle-timeout";
+    String FAILOVER_STRATEGY = "failover-strategy";
 
     String USE_SERVER_LOG = "use-server-log";
     String VALUE = "value";
@@ -216,4 +218,25 @@ public interface Constants {
     String EXTENDED = "extended";
     String MAX_BUFFERED_REQUEST_SIZE = "max-buffered-request-size";
     String MAX_SESSIONS = "max-sessions";
+    String USER_AGENTS = "user-agents";
+    String SESSION_TIMEOUT = "session-timeout";
+    String CRAWLER_SESSION_MANAGEMENT = "crawler-session-management";
+    String MAX_AJP_PACKET_SIZE = "max-ajp-packet-size";
+    String STATISTICS_ENABLED = "statistics-enabled";
+    String DEFAULT_SECURITY_DOMAIN = "default-security-domain";
+    String DISABLE_FILE_WATCH_SERVICE = "disable-file-watch-service";
+    String DISABLE_SESSION_ID_REUSE = "disable-session-id-reuse";
+    String PER_MESSAGE_DEFLATE = "per-message-deflate";
+    String DEFLATER_LEVEL = "deflater-level";
+    String MAX_RETRIES = "max-retries";
+
+    // Elytron Integration
+    String APPLICATION_SECURITY_DOMAIN = "application-security-domain";
+    String APPLICATION_SECURITY_DOMAINS = "application-security-domains";
+    String HTTP_AUTHENITCATION_FACTORY = "http-authentication-factory";
+    String OVERRIDE_DEPLOYMENT_CONFIG = "override-deployment-config";
+    String REFERENCING_DEPLOYMENTS = "referencing-deployments";
+    String SECURITY_DOMAIN = "security-domain";
+    String ENABLE_JACC = "enable-jacc";
+
 }

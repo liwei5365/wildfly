@@ -22,38 +22,51 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
+import java.security.AccessController;
+import java.security.PrivilegedAction;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadFactory;
+
 import org.infinispan.commons.executors.BlockingThreadPoolExecutorFactory;
 import org.infinispan.commons.executors.ThreadPoolExecutorFactory;
 import org.infinispan.configuration.global.ThreadPoolConfiguration;
 import org.infinispan.configuration.global.ThreadPoolConfigurationBuilder;
-import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.concurrent.ClassLoaderThreadFactory;
 
 /**
  * @author Radoslav Husar
  * @version August 2015
  */
-public class ThreadPoolBuilder extends CacheContainerComponentBuilder<ThreadPoolConfiguration> implements ResourceServiceBuilder<ThreadPoolConfiguration> {
+public class ThreadPoolBuilder extends GlobalComponentBuilder<ThreadPoolConfiguration> {
 
     private final ThreadPoolConfigurationBuilder builder = new ThreadPoolConfigurationBuilder(null);
     private final ThreadPoolDefinition definition;
 
-    ThreadPoolBuilder(ThreadPoolDefinition definition, String containerName) {
-        super(definition, containerName);
+    ThreadPoolBuilder(ThreadPoolDefinition definition, PathAddress containerAddress) {
+        super(definition, containerAddress);
         this.definition = definition;
     }
 
     @Override
     public Builder<ThreadPoolConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
         ThreadPoolExecutorFactory<?> factory = new BlockingThreadPoolExecutorFactory(
-                this.definition.getMaxThreads().getDefinition().resolveModelAttribute(context, model).asInt(),
-                this.definition.getMinThreads().getDefinition().resolveModelAttribute(context, model).asInt(),
-                this.definition.getQueueLength().getDefinition().resolveModelAttribute(context, model).asInt(),
-                this.definition.getKeepAliveTime().getDefinition().resolveModelAttribute(context, model).asLong()
-        );
+                this.definition.getMaxThreads().resolveModelAttribute(context, model).asInt(),
+                this.definition.getMinThreads().resolveModelAttribute(context, model).asInt(),
+                this.definition.getQueueLength().resolveModelAttribute(context, model).asInt(),
+                this.definition.getKeepAliveTime().resolveModelAttribute(context, model).asLong()
+        ) {
+            @Override
+            public ExecutorService createExecutor(ThreadFactory factory) {
+                return super.createExecutor(new ClassLoaderThreadFactory(factory, AccessController.doPrivileged(
+                        (PrivilegedAction<ClassLoader>) () -> ClassLoaderThreadFactory.class.getClassLoader()))
+                );
+            }
+        };
         this.builder.threadPoolFactory(factory);
 
         return this;

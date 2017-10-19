@@ -24,12 +24,10 @@ package org.jboss.as.test.integration.hibernate;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.File;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Properties;
 import java.util.Set;
-
 import javax.annotation.Resource;
 import javax.ejb.Stateful;
 import javax.ejb.TransactionAttribute;
@@ -49,7 +47,6 @@ import org.hibernate.stat.Statistics;
 import org.infinispan.manager.CacheContainer;
 
 /**
- *
  * @author Madhumita Sadhukhan
  */
 @Stateful
@@ -60,7 +57,7 @@ public class SFSBHibernate2LcacheStats {
 
     /**
      * Lookup the Infinispan cache container to start it.
-     *
+     * <p>
      * We also could change the following line in standalone.xml: <cache-container name="hibernate" default-cache="local-query">
      * To: <cache-container name="hibernate" default-cache="local-query" start="EAGER">
      */
@@ -78,12 +75,11 @@ public class SFSBHibernate2LcacheStats {
         // static {
         try {
 
-            //System.out.println("setupConfig:  Current dir = " + (new File(".")).getCanonicalPath());
-
             // prepare the configuration
             Configuration configuration = new Configuration().setProperty(AvailableSettings.USE_NEW_ID_GENERATOR_MAPPINGS,
                     "true");
             configuration.getProperties().put(AvailableSettings.JTA_PLATFORM, JBossAppServerJtaPlatform.class);
+            configuration.getProperties().put(AvailableSettings.TRANSACTION_COORDINATOR_STRATEGY, "jta");
             configuration.setProperty(Environment.HBM2DDL_AUTO, "create-drop");
             configuration.setProperty(Environment.DATASOURCE, "java:jboss/datasources/ExampleDS");
             // set property to enable statistics
@@ -100,7 +96,7 @@ public class SFSBHibernate2LcacheStats {
             // build the serviceregistry
             sessionFactory = configuration.buildSessionFactory();
         } catch (Throwable ex) { // Make sure you log the exception, as it might be swallowed
-            System.err.println("Initial SessionFactory creation failed." + ex);
+            ex.printStackTrace();
             throw new ExceptionInInitializerError(ex);
         }
 
@@ -141,8 +137,6 @@ public class SFSBHibernate2LcacheStats {
             // session.flush();
             // session.close();
         } catch (Exception e) {
-
-            e.printStackTrace();
             throw new RuntimeException("transactional failure while persisting planet entity", e);
 
         }
@@ -153,7 +147,7 @@ public class SFSBHibernate2LcacheStats {
 
     // fetch planet
     public Planet getPlanet(Integer id) {
-        Planet planet = (Planet) sessionFactory.openSession().get(Planet.class, id);
+        Planet planet = sessionFactory.openSession().get(Planet.class, id);
         return planet;
     }
 

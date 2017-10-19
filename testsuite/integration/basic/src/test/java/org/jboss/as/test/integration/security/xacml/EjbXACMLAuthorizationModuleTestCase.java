@@ -25,6 +25,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.util.concurrent.Callable;
 
 import javax.ejb.EJB;
 import javax.ejb.EJBAccessException;
@@ -38,9 +39,7 @@ import org.jboss.as.test.integration.security.common.config.SecurityDomain;
 import org.jboss.as.test.integration.security.common.config.SecurityModule;
 import org.jboss.as.test.integration.security.common.ejb3.Hello;
 import org.jboss.as.test.integration.security.common.ejb3.HelloBean;
-import org.jboss.logging.Logger;
-import org.jboss.security.client.SecurityClient;
-import org.jboss.security.client.SecurityClientFactory;
+import org.jboss.as.test.shared.integration.ejb.security.Util;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -49,13 +48,12 @@ import org.junit.runner.RunWith;
 
 /**
  * Arquillian JUnit testcase for testing XACML based authorization of EJBs.
- * 
+ *
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ EjbXACMLAuthorizationModuleTestCase.SecurityDomainsSetup.class })
+@ServerSetup({EjbXACMLAuthorizationModuleTestCase.SecurityDomainsSetup.class})
 public class EjbXACMLAuthorizationModuleTestCase {
-    private static Logger LOGGER = Logger.getLogger(EjbXACMLAuthorizationModuleTestCase.class);
 
     @EJB(mappedName = "java:global/test-custom-xacml/HelloBean")
     private Hello hello;
@@ -64,7 +62,7 @@ public class EjbXACMLAuthorizationModuleTestCase {
 
     /**
      * Creates {@link JavaArchive} for testing the {@link CustomXACMLAuthorizationModule}.
-     * 
+     *
      * @return
      * @throws IOException
      * @throws IllegalArgumentException
@@ -76,7 +74,7 @@ public class EjbXACMLAuthorizationModuleTestCase {
 
     /**
      * Tests secured EJB call for unauthenticated user.
-     * 
+     *
      * @throws Exception
      */
     @Test
@@ -91,44 +89,40 @@ public class EjbXACMLAuthorizationModuleTestCase {
 
     /**
      * Test secured EJB call for authenticated and authorized user.
-     * 
+     *
      * @throws Exception
      */
     @Test
     public void testAuthz() throws Exception {
-        SecurityClient securityClient = SecurityClientFactory.getSecurityClient();
-        securityClient.setSimple("jduke", "theduke");
-        try {
-            securityClient.login();
+        final Callable<Void> callable = () -> {
             assertEquals(HelloBean.HELLO_WORLD, hello.sayHelloWorld());
-        } finally {
-            securityClient.logout();
-        }
+            return null;
+        };
+        Util.switchIdentitySCF("jduke", "theduke", callable);
     }
 
     /**
      * Test secured EJB call for authenticated but not authorized authorized user.
-     * 
+     *
      * @throws Exception
      */
     @Test
     public void testNotAuthz() throws Exception {
-        SecurityClient securityClient = SecurityClientFactory.getSecurityClient();
-        securityClient.setSimple("JohnDoe", "jdoe");
-        try {
-            securityClient.login();
+        final Callable<Void> callable = () -> {
             hello.sayHelloWorld();
             fail("Access to sayHelloWorld() should be denied for JohnDoe.");
+            return null;
+        };
+        try {
+            Util.switchIdentitySCF("JohnDoe", "jdoe", callable);
         } catch (EJBAccessException e) {
             //OK - expected
-        } finally {
-            securityClient.logout();
         }
     }
 
     /**
      * Tests unauthenticated call followed by the authentication and second call to the same instance.
-     * 
+     *
      * @throws Exception
      */
     @Test
@@ -139,21 +133,18 @@ public class EjbXACMLAuthorizationModuleTestCase {
         } catch (EJBAccessException e) {
             //OK
         }
-        SecurityClient securityClient = SecurityClientFactory.getSecurityClient();
-        securityClient.setSimple("jduke", "theduke");
-        try {
-            securityClient.login();
+        final Callable<Void> callable = () -> {
             assertEquals(HelloBean.HELLO_WORLD, hello.sayHelloWorld());
-        } finally {
-            securityClient.logout();
-        }
+            return null;
+        };
+        Util.switchIdentitySCF("jduke", "theduke", callable);
     }
 
     // Private methods -------------------------------------------------------
 
     /**
      * Creates JAR with the EJB for the test deployment.
-     * 
+     *
      * @param archiveName
      * @param securityDomainName
      * @return
@@ -161,7 +152,7 @@ public class EjbXACMLAuthorizationModuleTestCase {
     private static JavaArchive createJar(final String archiveName, final String securityDomainName) {
         final JavaArchive jar = ShrinkWrap
                 .create(JavaArchive.class, archiveName)
-                .addClasses(HelloBean.class, Hello.class, CustomXACMLAuthorizationModule.class)
+                .addClasses(HelloBean.class, Hello.class, CustomXACMLAuthorizationModule.class, Util.class)
                 .addAsResource(new StringAsset("jduke=theduke\nJohnDoe=jdoe"), "users.properties")
                 .addAsResource(new StringAsset("jduke=TestRole,TestRole2\nJohnDoe=TestRole"), "roles.properties")
                 .addAsResource(EjbXACMLAuthorizationModuleTestCase.class.getPackage(),
@@ -172,7 +163,6 @@ public class EjbXACMLAuthorizationModuleTestCase {
                         XACMLTestUtils.TESTOBJECTS_CONFIG + "/jboss-ejb3.xml", "jboss-ejb3.xml");
         XACMLTestUtils.addJBossDeploymentStructureToArchive(jar);
         jar.addClasses(AbstractSecurityDomainsServerSetupTask.class);
-        LOGGER.info(jar.toString(true));
         return jar;
     }
 
@@ -180,14 +170,14 @@ public class EjbXACMLAuthorizationModuleTestCase {
 
     /**
      * A {@link ServerSetupTask} instance which creates security domains for this test case.
-     * 
+     *
      * @author Josef Cacek
      */
     static class SecurityDomainsSetup extends AbstractSecurityDomainsServerSetupTask {
 
         /**
          * Returns SecurityDomains configuration for this testcase.
-         * 
+         *
          * @see org.jboss.as.test.integration.security.common.AbstractSecurityDomainsServerSetupTask#getSecurityDomains()
          */
         @Override
@@ -198,7 +188,7 @@ public class EjbXACMLAuthorizationModuleTestCase {
                     .authorizationModules(
                             new SecurityModule.Builder().name(CustomXACMLAuthorizationModule.class.getName()).build()) //
                     .build();
-            return new SecurityDomain[] { sd };
+            return new SecurityDomain[]{sd};
         }
     }
 }

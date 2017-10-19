@@ -21,6 +21,11 @@
  */
 package org.jboss.as.test.smoke.deployment.rar.tests.eardeployment;
 
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.URL;
@@ -40,14 +45,8 @@ import org.jboss.shrinkwrap.api.spec.EnterpriseArchive;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.api.spec.ResourceAdapterArchive;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 
 
 /**
@@ -82,7 +81,6 @@ public class EarDeploymentTestCase extends ContainerResourceMgmtTestBase {
         raa.addAsManifestResource(EarDeploymentTestCase.class.getPackage(), "ironjacamar.xml", "ironjacamar.xml")
                 .addAsManifestResource(EarDeploymentTestCase.class.getPackage(), "ra.xml", "ra.xml")
                 .addAsManifestResource(new StringAsset("Dependencies: org.jboss.as.controller-client,org.jboss.dmr,org.jboss.as.cli,javax.inject.api,org.jboss.as.connector\n"), "MANIFEST.MF");
-        ;
 
         WebArchive wa = ShrinkWrap.create(WebArchive.class, "servlet.war");
         wa.addClasses(RaServlet.class);
@@ -108,7 +106,6 @@ public class EarDeploymentTestCase extends ContainerResourceMgmtTestBase {
     }
 
     @Test
-    @Ignore
     public void testConfiguration() throws Throwable {
         assertNotNull("Deployment metadata for ear not found", managementClient.getProtocolMetaData(deploymentName));
 
@@ -117,7 +114,7 @@ public class EarDeploymentTestCase extends ContainerResourceMgmtTestBase {
         address.protect();
         final ModelNode snapshot = new ModelNode();
         snapshot.get(OP).set("read-resource");
-        snapshot.get("recursive").set("true");
+        snapshot.get("recursive").set(true);
         snapshot.get(OP_ADDR).set(address);
         executeOperation(snapshot);
     }

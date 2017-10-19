@@ -24,20 +24,29 @@ package org.wildfly.clustering.web.infinispan;
 
 import java.util.ServiceLoader;
 
+import org.infinispan.persistence.keymappers.TwoWayKey2StringMapper;
+import org.jboss.logging.Logger;
 import org.junit.Test;
 import org.wildfly.clustering.marshalling.Externalizer;
-import org.wildfly.clustering.spi.CacheGroupAliasBuilderProvider;
-import org.wildfly.clustering.spi.DistributedCacheGroupBuilderProvider;
-import org.wildfly.clustering.spi.LocalCacheGroupBuilderProvider;
+import org.wildfly.clustering.spi.CacheAliasBuilderProvider;
+import org.wildfly.clustering.spi.DistributedCacheBuilderProvider;
+import org.wildfly.clustering.spi.LocalCacheBuilderProvider;
 import org.wildfly.clustering.web.session.RouteLocatorBuilderProvider;
 import org.wildfly.clustering.web.session.SessionManagerFactoryBuilderProvider;
 import org.wildfly.clustering.web.sso.SSOManagerFactoryBuilderProvider;
 
 /**
  * Validates loading of services.
+ *
  * @author Paul Ferraro
  */
 public class ServiceLoaderTestCase {
+    private static final Logger LOGGER = Logger.getLogger(ServiceLoaderTestCase.class);
+
+    private static <T> void load(Class<T> targetClass) {
+        ServiceLoader.load(targetClass, ServiceLoaderTestCase.class.getClassLoader())
+                .forEach(object -> LOGGER.trace("\t" + object.getClass().getName()));
+    }
 
     @Test
     public void load() {
@@ -45,13 +54,9 @@ public class ServiceLoaderTestCase {
         load(RouteLocatorBuilderProvider.class);
         load(SessionManagerFactoryBuilderProvider.class);
         load(SSOManagerFactoryBuilderProvider.class);
-        load(DistributedCacheGroupBuilderProvider.class);
-        load(LocalCacheGroupBuilderProvider.class);
-        load(CacheGroupAliasBuilderProvider.class);
-    }
-
-    private static <T> void load(Class<T> targetClass) {
-        System.out.println(targetClass.getName() + ":");
-        ServiceLoader.load(targetClass, ServiceLoaderTestCase.class.getClassLoader()).forEach(object -> System.out.println("\t" + object.getClass().getName()));
+        load(DistributedCacheBuilderProvider.class);
+        load(LocalCacheBuilderProvider.class);
+        load(CacheAliasBuilderProvider.class);
+        load(TwoWayKey2StringMapper.class);
     }
 }

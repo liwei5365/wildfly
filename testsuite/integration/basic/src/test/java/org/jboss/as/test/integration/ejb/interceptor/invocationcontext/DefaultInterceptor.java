@@ -40,17 +40,17 @@ public class DefaultInterceptor {
         String ret = InvocationContextChecker.checkBeanInterceptorContext(ctx, null, "Default");
         return ret + ctx.proceed();
     }
-    
+
     @AroundTimeout
     Object interceptTimeout(InvocationContext ctx) throws Exception {
         String ret = InvocationContextChecker.checkTimeoutInterceptorContext(ctx, null, "Default");
-        TimeoutBean.interceptorResults += ret;        
+        TimeoutBean.interceptorResults += ret;
         return ctx.proceed();
     }
 
     @PostConstruct
     void postConstruct(InvocationContext ctx) {
-        log.info("PostConstruct on DefaultInterceptor called" + ctx.getTarget().getClass().getName());
+        log.trace("PostConstruct on DefaultInterceptor called" + ctx.getTarget().getClass().getName());
         if (ctx.getMethod() != null) {
             throw new RuntimeException("InvocationContext.getMethod() on lifecycle event has to be null");
         }

@@ -55,6 +55,7 @@ import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.arquillian.api.ContainerResource;
 import org.jboss.as.arquillian.container.ManagementClient;
+import org.jboss.as.test.integration.common.DefaultConfiguration;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.Asset;
@@ -93,7 +94,11 @@ public class JMXPropertyEditorsTestCase {
     static {
         String osName = System.getProperty("os.name");
         if ( osName.contains( "Windows" ) ) {
-            USER_SYS_PROP = "USERNAME";
+            if (System.getenv().containsKey("USERNAME")) {
+                USER_SYS_PROP = "USERNAME";
+            } else {
+                USER_SYS_PROP = "USER";
+            }
         } else if ( osName.contains( "SunOS" ) ) {
             USER_SYS_PROP = "LOGNAME";
         } else {
@@ -115,9 +120,8 @@ public class JMXPropertyEditorsTestCase {
 
     private MBeanServerConnection getMBeanServerConnection() throws IOException {
         final String address = managementClient.getMgmtAddress()+":"+managementClient.getMgmtPort();
-        connector = JMXConnectorFactory.connect(new JMXServiceURL("service:jmx:http-remoting-jmx://"+address));
+        connector = JMXConnectorFactory.connect(new JMXServiceURL("service:jmx:http-remoting-jmx://"+address), DefaultConfiguration.credentials());
         return connector.getMBeanServerConnection();
-
     }
 
     private static Asset createServiceAsset(String attributeName, String attributeValue) {
@@ -149,7 +153,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("AtomicBoolean", "true");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -186,7 +189,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("AtomicInteger", "3");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -223,7 +225,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("AtomicLong", "2");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -260,7 +261,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("BigDecimal", "100000000");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -288,7 +288,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("BigInteger", "100000000");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -316,7 +315,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Boolean", "true");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -344,7 +342,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("BooleanArray", "true,false");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -380,7 +377,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Byte", "1");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -408,7 +404,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ByteArray", "1,2,3");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -444,7 +439,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Char", "R");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -473,7 +467,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("CharacterArray", "R,R,X");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -510,7 +503,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Clazz", "java.lang.String");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -539,7 +531,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ClassArray", "java.lang.String,java.util.List");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -576,7 +567,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Document", "<document><element/><document>");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -611,7 +601,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Double", "4");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -640,7 +629,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Element", "<element/>");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -675,7 +663,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("File", "/I_DONT_EXIST/DUNNO");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -704,7 +691,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Float", "1.5");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -733,7 +719,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("FloatArray", "1.5,2.5");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -770,7 +755,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("InetAddress", "10.10.10.1");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -799,7 +783,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("InetAddressArray", "10.10.10.1,localhost");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -837,7 +820,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Integer", "1");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -866,7 +848,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("IntegerArray", "1,5,4");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -903,7 +884,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Locale", Locale.ENGLISH.toString());
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -932,7 +912,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Long", "14");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -961,7 +940,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("LongArray", "14,15");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -998,7 +976,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ObjectBoolean", "true");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1027,7 +1004,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ObjectByte", "10");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1056,7 +1032,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ObjectChar", "Z");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1085,7 +1060,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ObjectDouble", "10");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1114,7 +1088,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ObjectFloat", "10");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1143,7 +1116,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ObjectInteger", "10");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1172,7 +1144,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ObjectLong", "10");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1201,7 +1172,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ObjectShort", "10");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1230,7 +1200,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Properties", "prop1=ugabuga\nprop2=HAHA\nenv=${env."+USER_SYS_PROP+"}");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1249,15 +1218,10 @@ public class JMXPropertyEditorsTestCase {
                 public int compare(Object o1, Object o2) {
                     Properties p1 = (Properties) o1;
                     Properties p2 = (Properties) o2;
-                    System.err.println("["+p1.size()+"]:"+p1+"\n["+p2.size()+"]:"+p2);
-                    System.err.println("------- x");
                     if (p1.size() != p2.size()) {
-                        System.err.println("------- 0");
                         return 1;
                     }
-                    System.err.println("------- 1");
                     if(!p1.keySet().containsAll(p2.keySet())){
-                        System.err.println("------- 2");
                         return 1;
                     }
 
@@ -1266,7 +1230,6 @@ public class JMXPropertyEditorsTestCase {
                         Object v1 = p1.get(key);
                         Object v2 = p2.get(key);
                         if(!v1.equals(v2)){
-                            System.err.println("------- 3: "+v1+":"+v2);
                             return 1;
                         }
                     }
@@ -1294,7 +1257,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("Short", "1");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1323,7 +1285,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("ShortArray", "1,20");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1360,7 +1321,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("StringArray", "1,20");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1397,7 +1357,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("URI", "http://nowhere.com");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 
@@ -1426,7 +1385,6 @@ public class JMXPropertyEditorsTestCase {
         Asset asset = createServiceAsset("URL", "http://nowhere.com");
         jmxSAR.addAsManifestResource(asset, "jboss-service.xml");
 
-        System.err.println(jmxSAR.toString(true));
         return jmxSAR;
     }
 

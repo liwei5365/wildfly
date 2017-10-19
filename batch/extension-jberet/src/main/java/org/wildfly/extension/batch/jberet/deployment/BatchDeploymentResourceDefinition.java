@@ -22,20 +22,20 @@
 
 package org.wildfly.extension.batch.jberet.deployment;
 
+import java.util.Properties;
 import javax.batch.operations.JobExecutionAlreadyCompleteException;
 import javax.batch.operations.JobExecutionNotMostRecentException;
 import javax.batch.operations.JobExecutionNotRunningException;
-import javax.batch.operations.JobOperator;
 import javax.batch.operations.JobRestartException;
 import javax.batch.operations.JobSecurityException;
 import javax.batch.operations.JobStartException;
 import javax.batch.operations.NoSuchJobExecutionException;
-import java.util.Properties;
 
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.SimpleAttributeDefinition;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
+import org.jboss.as.controller.SimpleListAttributeDefinition;
 import org.jboss.as.controller.SimpleMapAttributeDefinition;
 import org.jboss.as.controller.SimpleOperationDefinition;
 import org.jboss.as.controller.SimpleOperationDefinitionBuilder;
@@ -65,6 +65,10 @@ public class BatchDeploymentResourceDefinition extends SimpleResourceDefinition 
     private static final SimpleMapAttributeDefinition PROPERTIES = new SimpleMapAttributeDefinition.Builder("properties", ModelType.STRING, true)
             .build();
 
+    private static final SimpleListAttributeDefinition JOB_XML_NAMES = SimpleListAttributeDefinition.Builder.of("job-xml-names", JOB_XML_NAME)
+            .setStorageRuntime()
+            .build();
+
     private static final SimpleOperationDefinition START_JOB = new SimpleOperationDefinitionBuilder("start-job", DEFAULT_RESOLVER)
             .setParameters(JOB_XML_NAME, PROPERTIES)
             .setReplyType(ModelType.LONG)
@@ -91,7 +95,7 @@ public class BatchDeploymentResourceDefinition extends SimpleResourceDefinition 
         super.registerOperations(resourceRegistration);
         resourceRegistration.registerOperationHandler(START_JOB, new JobOperationStepHandler() {
             @Override
-            protected void execute(final OperationContext context, final ModelNode operation, final JobOperator jobOperator) throws OperationFailedException {
+            protected void execute(final OperationContext context, final ModelNode operation, final WildFlyJobOperator jobOperator) throws OperationFailedException {
                 // Resolve the job XML name
                 final String jobName = resolveValue(context, operation, JOB_XML_NAME).asString();
                 final Properties properties = resolvePropertyValue(context, operation, PROPERTIES);
@@ -106,7 +110,7 @@ public class BatchDeploymentResourceDefinition extends SimpleResourceDefinition 
 
         resourceRegistration.registerOperationHandler(STOP_JOB, new JobOperationStepHandler() {
             @Override
-            protected void execute(final OperationContext context, final ModelNode operation, final JobOperator jobOperator) throws OperationFailedException {
+            protected void execute(final OperationContext context, final ModelNode operation, final WildFlyJobOperator jobOperator) throws OperationFailedException {
                 // Resolve the execution id
                 final long executionId = resolveValue(context, operation, EXECUTION_ID).asLong();
                 try {
@@ -119,7 +123,7 @@ public class BatchDeploymentResourceDefinition extends SimpleResourceDefinition 
 
         resourceRegistration.registerOperationHandler(RESTART_JOB, new JobOperationStepHandler() {
             @Override
-            protected void execute(final OperationContext context, final ModelNode operation, final JobOperator jobOperator) throws OperationFailedException {
+            protected void execute(final OperationContext context, final ModelNode operation, final WildFlyJobOperator jobOperator) throws OperationFailedException {
                 // Resolve the execution id
                 final long executionId = resolveValue(context, operation, EXECUTION_ID).asLong();
                 final Properties properties = resolvePropertyValue(context, operation, PROPERTIES);
@@ -128,6 +132,19 @@ public class BatchDeploymentResourceDefinition extends SimpleResourceDefinition 
                     context.getResult().set(newExecutionId);
                 } catch (JobExecutionAlreadyCompleteException | NoSuchJobExecutionException | JobExecutionNotMostRecentException | JobRestartException | JobSecurityException e) {
                     throw createOperationFailure(e);
+                }
+            }
+        });
+    }
+
+    @Override
+    public void registerAttributes(final ManagementResourceRegistration resourceRegistration) {
+        resourceRegistration.registerReadOnlyAttribute(JOB_XML_NAMES, new JobOperationStepHandler(false) {
+            @Override
+            protected void execute(final OperationContext context, final ModelNode operation, final WildFlyJobOperator jobOperator) throws OperationFailedException {
+                final ModelNode list = context.getResult().setEmptyList();
+                for (String jobXmlName : jobOperator.getJobXmlNames()) {
+                    list.add(jobXmlName);
                 }
             }
         });

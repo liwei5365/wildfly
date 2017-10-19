@@ -58,8 +58,6 @@ import static org.jboss.as.ejb3.subsystem.EJB3SubsystemModel.TIMER_SERVICE;
  */
 public class EJB3Subsystem30Parser extends EJB3Subsystem20Parser {
 
-    public static final EJB3Subsystem30Parser INSTANCE = new EJB3Subsystem30Parser();
-
     protected EJB3Subsystem30Parser() {
     }
 
@@ -180,6 +178,7 @@ public class EJB3Subsystem30Parser extends EJB3Subsystem20Parser {
         if (!required.isEmpty()) {
             throw missingRequired(reader, required);
         }
+        operation.get(EJB3SubsystemModel.EXECUTE_IN_WORKER).set(new ModelNode(false));
         // each profile adds it's own operation
         operations.add(operation);
 
@@ -292,7 +291,7 @@ public class EJB3Subsystem30Parser extends EJB3Subsystem20Parser {
                     RemotingEjbReceiverDefinition.CONNECT_TIMEOUT.parseAndSetParameter(value, operation, reader);
                     break;
                 default:
-                    unexpectedAttribute(reader, i);
+                    throw unexpectedAttribute(reader, i);
             }
         }
         if (!required.isEmpty()) {
@@ -309,7 +308,7 @@ public class EJB3Subsystem30Parser extends EJB3Subsystem20Parser {
                     parseChannelCreationOptions(reader, receiverAddress, operations);
                     break;
                 default:
-                    unexpectedElement(reader);
+                    throw unexpectedElement(reader);
             }
         }
     }

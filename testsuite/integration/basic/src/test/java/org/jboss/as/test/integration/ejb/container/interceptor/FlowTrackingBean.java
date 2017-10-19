@@ -34,7 +34,7 @@ import org.jboss.logging.Logger;
 /**
  * A {@link FlowTracker} implementation. There are 2 EE interceptors used - {@link NonContainerInterceptor} and the class itself
  * ({@link #aroundInvoke(InvocationContext)}).
- * 
+ *
  * @author Jaikiran Pai
  */
 @Stateless
@@ -49,7 +49,7 @@ public class FlowTrackingBean implements FlowTracker {
 
     @AroundInvoke
     protected Object aroundInvoke(InvocationContext invocationContext) throws Exception {
-        logger.info("@AroundInvoke on bean invoked");
+        logger.trace("@AroundInvoke on bean invoked");
         final String skipInterceptor = (String) invocationContext.getContextData().get(FlowTrackingBean.CONTEXT_DATA_KEY);
         if (skipInterceptor != null && this.getClass().getName().equals(skipInterceptor)) {
             return invocationContext.proceed();
@@ -58,7 +58,7 @@ public class FlowTrackingBean implements FlowTracker {
     }
 
     public String echo(final String msg) {
-        logger.info("EJB invoked!!!");
+        logger.trace("EJB invoked!!!");
         return msg;
     }
 

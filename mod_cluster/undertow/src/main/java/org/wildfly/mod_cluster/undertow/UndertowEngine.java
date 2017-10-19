@@ -29,8 +29,8 @@ import org.jboss.modcluster.container.Connector;
 import org.jboss.modcluster.container.Engine;
 import org.jboss.modcluster.container.Host;
 import org.jboss.modcluster.container.Server;
-import org.wildfly.extension.undertow.ListenerService;
 import org.wildfly.extension.undertow.SessionCookieConfig;
+import org.wildfly.extension.undertow.UndertowListener;
 import org.wildfly.extension.undertow.UndertowService;
 
 /**
@@ -41,8 +41,8 @@ import org.wildfly.extension.undertow.UndertowService;
  */
 public class UndertowEngine implements Engine {
 
-    private final org.wildfly.extension.undertow.Server server;
     private final UndertowService service;
+    private final org.wildfly.extension.undertow.Server server;
     private final Connector connector;
 
     public UndertowEngine(org.wildfly.extension.undertow.Server server, UndertowService service, Connector connector) {
@@ -100,7 +100,7 @@ public class UndertowEngine implements Engine {
 
     @Override
     public Iterable<Connector> getConnectors() {
-        final Iterator<ListenerService<?>> listeners = this.server.getListeners().iterator();
+        final Iterator<UndertowListener> listeners = this.server.getListeners().iterator();
 
         final Iterator<Connector> iterator = new Iterator<Connector>() {
             @Override
@@ -129,12 +129,12 @@ public class UndertowEngine implements Engine {
 
     @Override
     public String getJvmRoute() {
-        return this.service.getInstanceId();
+        return this.server.getRoute();
     }
 
     @Override
     public void setJvmRoute(String jvmRoute) {
-        this.service.setInstanceId(jvmRoute);
+        // Ignore
     }
 
     @Override
@@ -155,7 +155,7 @@ public class UndertowEngine implements Engine {
     @Override
     public String getSessionCookieName() {
         SessionCookieConfig override = server.getServletContainer().getSessionCookieConfig();
-        if (override == null) {
+        if (override == null || override.getName() == null) {
             return io.undertow.server.session.SessionCookieConfig.DEFAULT_SESSION_ID;
         }
         return override.getName();

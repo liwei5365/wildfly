@@ -22,6 +22,7 @@
 package org.jboss.as.webservices.dmr;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -67,9 +68,15 @@ public class WebservicesSubsystemParserTestCase extends AbstractSubsystemBaseTes
 
     @Override
     protected String[] getSubsystemTemplatePaths() throws IOException {
-        return new String[] {
+        return new String[]{
                 "/subsystem-templates/webservices.xml"
         };
+    }
+
+    @Test
+    @Override
+    public void testSchemaOfSubsystemTemplates() throws Exception {
+        super.testSchemaOfSubsystemTemplates();
     }
 
     protected AdditionalInitialization createAdditionalInitialization() {
@@ -109,9 +116,21 @@ public class WebservicesSubsystemParserTestCase extends AbstractSubsystemBaseTes
 
     @Test
     public void testParseV12() throws Exception {
-        //no need to do extra standardSubsystemTest("ws-subsystem12.xml") as that is default!
         KernelServices services = createKernelServicesBuilder(AdditionalInitialization.MANAGEMENT)
                 .setSubsystemXmlResource("ws-subsystem12.xml")
+                .build();
+        ModelNode model = services.readWholeModel().get("subsystem", getMainSubsystemName());
+        standardSubsystemTest("ws-subsystem12.xml", false);
+        checkSubsystemBasics(model);
+        checkEndpointConfigs(model);
+        checkClientConfigs(model);
+    }
+
+    @Test
+    public void testParseV20() throws Exception {
+        // no need to do extra standardSubsystemTest("ws-subsystem20.xml") as that is default!
+        KernelServices services = createKernelServicesBuilder(AdditionalInitialization.MANAGEMENT)
+                .setSubsystemXmlResource("ws-subsystem20.xml")
                 .build();
         ModelNode model = services.readWholeModel().get("subsystem", getMainSubsystemName());
         checkSubsystemBasics(model);
@@ -124,6 +143,7 @@ public class WebservicesSubsystemParserTestCase extends AbstractSubsystemBaseTes
         assertEquals(9443, Attributes.WSDL_SECURE_PORT.resolveModelAttribute(ExpressionResolver.TEST_RESOLVER, model).asInt());
         assertEquals("localhost", Attributes.WSDL_HOST.resolveModelAttribute(ExpressionResolver.TEST_RESOLVER, model).asString());
         assertTrue(Attributes.MODIFY_WSDL_ADDRESS.resolveModelAttribute(ExpressionResolver.TEST_RESOLVER, model).asBoolean());
+        assertFalse(Attributes.STATISTICS_ENABLED.resolveModelAttribute(ExpressionResolver.TEST_RESOLVER, model).asBoolean());
     }
 
 
@@ -150,75 +170,24 @@ public class WebservicesSubsystemParserTestCase extends AbstractSubsystemBaseTes
         assertEquals("my-handlers2", postHandlers.get(0).getName());
     }
 
-    private FailedOperationTransformationConfig getConfig() {
-        PathAddress subsystemAddress = PathAddress.pathAddress(WSExtension.SUBSYSTEM_PATH);
-        PathAddress endpoint = subsystemAddress.append(WSExtension.ENDPOINT_CONFIG_PATH);
-        return new FailedOperationTransformationConfig()
-                .addFailedAttribute(subsystemAddress, new FailedOperationTransformationConfig.RejectExpressionsConfig(Attributes.SUBSYSTEM_ATTRIBUTES))
-                .addFailedAttribute(endpoint.append(WSExtension.PRE_HANDLER_CHAIN_PATH),new FailedOperationTransformationConfig.RejectExpressionsConfig(Attributes.PROTOCOL_BINDINGS))
-                .addFailedAttribute(endpoint.append(WSExtension.POST_HANDLER_CHAIN_PATH),new FailedOperationTransformationConfig.RejectExpressionsConfig(Attributes.PROTOCOL_BINDINGS))
-                .addFailedAttribute(subsystemAddress.append(WSExtension.CLIENT_CONFIG_PATH),FailedOperationTransformationConfig.REJECTED_RESOURCE)
-                .addFailedAttribute(subsystemAddress.append(WSExtension.CLIENT_CONFIG_PATH).append(WSExtension.PRE_HANDLER_CHAIN_PATH),FailedOperationTransformationConfig.REJECTED_RESOURCE)
-                .addFailedAttribute(subsystemAddress.append(WSExtension.CLIENT_CONFIG_PATH).append(WSExtension.PRE_HANDLER_CHAIN_PATH).append(WSExtension.HANDLER_PATH),FailedOperationTransformationConfig.REJECTED_RESOURCE)
-                .addFailedAttribute(subsystemAddress.append(WSExtension.CLIENT_CONFIG_PATH).append(WSExtension.POST_HANDLER_CHAIN_PATH),FailedOperationTransformationConfig.REJECTED_RESOURCE)
-                .addFailedAttribute(subsystemAddress.append(WSExtension.CLIENT_CONFIG_PATH).append(WSExtension.POST_HANDLER_CHAIN_PATH).append(WSExtension.HANDLER_PATH),FailedOperationTransformationConfig.REJECTED_RESOURCE);
-    }
-
-
-   private void testRejectExpressions_1_1_0(ModelTestControllerVersion controllerVersion) throws Exception {
-        // create builder for current subsystem version
-        KernelServicesBuilder builder = createKernelServicesBuilder(createAdditionalInitialization());
-
-        // create builder for legacy subsystem version
-        ModelVersion version_1_1_0 = ModelVersion.create(1, 1, 0);
-        builder.createLegacyKernelServicesBuilder(null, controllerVersion, version_1_1_0)
-                .addMavenResourceURL("org.jboss.as:jboss-as-webservices-server-integration:" + controllerVersion.getMavenGavVersion());
-
-        KernelServices mainServices = builder.build();
-        KernelServices legacyServices = mainServices.getLegacyServices(version_1_1_0);
-
-        Assert.assertNotNull(legacyServices);
-        Assert.assertTrue("main services did not boot", mainServices.isSuccessfulBoot());
-        Assert.assertTrue(legacyServices.isSuccessfulBoot());
-
-        List<ModelNode> xmlOps = builder.parseXmlResource("ws-subsystem12.xml");
-
-        ModelTestUtils.checkFailedTransformedBootOperations(mainServices, version_1_1_0, xmlOps, getConfig());
+    @Test
+    public void testTransformersEAP620() throws Exception {
+        testTransformers_1_2_0(ModelTestControllerVersion.EAP_6_2_0);
     }
 
     @Test
-    public void testTransformersAS712() throws Exception {
-        testRejectExpressions_1_1_0(ModelTestControllerVersion.V7_1_2_FINAL);
+    public void testTransformersEAP630() throws Exception {
+        testTransformers_1_2_0(ModelTestControllerVersion.EAP_6_3_0);
     }
 
     @Test
-    public void testTransformersAS713() throws Exception {
-        testRejectExpressions_1_1_0(ModelTestControllerVersion.V7_1_3_FINAL);
+    public void testTransformersEAP640() throws Exception {
+        testTransformers_1_2_0(ModelTestControllerVersion.EAP_6_4_0);
     }
 
     @Test
-    public void testTransformersEAP600() throws Exception {
-        testRejectExpressions_1_1_0(ModelTestControllerVersion.EAP_6_0_0);
-    }
-
-    @Test
-    public void testTransformersEAP601() throws Exception {
-        testRejectExpressions_1_1_0(ModelTestControllerVersion.EAP_6_0_1);
-    }
-
-    @Test
-    public void testTransformersAS720() throws Exception {
-        testTransformers_1_2_0(ModelTestControllerVersion.V7_2_0_FINAL);
-    }
-
-    @Test
-    public void testTransformersEAP610() throws Exception {
-        testTransformers_1_2_0(ModelTestControllerVersion.EAP_6_1_0);
-    }
-    
-    @Test
-    public void testTransformersEAP611() throws Exception {
-        testTransformers_1_2_0(ModelTestControllerVersion.EAP_6_1_1);
+    public void testTransformersEAP700() throws Exception {
+        testRejections_2_0_0(ModelTestControllerVersion.EAP_7_0_0);
     }
 
     private void testTransformers_1_2_0(ModelTestControllerVersion controllerVersion) throws Exception {
@@ -240,6 +209,34 @@ public class WebservicesSubsystemParserTestCase extends AbstractSubsystemBaseTes
         Assert.assertTrue(legacyServices.isSuccessfulBoot());
 
         checkSubsystemModelTransformation(mainServices, version_1_2_0);
+    }
+
+    private void testRejections_2_0_0(ModelTestControllerVersion controllerVersion) throws Exception {
+        // create builder for current subsystem version
+        KernelServicesBuilder builder = createKernelServicesBuilder(createAdditionalInitialization());
+
+        // create builder for legacy subsystem version
+        ModelVersion version_2_0_0 = ModelVersion.create(2, 0, 0);
+        builder.createLegacyKernelServicesBuilder(null, controllerVersion, version_2_0_0)
+                .addMavenResourceURL("org.jboss.eap:wildfly-webservices-server-integration:" + controllerVersion.getMavenGavVersion())
+                .configureReverseControllerCheck(AdditionalInitialization.MANAGEMENT, null)
+                .dontPersistXml();
+
+        KernelServices mainServices = builder.build();
+        KernelServices legacyServices = mainServices.getLegacyServices(version_2_0_0);
+
+        Assert.assertNotNull(legacyServices);
+        Assert.assertTrue("main services did not boot", mainServices.isSuccessfulBoot());
+        Assert.assertTrue(legacyServices.isSuccessfulBoot());
+
+        List<ModelNode> xmlOps = builder.parseXmlResource("ws-subsystem20.xml");
+        ModelTestUtils.checkFailedTransformedBootOperations(mainServices, version_2_0_0, xmlOps, getFailedTransformationConfig());
+    }
+
+    private FailedOperationTransformationConfig getFailedTransformationConfig() {
+        PathAddress subsystemAddress = PathAddress.pathAddress(WSExtension.SUBSYSTEM_PATH);
+        return new FailedOperationTransformationConfig()
+                .addFailedAttribute(subsystemAddress, new FailedOperationTransformationConfig.RejectExpressionsConfig(Attributes.STATISTICS_ENABLED));
     }
 
 }

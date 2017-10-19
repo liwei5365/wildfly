@@ -22,31 +22,32 @@
 
 package org.jboss.as.ejb3.remote;
 
-import org.jboss.ejb.client.AttachmentKeys;
-import org.jboss.ejb.client.TransactionID;
-import org.jboss.ejb.client.UserTransactionID;
-import org.jboss.ejb.client.XidTransactionID;
-import org.jboss.invocation.Interceptor;
-import org.jboss.invocation.InterceptorContext;
-
-import javax.transaction.Transaction;
+import javax.transaction.SystemException;
 import javax.transaction.TransactionManager;
+
+import org.jboss.as.ejb3.component.EJBComponent;
+import org.jboss.as.ejb3.component.interceptors.AbstractEJBInterceptor;
+import org.jboss.as.ejb3.logging.EjbLogger;
+import org.jboss.invocation.InterceptorContext;
 
 /**
  * An interceptor which is responsible for identifying any remote transaction associated with the invocation
  * and propagating that transaction during the remaining part of the invocation
  *
  * @author Jaikiran Pai
+ * @author Flavia Rainone
+ * @deprecated Remove this class once WFLY-7860 is resolved.
  */
-class EJBRemoteTransactionPropagatingInterceptor implements Interceptor {
+@Deprecated
+class EJBRemoteTransactionPropagatingInterceptor extends AbstractEJBInterceptor {
 
     /**
      * Remote transactions repository
      */
-    private final EJBRemoteTransactionsRepository ejbRemoteTransactionsRepository;
+    private final TransactionManager transactionManager;
 
-    EJBRemoteTransactionPropagatingInterceptor(final EJBRemoteTransactionsRepository ejbRemoteTransactionsRepository) {
-        this.ejbRemoteTransactionsRepository = ejbRemoteTransactionsRepository;
+    EJBRemoteTransactionPropagatingInterceptor(final TransactionManager transactionManager) {
+        this.transactionManager = transactionManager;
     }
 
     /**
@@ -54,70 +55,38 @@ class EJBRemoteTransactionPropagatingInterceptor implements Interceptor {
      * invocation context.
      *
      * @param context The invocation context
-     * @return
-     * @throws Exception
+     * @return the invocation result
+     * @throws Exception if the invocation or transaction creation fails
      */
     @Override
     public Object processInvocation(InterceptorContext context) throws Exception {
-        final TransactionManager transactionManager = this.ejbRemoteTransactionsRepository.getTransactionManager();
-        Transaction originatingRemoteTx = null;
-        // get the transaction id attachment
-        final TransactionID transactionID = (TransactionID) context.getPrivateData(AttachmentKeys.TRANSACTION_ID_KEY);
-        if (transactionID != null) {
-            // if it's UserTransaction then create or resume the UserTransaction corresponding to the ID
-            if (transactionID instanceof UserTransactionID) {
-                this.createOrResumeUserTransaction((UserTransactionID) transactionID);
-            } else if (transactionID instanceof XidTransactionID) {
-                this.createOrResumeXidTransaction((XidTransactionID) transactionID);
+        final TransactionManager transactionManager = this.transactionManager;
+        if (context.hasTransaction()) {
+            // TODO: WFLY-7860
+            try {
+                transactionManager.resume(context.getTransaction());
+            } catch (SystemException e) {
+                try {
+                    EJBComponent component = getComponent(context, EJBComponent.class);
+                    // SystemException + server suspended equals the transaction is new and the request
+                    // for new transaction is being rejected
+                    if (component != null && component.getEjbSuspendHandlerService().isSuspended()) {
+                        throw EjbLogger.ROOT_LOGGER.cannotBeginUserTransaction();
+                    }
+                } catch (RuntimeException unexpected) {
+                    // just log, probably some other problem in the server is causing the original system
+                    // exception and we don't want to overwrite the original exception
+                    EjbLogger.ROOT_LOGGER.debug("Unexpected", unexpected);
+                }
+                throw e;
             }
-            // the invocation was associated with a remote tx, so keep a flag so that we can
-            // suspend (on this thread) the originating tx when returning from the invocation
-            originatingRemoteTx = transactionManager.getTransaction();
-        }
-        try {
-            // we are done with any tx propagation setup, let's move on
-            return context.proceed();
-        } finally {
-            // suspend the originating remote tx on this thread now that the invocation has been done
-            if (originatingRemoteTx != null) {
+            try {
+                return context.proceed();
+            } finally {
                 transactionManager.suspend();
             }
-        }
-    }
-
-    /**
-     * Creates or resumes a UserTransaction associated with the passed <code>UserTransactionID</code>.
-     * When this method returns successfully, the transaction manager will have the correct user transaction
-     * associated with it
-     *
-     * @param userTransactionID The user transaction id
-     * @throws Exception
-     */
-    private void createOrResumeUserTransaction(final UserTransactionID userTransactionID) throws Exception {
-        final TransactionManager transactionManager = this.ejbRemoteTransactionsRepository.getTransactionManager();
-        final Transaction alreadyCreatedTx = this.ejbRemoteTransactionsRepository.getUserTransaction(userTransactionID);
-        if (alreadyCreatedTx != null) {
-            // resume the already created tx
-            transactionManager.resume(alreadyCreatedTx);
-            return;
-        }
-        // begin a new user transaction and add it to the tx repository
-        this.ejbRemoteTransactionsRepository.beginUserTransaction(userTransactionID);
-    }
-
-    private void createOrResumeXidTransaction(final XidTransactionID xidTransactionID) throws Exception {
-        final TransactionManager transactionManager = this.ejbRemoteTransactionsRepository.getTransactionManager();
-        final Transaction alreadyCreatedTx = this.ejbRemoteTransactionsRepository.getImportedTransaction(xidTransactionID);
-        if (alreadyCreatedTx != null) {
-            // resume the already created tx
-            transactionManager.resume(alreadyCreatedTx);
         } else {
-            // begin a new tx and add it to the tx repository
-            // TODO: Fix the tx timeout to accept a value from the client (WFLY-2789)
-            final Transaction newSubOrdinateTx = this.ejbRemoteTransactionsRepository.importTransaction(xidTransactionID, Integer.getInteger("org.jboss.as.ejb3.remote-tx-timeout", 31536000)); // 31536000 = 60 * 60 * 24 * 365 (Year in seconds)
-            // associate this tx with the thread
-            transactionManager.resume(newSubOrdinateTx);
+            return context.proceed();
         }
     }
-
 }

@@ -22,6 +22,7 @@ import static org.jboss.as.jpa.hibernate5.JpaLogger.JPA_LOGGER;
 import java.util.Map;
 import java.util.Properties;
 
+import javax.enterprise.inject.spi.BeanManager;
 import javax.persistence.SharedCacheMode;
 import javax.persistence.spi.PersistenceUnitInfo;
 
@@ -49,6 +50,7 @@ public class HibernatePersistenceProviderAdaptor implements PersistenceProviderA
     private volatile Platform platform;
     private static final String SHARED_CACHE_MODE = "javax.persistence.sharedCache.mode";
     private static final String NONE = SharedCacheMode.NONE.name();
+    private static final String HIBERNATE_EXTENDED_BEANMANAGER = "org.hibernate.jpa.event.spi.jpa.ExtendedBeanManager";
 
     @Override
     public void injectJtaManager(JtaManager jtaManager) {
@@ -71,7 +73,7 @@ public class HibernatePersistenceProviderAdaptor implements PersistenceProviderA
         putPropertyIfAbsent(pu, properties, AvailableSettings.USE_NEW_ID_GENERATOR_MAPPINGS, "true");
         putPropertyIfAbsent(pu, properties, AvailableSettings.KEYWORD_AUTO_QUOTING_ENABLED,"false");
         putPropertyIfAbsent(pu, properties, AvailableSettings.IMPLICIT_NAMING_STRATEGY, NAMING_STRATEGY_JPA_COMPLIANT_IMPL);
-        putPropertyIfAbsent(pu, properties, org.hibernate.ejb.AvailableSettings.SCANNER, HibernateArchiveScanner.class);
+        putPropertyIfAbsent(pu, properties, AvailableSettings.SCANNER, HibernateArchiveScanner.class);
         properties.put(AvailableSettings.APP_CLASSLOADER, pu.getClassLoader());
         putPropertyIfAbsent(pu, properties, AvailableSettings.JTA_PLATFORM,  new JBossAppServerJtaPlatform(jtaManager));
         putPropertyIfAbsent(pu,properties, org.hibernate.ejb.AvailableSettings.ENTITY_MANAGER_FACTORY_NAME, pu.getScopedPersistenceUnitName());
@@ -150,6 +152,44 @@ public class HibernatePersistenceProviderAdaptor implements PersistenceProviderA
 
     @Override
     public void cleanup(PersistenceUnitMetadata pu) {
+
+    }
+
+    @Override
+    public Object beanManagerLifeCycle(BeanManager beanManager) {
+
+        if( isHibernateExtendedBeanManagerSupported()) {
+            return new HibernateExtendedBeanManager(beanManager);
+        }
+        // for ORM 5.0, return null to indicate that the org.hibernate.jpa.event.spi.jpa.ExtendedBeanManager extension should not be used.
+        return null;
+    }
+
+    @Override
+    public void markPersistenceUnitAvailable(Object wrapperBeanManagerLifeCycle) {
+        if(isHibernateExtendedBeanManagerSupported()) {
+            HibernateExtendedBeanManager hibernateExtendedBeanManager = (HibernateExtendedBeanManager) wrapperBeanManagerLifeCycle;
+            // notify Hibernate ORM ExtendedBeanManager extension that the entity listener(s) can now be registered.
+            hibernateExtendedBeanManager.beanManagerIsAvailableForUse();
+        }
+    }
+
+    /**
+     * org.hibernate.jpa.event.spi.jpa.ExtendedBeanManager is added to Hibernate 5.1 as an extension for delaying registration
+     * of entity listeners until the CDI AfterDeploymentValidation event is triggered.
+     * This allows entity listener classes to reference the (origin) persistence unit (WFLY-2387).
+     *
+     * return true for Hibernate ORM 5.1+, which should contain the ExtendedBeanManager contract
+     */
+    private boolean isHibernateExtendedBeanManagerSupported() {
+        try {
+            Class.forName(HIBERNATE_EXTENDED_BEANMANAGER);
+            return true;
+        } catch (ClassNotFoundException ignore) {
+            return false;
+        } catch (NoClassDefFoundError ignore) {
+            return false;
+        }
 
     }
 

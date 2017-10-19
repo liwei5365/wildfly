@@ -32,10 +32,12 @@ import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.REM
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.VAULT;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.VAULT_OPTIONS;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
+import java.net.SocketPermission;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -87,7 +89,7 @@ public class PasswordMaskingInContainerTestCase {
             // setup DB
             server = Server.createTcpServer("-tcpAllowOthers").start();
             Class.forName("org.h2.Driver");
-            connection = DriverManager.getConnection("jdbc:h2:mem:masked;DB_CLOSE_DELAY=-1", "sa", DS_CLEAR_TEXT_PASSWORD);
+            connection = DriverManager.getConnection("jdbc:h2:mem:masked;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE", "sa", DS_CLEAR_TEXT_PASSWORD);
             executeUpdate(connection, "CREATE TABLE FooBars(ID Varchar(50), Password Varchar(50))");
             executeUpdate(connection, "INSERT INTO FooBars VALUES ('foo','foo'),('bar','bar')");
 
@@ -148,6 +150,7 @@ public class PasswordMaskingInContainerTestCase {
             op.get(OP).set(REMOVE);
             op.get(OP_ADDR).add(SUBSYSTEM, "datasources");
             op.get(OP_ADDR).add("data-source", VAULT_BLOCK);
+            op.get(OPERATION_HEADERS).get(ALLOW_RESOURCE_SERVICE_RESTART).set(true);
             managementClient.getControllerClient().execute(new OperationBuilder(op).build());
 
             // remove created vault
@@ -160,7 +163,6 @@ public class PasswordMaskingInContainerTestCase {
             vaultHandler.cleanUp();
 
             // stop DB
-            executeUpdate(connection, "DROP TABLE TestPeople");
             connection.close();
             server.shutdown();
 
@@ -175,7 +177,7 @@ public class PasswordMaskingInContainerTestCase {
 
     }
 
-    static final String RESOURCE_LOCATION = PasswordMaskingInContainerTestCase.class.getProtectionDomain().getCodeSource().getLocation().getFile()
+    static final String RESOURCE_LOCATION = PasswordMaskingInContainerTestCase.class.getResource("/").getPath()
             + "security/pwdmsk-vault/";
     static final String VAULT_BLOCK = "MaskedDS";
     static final String DS_CLEAR_TEXT_PASSWORD = "sa";
@@ -185,6 +187,7 @@ public class PasswordMaskingInContainerTestCase {
         WebArchive war = ShrinkWrap.create(WebArchive.class, "passwordMasking" + ".war");
         war.addClass(PasswordMaskingTestServlet.class);
         war.setWebXML(PasswordMaskingInContainerTestCase.class.getPackage(), "web.xml");
+        war.addAsManifestResource(createPermissionsXmlAsset(new SocketPermission("*:9092", "connect,resolve")), "permissions.xml");
         return war;
     }
 

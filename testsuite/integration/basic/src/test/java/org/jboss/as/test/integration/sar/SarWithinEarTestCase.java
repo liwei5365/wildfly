@@ -23,7 +23,6 @@
 package org.jboss.as.test.integration.sar;
 
 import java.io.IOException;
-
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 import javax.management.remote.JMXConnector;
@@ -35,6 +34,7 @@ import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.as.arquillian.api.ContainerResource;
 import org.jboss.as.arquillian.container.ManagementClient;
+import org.jboss.as.test.integration.common.DefaultConfiguration;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.EnterpriseArchive;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -133,8 +133,7 @@ public class SarWithinEarTestCase {
     }
 
     private MBeanServerConnection getMBeanServerConnection() throws IOException {
-        connector = JMXConnectorFactory.connect(managementClient.getRemoteJMXURL());
+        connector = JMXConnectorFactory.connect(managementClient.getRemoteJMXURL(), DefaultConfiguration.credentials());
         return connector.getMBeanServerConnection();
-
     }
 }

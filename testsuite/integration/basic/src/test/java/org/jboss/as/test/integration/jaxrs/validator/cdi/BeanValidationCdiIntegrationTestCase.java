@@ -41,19 +41,16 @@ import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 /**
- * Test for the integration of JAX-RS, Bean Validation and CDI.
+ * Test for the integration of JAX-RS, Bean Validation and CDI. See WFLY-278.
  *
  * @author Gunnar Morling
  */
 @RunWith(Arquillian.class)
 @RunAsClient
-@Ignore
-//TODO WFLY-278 Can be enabled once HV portable extension is integrated into WF
 public class BeanValidationCdiIntegrationTestCase {
 
     @ApplicationPath("/myjaxrs")
@@ -63,16 +60,16 @@ public class BeanValidationCdiIntegrationTestCase {
     @Deployment(testable = false)
     public static Archive<?> deploy() {
         return ShrinkWrap.create(WebArchive.class, "jaxrsnoap.war")
-            .addPackage(HttpRequest.class.getPackage())
-            .addClasses(
-                BeanValidationCdiIntegrationTestCase.class,
-                OrderModel.class,
-                OrderResource.class,
-                CustomMax.class,
-                CustomMaxValidator.class,
-                MaximumValueProvider.class
-            )
-            .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml");
+                .addPackage(HttpRequest.class.getPackage())
+                .addClasses(
+                        BeanValidationCdiIntegrationTestCase.class,
+                        OrderModel.class,
+                        OrderResource.class,
+                        CustomMax.class,
+                        CustomMaxValidator.class,
+                        MaximumValueProvider.class
+                )
+                .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml");
     }
 
     @ArquillianResource

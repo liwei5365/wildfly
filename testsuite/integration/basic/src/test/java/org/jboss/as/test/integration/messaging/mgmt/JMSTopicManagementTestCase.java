@@ -27,11 +27,9 @@ import static org.jboss.as.controller.client.helpers.ClientConstants.NAME;
 import static org.jboss.as.controller.client.helpers.ClientConstants.VALUE;
 import static org.jboss.as.controller.client.helpers.ClientConstants.WRITE_ATTRIBUTE_OPERATION;
 import static org.jboss.as.controller.operations.common.Util.getEmptyOperation;
-import static org.jboss.as.test.shared.IntermittentFailure.thisTestIsFailingIntermittently;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
-
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.MessageProducer;
@@ -110,8 +108,7 @@ public class JMSTopicManagementTestCase {
         addSecuritySettings();
     }
 
-    private void addSecuritySettings() throws Exception
-    {
+    private void addSecuritySettings() throws Exception {
         // <jms server address>/security-setting=#/role=guest:write-attribute(name=create-durable-queue, value=TRUE)
         ModelNode address = adminSupport.getServerAddress()
                 .add("security-setting", "#")
@@ -163,8 +160,7 @@ public class JMSTopicManagementTestCase {
         }
     }
 
-    private void removeSecuritySetting() throws Exception
-    {
+    private void removeSecuritySetting() throws Exception {
         // <jms server address>/security-setting=#/role=guest:write-attribute(name=create-durable-queue, value=FALSE)
         ModelNode address = adminSupport.getServerAddress()
                 .add("security-setting", "#")
@@ -347,8 +343,7 @@ public class JMSTopicManagementTestCase {
         result = execute(op, true);
         assertTrue(result.isDefined());
         for (ModelNode binding : result.asList()) {
-            if (binding.asString().equals(jndiName))
-                return;
+            if (binding.asString().equals(jndiName)) { return; }
         }
         Assert.fail(jndiName + " was not found");
     }
@@ -391,16 +386,13 @@ public class JMSTopicManagementTestCase {
         ModelNode result = execute(op, true);
         Assert.assertTrue(result.isDefined());
         for (ModelNode binding : result.asList()) {
-            if (binding.asString().equals(EXPORTED_PREFIX + getTopicJndiName()))
-                return;
+            if (binding.asString().equals(EXPORTED_PREFIX + getTopicJndiName())) { return; }
         }
         Assert.fail(getTopicJndiName() + " was not found");
     }
 
     @Test
     public void removeJMSTopicRemovesAllMessages() throws Exception {
-
-        thisTestIsFailingIntermittently("WFLY-5019");
 
         // create a durable subscriber
         final String subscriptionName = "removeJMSTopicRemovesAllMessages";
@@ -441,15 +433,9 @@ public class JMSTopicManagementTestCase {
         ModelNode response = managementClient.getControllerClient().execute(op);
         final String outcome = response.get("outcome").asString();
         if (expectSuccess) {
-            if (!"success".equals(outcome)) {
-                System.out.println(response);
-            }
             Assert.assertEquals("success", outcome);
             return response.get("result");
         } else {
-            if ("success".equals(outcome)) {
-                System.out.println(response);
-            }
             Assert.assertEquals("failed", outcome);
             return response.get("failure-description");
         }
@@ -463,17 +449,15 @@ public class JMSTopicManagementTestCase {
         return "topic/" + getTopicName();
     }
 
-   static void applyUpdate(ModelNode update, final ModelControllerClient client) throws IOException {
+    static void applyUpdate(ModelNode update, final ModelControllerClient client) throws IOException {
         ModelNode result = client.execute(new OperationBuilder(update).build());
         if (result.hasDefined("outcome") && "success".equals(result.get("outcome").asString())) {
-            if (result.hasDefined("result")) {
+            /*if (result.hasDefined("result")) {
                 System.out.println(result.get("result"));
-            }
-        }
-        else if (result.hasDefined("failure-description")){
+            }*/
+        } else if (result.hasDefined("failure-description")) {
             throw new RuntimeException(result.get("failure-description").toString());
-        }
-        else {
+        } else {
             throw new RuntimeException("Operation not successful; outcome = " + result.get("outcome"));
         }
     }

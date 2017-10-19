@@ -15,7 +15,7 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-ts-integ</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Final-SNAPSHOT</version>
     </parent>
 
     <!-- ********************************************************************************** -->
@@ -29,10 +29,11 @@
         <jbossas.ts.integ.dir>${basedir}/..</jbossas.ts.integ.dir>
         <jbossas.ts.dir>${jbossas.ts.integ.dir}/..</jbossas.ts.dir>
         <jbossas.project.dir>${jbossas.ts.dir}/..</jbossas.project.dir>
-        <version.exec.maven.plugin>1.2.1</version.exec.maven.plugin>
         <!-- use the web build for tests -->
         <jboss.dist>${jbossas.project.dir}/${wildfly.web.build.output.dir}</jboss.dist>
         <jboss.home>${jboss.dist}</jboss.home>
+
+        <ts.elytron.cli>web-enable-elytron.cli</ts.elytron.cli>
     </properties>
 
     <dependencies>
@@ -49,32 +50,6 @@
 
     <build>
         <plugins>
-            <!-- Build the target/jbossas server configuration. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <executions>
-                    <!-- Copy in some jars. -->
-                    <execution>
-                        <id>prepare-jars-basic-integration.server</id>
-                        <phase>process-test-resources</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <target>
-                                <property name="tests.resources.dir" value="${basedir}/../src/test/resources"/>
-                                <property name="tests.output.dir" value="${project.build.directory}"/>
-                                <ant antfile="${basedir}/../src/test/scripts/basic-integration-build.xml">
-                                    <target name="build-basic-integration"/>
-                                    <!-- TODO: Unify names, then call "recursively". -->
-                                </ant>
-                            </target>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -94,4 +69,29 @@
             </plugin>
         </plugins>
     </build>
+    <!-- WFLY-5588 DefaultContextServiceServletTestCase fails on IBM jdk -->
+    <profiles>
+        <profile>
+            <id>ibmjdk.profile</id>
+            <activation>
+                <property>
+                    <name>java.vendor</name>
+                    <value>IBM Corporation</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <systemPropertyVariables>
+                                <jboss.args>${jboss.args} -Dcom.ibm.enableClassCaching=false</jboss.args>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

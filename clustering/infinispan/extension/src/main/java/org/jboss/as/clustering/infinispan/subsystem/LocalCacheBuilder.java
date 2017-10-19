@@ -22,54 +22,50 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
+import java.util.stream.Stream;
+
 import org.infinispan.configuration.cache.CacheMode;
 import org.infinispan.configuration.cache.Configuration;
 import org.infinispan.configuration.cache.ConfigurationBuilder;
-import org.infinispan.configuration.cache.LockingConfiguration;
+import org.infinispan.configuration.cache.PersistenceConfiguration;
 import org.infinispan.configuration.cache.TransactionConfiguration;
-import org.infinispan.configuration.cache.VersioningScheme;
-import org.infinispan.transaction.LockingMode;
-import org.infinispan.util.concurrent.IsolationLevel;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.msc.value.InjectedValue;
+import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
 public class LocalCacheBuilder extends CacheConfigurationBuilder {
 
-    private final InjectedValue<TransactionConfiguration> transaction = new InjectedValue<>();
-    private final InjectedValue<LockingConfiguration> locking = new InjectedValue<>();
+    private final ValueDependency<PersistenceConfiguration> persistence;
+    private final ValueDependency<TransactionConfiguration> transaction;
 
-    private final String containerName;
-    private final String cacheName;
-
-    LocalCacheBuilder(String containerName, String cacheName) {
-        super(containerName, cacheName);
-        this.containerName = containerName;
-        this.cacheName = cacheName;
+    LocalCacheBuilder(PathAddress address) {
+        super(address);
+        this.persistence = new InjectedValueDependency<>(CacheComponent.PERSISTENCE.getServiceName(address), PersistenceConfiguration.class);
+        this.transaction = new InjectedValueDependency<>(CacheComponent.TRANSACTION.getServiceName(address), TransactionConfiguration.class);
     }
 
     @Override
     public ServiceBuilder<Configuration> build(ServiceTarget target) {
-        return super.build(target)
-                .addDependency(CacheComponent.TRANSACTION.getServiceName(this.containerName, this.cacheName), TransactionConfiguration.class, this.transaction)
-                .addDependency(CacheComponent.LOCKING.getServiceName(this.containerName, this.cacheName), LockingConfiguration.class, this.locking)
-        ;
-    }
-
-    @Override
-    public ConfigurationBuilder createConfigurationBuilder() {
-        ConfigurationBuilder builder = super.createConfigurationBuilder();
-        builder.clustering().cacheMode(CacheMode.LOCAL);
-
-        if ((this.transaction.getValue().lockingMode() == LockingMode.OPTIMISTIC) && (this.locking.getValue().isolationLevel() == IsolationLevel.REPEATABLE_READ)) {
-            builder.locking().writeSkewCheck(true);
-            builder.versioning().enable().scheme(VersioningScheme.SIMPLE);
-        }
-
+        ServiceBuilder<Configuration> builder = super.build(target);
+        Stream.of(this.persistence, this.transaction).forEach(dependency -> dependency.register(builder));
         return builder;
     }
 
+    @Override
+    public void accept(ConfigurationBuilder builder) {
+        super.accept(builder);
+
+        builder.clustering().cacheMode(CacheMode.LOCAL);
+
+        TransactionConfiguration transaction = this.transaction.getValue();
+        PersistenceConfiguration persistence = this.persistence.getValue();
+
+        // Auto-enable simple cache optimization if cache is non-transactional and non-persistent
+        builder.simpleCache(!transaction.transactionMode().isTransactional() && !persistence.usingStores());
+    }
 }

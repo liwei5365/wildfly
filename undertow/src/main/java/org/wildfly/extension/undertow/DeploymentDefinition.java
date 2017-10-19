@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -31,12 +31,15 @@ import java.util.Map;
 import org.jboss.as.controller.AbstractRuntimeOnlyHandler;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.OperationContext;
+import org.jboss.as.controller.OperationDefinition;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
+import org.jboss.as.controller.SimpleOperationDefinitionBuilder;
 import org.jboss.as.controller.SimpleResourceDefinition;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
+import org.jboss.as.controller.descriptions.ResourceDescriptionResolver;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.registry.Resource;
 import org.jboss.dmr.ModelNode;
@@ -44,7 +47,7 @@ import org.jboss.dmr.ModelType;
 import org.jboss.msc.service.ServiceController;
 import org.wildfly.extension.undertow.deployment.UndertowDeploymentService;
 import org.wildfly.extension.undertow.logging.UndertowLogger;
-
+import io.undertow.server.session.Session;
 import io.undertow.server.session.SessionManager;
 import io.undertow.server.session.SessionManagerStatistics;
 import io.undertow.servlet.api.Deployment;
@@ -53,15 +56,28 @@ import io.undertow.servlet.api.Deployment;
  * @author Tomaz Cerar
  */
 public class DeploymentDefinition extends SimpleResourceDefinition {
+
+    private static final ResourceDescriptionResolver DEFAULT_RESOLVER = UndertowExtension.getResolver("deployment");
+
     public static final DeploymentDefinition INSTANCE = new DeploymentDefinition();
 
     public static final AttributeDefinition SERVER = new SimpleAttributeDefinitionBuilder("server", ModelType.STRING).setStorageRuntime().build();
     public static final AttributeDefinition CONTEXT_ROOT = new SimpleAttributeDefinitionBuilder("context-root", ModelType.STRING).setStorageRuntime().build();
     public static final AttributeDefinition VIRTUAL_HOST = new SimpleAttributeDefinitionBuilder("virtual-host", ModelType.STRING).setStorageRuntime().build();
+    static final AttributeDefinition SESSIOND_ID = new SimpleAttributeDefinitionBuilder("session-id", ModelType.STRING)
+            .setRequired(true)
+            .setAllowExpression(false)
+            .build();
+
+    static final OperationDefinition INVALIDATE_SESSION = new SimpleOperationDefinitionBuilder("invalidate-session", DEFAULT_RESOLVER)
+            .addParameter(SESSIOND_ID)
+            .setRuntimeOnly()
+            .setReplyType(ModelType.BOOLEAN)
+            .build();
 
     private DeploymentDefinition() {
         super(PathElement.pathElement(SUBSYSTEM, UndertowExtension.SUBSYSTEM_NAME),
-                UndertowExtension.getResolver("deployment"));
+                DEFAULT_RESOLVER);
     }
 
 
@@ -73,6 +89,12 @@ public class DeploymentDefinition extends SimpleResourceDefinition {
         for (SessionStat stat : SessionStat.values()) {
             resourceRegistration.registerMetric(stat.definition, SessionManagerStatsHandler.getInstance());
         }
+    }
+
+    @Override
+    public void registerOperations(ManagementResourceRegistration resourceRegistration) {
+        super.registerOperations(resourceRegistration);
+        resourceRegistration.registerOperationHandler(INVALIDATE_SESSION, SessionInvalidateHandler.getInstance());
     }
 
     static class SessionManagerStatsHandler extends AbstractRuntimeOnlyHandler {
@@ -98,15 +120,20 @@ public class DeploymentDefinition extends SimpleResourceDefinition {
             final String path = CONTEXT_ROOT.resolveModelAttribute(context, subModel).asString();
             final String server = SERVER.resolveModelAttribute(context, subModel).asString();
 
-            final ServiceController<?> controller = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, path));
-            final UndertowDeploymentService deploymentService = (UndertowDeploymentService) controller.getService();
-
             SessionStat stat = SessionStat.getStat(operation.require(ModelDescriptionConstants.NAME).asString());
 
             if (stat == null) {
                 context.getFailureDescription().set(UndertowLogger.ROOT_LOGGER.unknownMetric(operation.require(ModelDescriptionConstants.NAME).asString()));
             } else {
                 ModelNode result = new ModelNode();
+                final ServiceController<?> controller = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, path));
+                if (controller != null && controller.getState() != ServiceController.State.UP) {//check if deployment is active at all
+                    return;
+                }
+                final UndertowDeploymentService deploymentService = (UndertowDeploymentService) controller.getService();
+                if (deploymentService == null || deploymentService.getDeployment() == null) { //we might be in shutdown and it is possible
+                    return;
+                }
                 Deployment deployment = deploymentService.getDeployment();
                 SessionManager sessionManager = deployment.getSessionManager();
                 SessionManagerStatistics sms = sessionManager.getStatistics();
@@ -143,14 +170,14 @@ public class DeploymentDefinition extends SimpleResourceDefinition {
                         if(sms == null) {
                             result.set(0);
                         } else {
-                            result.set((int)sms.getAverageSessionAliveTime());
+                            result.set((int) sms.getAverageSessionAliveTime() / 1000);
                         }
                         break;
                     case SESSION_MAX_ALIVE_TIME:
                         if(sms == null) {
                             result.set(0);
                         } else {
-                            result.set((int)sms.getMaxSessionAliveTime());
+                            result.set((int) sms.getMaxSessionAliveTime() / 1000);
                         }
                         break;
                     case REJECTED_SESSIONS:
@@ -165,6 +192,55 @@ public class DeploymentDefinition extends SimpleResourceDefinition {
                 }
                 context.getResult().set(result);
             }
+        }
+    }
+
+
+    static class SessionInvalidateHandler extends AbstractRuntimeOnlyHandler {
+
+        static SessionInvalidateHandler INSTANCE = new SessionInvalidateHandler();
+
+        private SessionInvalidateHandler() {
+        }
+
+        public static SessionInvalidateHandler getInstance() {
+            return INSTANCE;
+        }
+
+        @Override
+        protected void executeRuntimeStep(OperationContext context, ModelNode operation) throws OperationFailedException {
+
+            final PathAddress address = PathAddress.pathAddress(operation.get(ModelDescriptionConstants.OP_ADDR));
+
+            final Resource web = context.readResourceFromRoot(address.subAddress(0, address.size()), false);
+            final ModelNode subModel = web.getModel();
+
+            final String host = VIRTUAL_HOST.resolveModelAttribute(context, subModel).asString();
+            final String path = CONTEXT_ROOT.resolveModelAttribute(context, subModel).asString();
+            final String server = SERVER.resolveModelAttribute(context, subModel).asString();
+
+            String sessionId = SESSIOND_ID.resolveModelAttribute(context, operation).asString();
+            ModelNode result = new ModelNode();
+            final ServiceController<?> controller = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, path));
+            if (controller != null && controller.getState() != ServiceController.State.UP) {//check if deployment is active at all
+                result.set(false);
+            } else {
+                final UndertowDeploymentService deploymentService = (UndertowDeploymentService) controller.getService();
+                if (deploymentService == null || deploymentService.getDeployment() == null) { //we might be in shutdown and it is possible
+                    result.set(false);
+                } else {
+                    Deployment deployment = deploymentService.getDeployment();
+                    SessionManager sessionManager = deployment.getSessionManager();
+                    Session session = sessionManager.getSession(sessionId);
+                    if (session == null) {
+                        result.set(false);
+                    } else {
+                        session.invalidate(null);
+                        result.set(true);
+                    }
+                }
+            }
+            context.getResult().set(result);
         }
     }
 

@@ -21,29 +21,15 @@
  */
 package org.wildfly.clustering.server.provider;
 
-import org.wildfly.clustering.provider.ServiceProviderRegistry;
-import org.wildfly.clustering.server.CacheBuilderFactory;
-import org.wildfly.clustering.service.Builder;
-import org.wildfly.clustering.spi.LocalCacheGroupBuilderProvider;
+import org.wildfly.clustering.spi.LocalCacheBuilderProvider;
 
 /**
  * Provides the requisite builders for a non-clustered {@link ServiceProviderRegistrationFactory}.
  * @author Paul Ferraro
  */
-public class LocalServiceProviderRegistryBuilderProvider extends ServiceProviderRegistryBuilderProvider implements LocalCacheGroupBuilderProvider {
+public class LocalServiceProviderRegistryBuilderProvider extends ServiceProviderRegistryBuilderProvider implements LocalCacheBuilderProvider {
 
-    private static final CacheBuilderFactory<ServiceProviderRegistry<Object>> FACTORY = new CacheBuilderFactory<ServiceProviderRegistry<Object>>() {
-        @Override
-        public Builder<ServiceProviderRegistry<Object>> createBuilder(String containerName, String cacheName) {
-            return new LocalServiceProviderRegistryBuilder<>(containerName, cacheName);
-        }
-    };
-
-    /**
-     * @param containerName
-     * @param cacheName
-     */
     public LocalServiceProviderRegistryBuilderProvider() {
-        super(FACTORY);
+        super((name, containerName, cacheName) -> new LocalServiceProviderRegistryBuilder<>(name, containerName, cacheName));
     }
 }

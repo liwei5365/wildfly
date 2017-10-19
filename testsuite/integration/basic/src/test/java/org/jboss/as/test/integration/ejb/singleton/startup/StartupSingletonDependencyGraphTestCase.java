@@ -22,8 +22,6 @@
 
 package org.jboss.as.test.integration.ejb.singleton.startup;
 
-import java.util.logging.Logger;
-
 import javax.naming.InitialContext;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -38,28 +36,25 @@ import org.junit.runner.RunWith;
 /**
  * Singleton startup dependency.
  * Part of the migration AS6->AS7 testsuite [JBQA-5275] - ejb3/singleton.
- * 
+ *
  * @author Jaikiran Pai, Ondrej Chaloupka
  */
 @RunWith(Arquillian.class)
 public class StartupSingletonDependencyGraphTestCase {
-    private static final Logger log = Logger.getLogger(StartupSingletonDependencyGraphTestCase.class.getName());
-
     @Deployment
     public static Archive<?> deploy() {
         JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "ejb3-singleton-startup.jar");
         jar.addPackage(StartupSingletonDependencyGraphTestCase.class.getPackage());
-        log.info(jar.toString(true));
         return jar;
     }
 
     @Test
     public void testStartupSingletonBeanAccess() throws Exception {
-            final SingletonBeanRemoteView singletonBean = InitialContext.doLookup("java:module/" + SingletonB.class.getSimpleName());
-            singletonBean.doSomething();
-            final String message = "Hello world!";
-            final String reply = singletonBean.echo(message);
-            Assert.assertEquals("Unexpected reply from singleton bean", message, reply);
+        final SingletonBeanRemoteView singletonBean = InitialContext.doLookup("java:module/" + SingletonB.class.getSimpleName());
+        singletonBean.doSomething();
+        final String message = "Hello world!";
+        final String reply = singletonBean.echo(message);
+        Assert.assertEquals("Unexpected reply from singleton bean", message, reply);
     }
 
 }

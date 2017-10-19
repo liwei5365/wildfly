@@ -22,9 +22,13 @@
 package org.jboss.as.test.integration.ws.serviceref;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FilePermission;
 import java.io.InputStreamReader;
+import java.net.SocketPermission;
 import java.net.URL;
 import java.util.Properties;
+import java.util.PropertyPermission;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
@@ -34,7 +38,6 @@ import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.network.NetworkUtils;
 import org.jboss.as.test.shared.FileUtils;
 import org.jboss.as.test.shared.PropertiesValueResolver;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
@@ -43,38 +46,48 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
+
 /**
- *
  * @author <a href="mailto:rsvoboda@redhat.com">Rostislav Svoboda</a>
  */
 @RunWith(Arquillian.class)
 @RunAsClient
 public class ServiceRefSevletTestCase {
 
-    private static final Logger log = Logger.getLogger(ServiceRefSevletTestCase.class);
-
-    @Deployment (name="main", testable=false)
+    @Deployment(name = "main", testable = false)
     public static JavaArchive mainDeployment() {
         JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "ws-serviceref-example.jar")
-            .addClasses(EJB3Bean.class, EndpointInterface.class);
-        log.info(jar.toString(true));
+                .addClasses(EJB3Bean.class, EndpointInterface.class);
         return jar;
     }
 
-    @Deployment (name="servletClient", testable=false)
+    @Deployment(name = "servletClient", testable = false)
     public static WebArchive clientDeployment() {
         WebArchive war = ShrinkWrap.create(WebArchive.class, "ws-serviceref-example-servlet-client.war")
-            .addClasses(EndpointInterface.class, EndpointService.class, ServletClient.class)
+                .addClasses(EndpointInterface.class, EndpointService.class, ServletClient.class)
                 .addAsWebInfResource(ServiceRefSevletTestCase.class.getPackage(), "web.xml", "web.xml")
                 .addAsWebInfResource(ServiceRefSevletTestCase.class.getPackage(), "jboss-web.xml", "jboss-web.xml");
 
         String wsdl = FileUtils.readFile(ServiceRefSevletTestCase.class, "TestService.wsdl");
         final Properties properties = new Properties();
         properties.putAll(System.getProperties());
-        if(properties.containsKey("node0")) {
-            properties.put("node0", NetworkUtils.formatPossibleIpv6Address((String) properties.get("node0")));
+        final String node0 = NetworkUtils.formatPossibleIpv6Address((String) properties.get("node0"));
+        if (properties.containsKey("node0")) {
+            properties.put("node0", node0);
         }
         war.addAsWebInfResource(new StringAsset(PropertiesValueResolver.replaceProperties(wsdl, properties)), "wsdl/TestService.wsdl");
+        // all the following permissions are needed because EndpointService directly extends javax.xml.ws.Service class
+        // and CXF guys are not willing to add more privileged blocks into their code, thus deployments need to have
+        // the following permissions (note that the wsdl.properties permission is needed by wsdl4j)
+        war.addAsManifestResource(createPermissionsXmlAsset(
+                new FilePermission(System.getProperty("java.home") + File.separator + "lib" + File.separator + "wsdl.properties", "read"),
+                new PropertyPermission("user.dir", "read"),
+                new RuntimePermission("getClassLoader"),
+                new RuntimePermission("org.apache.cxf.permission", "resolveUri"),
+                new RuntimePermission("createClassLoader"),
+                new RuntimePermission("accessDeclaredMembers"),
+                new SocketPermission(node0 + ":8080", "connect,resolve")), "jboss-permissions.xml");
         return war;
     }
 

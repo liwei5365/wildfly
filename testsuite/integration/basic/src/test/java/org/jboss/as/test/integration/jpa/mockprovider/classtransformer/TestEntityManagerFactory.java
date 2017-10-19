@@ -35,13 +35,12 @@ import java.util.List;
  */
 public class TestEntityManagerFactory implements InvocationHandler {
 
-    private static final List<String> invocations =Collections.synchronizedList(new ArrayList<String>());
+    private static final List<String> invocations = Collections.synchronizedList(new ArrayList<String>());
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
 
         invocations.add(method.getName());
-        //System.out.println("TestEntityManagerFactory method=" + method.getName() + " is returning null");
         return null;
 
     }

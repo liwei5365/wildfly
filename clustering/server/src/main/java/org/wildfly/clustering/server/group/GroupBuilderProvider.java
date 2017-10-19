@@ -22,44 +22,19 @@
 
 package org.wildfly.clustering.server.group;
 
-import java.util.Arrays;
-import java.util.Collection;
-
-import org.jboss.as.clustering.naming.BinderServiceBuilder;
-import org.jboss.as.clustering.naming.JndiNameFactory;
-import org.jboss.as.naming.ManagedReferenceFactory;
-import org.jboss.as.naming.deployment.ContextNames;
-import org.jboss.modules.ModuleIdentifier;
 import org.wildfly.clustering.group.Group;
-import org.wildfly.clustering.server.GroupBuilderFactory;
-import org.wildfly.clustering.service.Builder;
-import org.wildfly.clustering.spi.GroupServiceName;
+import org.wildfly.clustering.server.GroupCapabilityServiceBuilderFactory;
+import org.wildfly.clustering.server.GroupJndiNameFactory;
+import org.wildfly.clustering.server.GroupRequirementBuilderProvider;
+import org.wildfly.clustering.spi.ClusteringRequirement;
 
 /**
  * Provides the requisite builders for a {@link Group} service created from a specified factory.
  * @author Paul Ferraro
  */
-public class GroupBuilderProvider implements org.wildfly.clustering.spi.GroupBuilderProvider {
+public class GroupBuilderProvider extends GroupRequirementBuilderProvider<Group> {
 
-    private final GroupBuilderFactory<Group> factory;
-
-    public GroupBuilderProvider(GroupBuilderFactory<Group> factory) {
-        this.factory = factory;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public Collection<Builder<?>> getBuilders(String group, ModuleIdentifier module) {
-        Builder<Group> builder = this.factory.createBuilder(group, module);
-        ContextNames.BindInfo binding = ContextNames.bindInfoFor(JndiNameFactory.createJndiName(JndiNameFactory.DEFAULT_JNDI_NAMESPACE, GroupServiceName.BASE_NAME, GroupServiceName.GROUP.toString(), group).getAbsoluteName());
-        Builder<ManagedReferenceFactory> bindingBuilder = new BinderServiceBuilder<>(binding, builder.getServiceName(), Group.class);
-        return Arrays.asList(builder, bindingBuilder);
-    }
-
-    @Override
-    public String toString() {
-        return this.getClass().getName();
+    public GroupBuilderProvider(GroupCapabilityServiceBuilderFactory<Group> factory) {
+        super(ClusteringRequirement.GROUP, factory, GroupJndiNameFactory.GROUP);
     }
 }

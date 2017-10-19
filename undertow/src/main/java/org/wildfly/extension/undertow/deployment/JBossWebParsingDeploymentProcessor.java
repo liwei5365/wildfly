@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2013, Red Hat, Inc., and individual contributors
+ * Copyright 2017, Red Hat, Inc., and individual contributors
  * as indicated by the @author tags. See the copyright.txt file in the
  * distribution for a full listing of individual contributors.
  *
@@ -41,6 +41,7 @@ import org.jboss.as.web.common.WarMetaData;
 import org.jboss.metadata.parser.jbossweb.JBossWebMetaDataParser;
 import org.jboss.metadata.parser.util.NoopXMLResolver;
 import org.jboss.metadata.web.jboss.JBossWebMetaData;
+import org.jboss.metadata.web.jboss.ValveMetaData;
 import org.jboss.vfs.VirtualFile;
 import org.wildfly.extension.undertow.logging.UndertowLogger;
 
@@ -74,6 +75,11 @@ public class JBossWebParsingDeploymentProcessor implements DeploymentUnitProcess
                 warMetaData.setJBossWebMetaData(jBossWebMetaData);
                 // if the jboss-web.xml has a distinct-name configured, then attach the value to this
                 // deployment unit
+                if(jBossWebMetaData.getValves() != null) {
+                    for(ValveMetaData valve : jBossWebMetaData.getValves()) {
+                        UndertowLogger.ROOT_LOGGER.unsupportedValveFeature(valve.getValveClass());
+                    }
+                }
                 if (jBossWebMetaData.getDistinctName() != null) {
                     deploymentUnit.putAttachment(org.jboss.as.ee.structure.Attachments.DISTINCT_NAME, jBossWebMetaData.getDistinctName());
                 }

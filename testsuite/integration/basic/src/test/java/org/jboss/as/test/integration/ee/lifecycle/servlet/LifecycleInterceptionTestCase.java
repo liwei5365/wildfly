@@ -22,6 +22,7 @@
 package org.jboss.as.test.integration.ee.lifecycle.servlet;
 
 import java.io.IOException;
+import java.net.SocketPermission;
 import java.net.URL;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -30,9 +31,12 @@ import java.util.concurrent.TimeoutException;
 import org.jboss.arquillian.container.test.api.Deployer;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.test.integration.common.HttpRequest;
+import org.jboss.as.test.shared.TestSuiteEnvironment;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
+
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
 /**
  * @author Matus Abaffy
@@ -47,7 +51,11 @@ public abstract class LifecycleInterceptionTestCase {
         return ShrinkWrap.create(WebArchive.class, "remote.war")
                 .addClasses(LifecycleCallbackBinding.class, LifecycleCallbackInterceptor.class, InfoClient.class,
                         InitServlet.class)
-                .addAsWebInfResource(EmptyAsset.INSTANCE, BEANS_XML);
+                .addAsWebInfResource(EmptyAsset.INSTANCE, BEANS_XML)
+                // InfoClient requires SocketPermission
+                .addAsManifestResource(
+                        createPermissionsXmlAsset(new SocketPermission(TestSuiteEnvironment.getServerAddress() + ":" + TestSuiteEnvironment.getHttpPort(), "connect,resolve")),
+                        "permissions.xml");
     }
 
     protected static WebArchive createMainTestArchiveBase() {
@@ -61,7 +69,7 @@ public abstract class LifecycleInterceptionTestCase {
 
     @ArquillianResource//(InfoServlet.class)
     URL infoContextPath;
-    
+
     protected String doGetRequest(String path) throws IOException, ExecutionException, TimeoutException {
         return HttpRequest.get(path, 10, TimeUnit.SECONDS);
     }

@@ -25,13 +25,14 @@ package org.jboss.as.test.integration.ejb.ejb2.reference.global;
 import java.util.Hashtable;
 
 import javax.ejb.EJBHome;
-import javax.naming.*;
+import javax.naming.Context;
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.ejb.client.EJBClient;
 import org.jboss.ejb.client.EJBHomeLocator;
-import org.jboss.logging.Logger;
 
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
@@ -43,13 +44,12 @@ import org.junit.runner.RunWith;
 /**
  * Migration test from EJB Testsuite (reference21_30) to AS7 [JIRA JBQA-5483].
  * Test for EJB3.0/EJB2.1 references
- * 
+ *
  * @author William DeCoste, Ondrej Chaloupka
  */
 @RunWith(Arquillian.class)
 public class GlobalReferenceTestCase {
 
-    private static final Logger log = Logger.getLogger(GlobalReferenceTestCase.class);
     private static final String EJB2 = "global-reference-ejb2";
     private static final String EJB3 = "global-reference-ejb3";
 
@@ -58,7 +58,6 @@ public class GlobalReferenceTestCase {
         final JavaArchive jar = ShrinkWrap.create(JavaArchive.class, EJB3 + ".jar")
            .addClasses(GlobalReferenceTestCase.class, GlobalSession30Bean.class, Session30.class, Session30RemoteBusiness.class,
                    Session21.class, Session21Home.class);
-        log.info(jar.toString(true));
         return jar;
     }
 
@@ -67,7 +66,6 @@ public class GlobalReferenceTestCase {
         final JavaArchive jar = ShrinkWrap.create(JavaArchive.class, EJB2 + ".jar")
            .addClasses(Session21.class, Session21Bean.class, Session21Home.class,
                    Session30.class, Session30RemoteBusiness.class);
-        log.info(jar.toString(true));
         jar.addAsManifestResource(GlobalReferenceTestCase.class.getPackage(), "jboss-ejb3-global.xml", "jboss.xml");
         jar.addAsManifestResource(GlobalReferenceTestCase.class.getPackage(), "ejb-jar-global.xml", "ejb-jar.xml");
         return jar;
@@ -90,7 +88,7 @@ public class GlobalReferenceTestCase {
     @Test
     public void testSession21() throws Exception {
         Session21Home home = this.getHome(Session21Home.class, "Session21");
-        Session21 session = (Session21) home.create();
+        Session21 session = home.create();
         String access = session.access();
         Assert.assertEquals("Session21", access);
         access = session.globalAccess30();

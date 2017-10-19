@@ -23,19 +23,16 @@
 package org.jboss.as.test.integration.ejb.security.runas.ejb2mdb;
 
 import javax.annotation.Resource;
+import javax.annotation.security.RolesAllowed;
 import javax.ejb.Remote;
 import javax.ejb.SessionContext;
 import javax.ejb.Stateless;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
-// Security related imports
-import javax.annotation.security.RolesAllowed;
-
-import org.jboss.logging.Logger;
 
 /**
  * Returns hola greeting for INTERNAL_ROLE.
- * 
+ *
  * @author Ondrej Chaloupka
  */
 @Stateless(name = "Hola")
@@ -43,25 +40,18 @@ import org.jboss.logging.Logger;
 @Remote(Hola.class)
 @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
 public class HolaBean implements Hola {
-    private static final Logger log = Logger.getLogger(HowdyBean.class);
-    
+    public static final String SAYING = "Hola";
+
     @Resource
     private SessionContext context;
 
     @RolesAllowed("INTERNAL_ROLE")
     public String sayHola() {
-        log.info("HolaBean.sayHola(). Caller name: " + context.getCallerPrincipal().getName());
-
-        if (context.isCallerInRole("JBossAdmin")) {
-            log.info("User is in role!!");
-        }
-
-        String name = getName();
-        return "Hola " + name + "!";
+        return String.format("%s %s", SAYING, getName());
     }
 
     private String getName() {
-        return "Fred";
+        return context.getCallerPrincipal().getName();
     }
 
 }

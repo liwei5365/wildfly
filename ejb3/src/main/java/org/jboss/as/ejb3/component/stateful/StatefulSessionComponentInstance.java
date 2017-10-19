@@ -26,6 +26,7 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.ejb.EJBException;
 import javax.transaction.Transaction;
@@ -41,11 +42,13 @@ import org.jboss.as.naming.ManagedReference;
 import org.jboss.ejb.client.SessionID;
 import org.jboss.invocation.Interceptor;
 import org.jboss.invocation.InterceptorContext;
+import org.wildfly.transaction.client.AbstractTransaction;
+import org.wildfly.transaction.client.ContextTransactionManager;
 
 /**
  * @author <a href="mailto:cdewolf@redhat.com">Carlo de Wolf</a>
  */
-public class StatefulSessionComponentInstance extends SessionBeanComponentInstance implements Identifiable<SessionID>, Contextual {
+public class StatefulSessionComponentInstance extends SessionBeanComponentInstance implements Identifiable<SessionID>, Contextual<Object> {
     private static final long serialVersionUID = 3803978357389448971L;
 
     private final SessionID id;
@@ -76,6 +79,21 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
      * The thread based lock for the stateful bean
      */
     private final Object threadLock = new Object();
+    /**
+     * State that is used to defer afterCompletion invocation if an invocation is currently in progress.
+     *
+     * States:
+     * 0 = No invocation in progress
+     * 1 = Invocation in progress
+     * 2 = Invocation in progress, afterCompletion delayed
+     *
+     */
+    private final AtomicInteger invocationSynchState = new AtomicInteger();
+    public static final int SYNC_STATE_NO_INVOCATION = 0;
+    public static final int SYNC_STATE_INVOCATION_IN_PROGRESS = 1;
+    public static final int SYNC_STATE_AFTER_COMPLETE_DELAYED_NO_COMMIT = 2;
+    public static final int SYNC_STATE_AFTER_COMPLETE_DELAYED_COMMITTED = 3;
+
     private boolean removed = false;
 
     boolean isSynchronizationRegistered() {
@@ -92,6 +110,10 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
 
     OwnableReentrantLock getLock() {
         return lock;
+    }
+
+    AtomicInteger getInvocationSynchState() {
+        return invocationSynchState;
     }
 
     /**
@@ -167,6 +189,8 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
         interceptorContext.putPrivateData(InvokeMethodOnTargetInterceptor.PARAMETERS_KEY, parameters);
         interceptorContext.setContextData(new HashMap<String, Object>());
         interceptorContext.setTarget(getInstance());
+        final AbstractTransaction transaction = ContextTransactionManager.getInstance().getTransaction();
+        interceptorContext.setTransactionSupplier(() -> transaction);
         try {
             return interceptor.processInvocation(interceptorContext);
         } catch (Error e) {

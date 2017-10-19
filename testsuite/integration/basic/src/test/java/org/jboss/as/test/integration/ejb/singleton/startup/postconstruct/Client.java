@@ -22,11 +22,11 @@
 
 package org.jboss.as.test.integration.ejb.singleton.startup.postconstruct;
 
+import org.jboss.logging.Logger;
 import javax.annotation.PostConstruct;
 import javax.ejb.EJB;
 import javax.ejb.Singleton;
 import javax.ejb.Startup;
-import java.util.logging.Logger;
 
 /**
  * @author Jan Martiska / jmartisk@redhat.com
@@ -42,7 +42,7 @@ public class Client {
 
     @PostConstruct
     public void postConstruct() {
-        logger.info("Client's PostConstruct called.");
+        logger.trace("Client's PostConstruct called.");
     }
 
 }

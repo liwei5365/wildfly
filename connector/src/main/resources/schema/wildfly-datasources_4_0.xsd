@@ -754,6 +754,16 @@
           </xs:documentation>
         </xs:annotation>
       </xs:element>
+      <xs:element name="fair" type="xs:boolean" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>
+            <![CDATA[[
+              Defines if pool use should be fair
+              Default true
+             ]]>
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
       <xs:element name="use-strict-min" type="xs:boolean" minOccurs="0" maxOccurs="1">
         <xs:annotation>
           <xs:documentation>
@@ -1024,7 +1034,7 @@
         <xs:documentation>
           <![CDATA[[
             Specifies the name of AS7 module providing this driver.
-            Thios tag is not used in IronJacamar standalone container.
+            This tag is not used in IronJacamar standalone container.
            ]]>
         </xs:documentation>
       </xs:annotation>

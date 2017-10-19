@@ -29,37 +29,44 @@ import static org.jboss.as.clustering.infinispan.subsystem.LockingResourceDefini
 
 import org.infinispan.configuration.cache.ConfigurationBuilder;
 import org.infinispan.configuration.cache.LockingConfiguration;
-import org.infinispan.configuration.cache.LockingConfigurationBuilder;
 import org.infinispan.util.concurrent.IsolationLevel;
-import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
 import org.wildfly.clustering.service.Builder;
 
 /**
  * @author Paul Ferraro
  */
-public class LockingBuilder extends CacheComponentBuilder<LockingConfiguration> implements ResourceServiceBuilder<LockingConfiguration> {
+public class LockingBuilder extends ComponentBuilder<LockingConfiguration> {
 
-    private final LockingConfigurationBuilder builder = new ConfigurationBuilder().locking();
+    private volatile long timeout;
+    private volatile int concurrency;
+    private volatile IsolationLevel isolation;
+    private volatile boolean striping;
 
-    LockingBuilder(String containerName, String cacheName) {
-        super(CacheComponent.LOCKING, containerName, cacheName);
+    LockingBuilder(PathAddress cacheAddress) {
+        super(CacheComponent.LOCKING, cacheAddress);
     }
 
     @Override
     public LockingConfiguration getValue() {
-        return this.builder.create();
+        return new ConfigurationBuilder().locking()
+                .lockAcquisitionTimeout(this.timeout)
+                .concurrencyLevel(this.concurrency)
+                .isolationLevel(this.isolation)
+                .useLockStriping(this.striping)
+                .create();
     }
 
     @Override
     public Builder<LockingConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.builder.lockAcquisitionTimeout(ACQUIRE_TIMEOUT.getDefinition().resolveModelAttribute(context, model).asLong());
-        this.builder.concurrencyLevel(CONCURRENCY.getDefinition().resolveModelAttribute(context, model).asInt());
-        this.builder.isolationLevel(ModelNodes.asEnum(ISOLATION.getDefinition().resolveModelAttribute(context, model), IsolationLevel.class));
-        this.builder.useLockStriping(STRIPING.getDefinition().resolveModelAttribute(context, model).asBoolean());
+        this.timeout = ACQUIRE_TIMEOUT.resolveModelAttribute(context, model).asLong();
+        this.concurrency = CONCURRENCY.resolveModelAttribute(context, model).asInt();
+        this.isolation = ModelNodes.asEnum(ISOLATION.resolveModelAttribute(context, model), IsolationLevel.class);
+        this.striping = STRIPING.resolveModelAttribute(context, model).asBoolean();
         return this;
     }
 }

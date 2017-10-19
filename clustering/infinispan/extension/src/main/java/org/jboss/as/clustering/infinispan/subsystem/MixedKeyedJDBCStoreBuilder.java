@@ -22,54 +22,43 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
+import java.util.stream.Stream;
+
 import org.infinispan.configuration.cache.PersistenceConfiguration;
 import org.infinispan.persistence.jdbc.configuration.JdbcMixedStoreConfiguration;
 import org.infinispan.persistence.jdbc.configuration.JdbcMixedStoreConfigurationBuilder;
 import org.infinispan.persistence.jdbc.configuration.TableManipulationConfiguration;
-import org.jboss.as.controller.OperationContext;
-import org.jboss.as.controller.OperationFailedException;
-import org.jboss.dmr.ModelNode;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
-import org.jboss.msc.value.InjectedValue;
+import org.wildfly.clustering.service.InjectedValueDependency;
+import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
 public class MixedKeyedJDBCStoreBuilder extends JDBCStoreBuilder<JdbcMixedStoreConfiguration, JdbcMixedStoreConfigurationBuilder> {
 
-    private final InjectedValue<TableManipulationConfiguration> binaryTable = new InjectedValue<>();
-    private final InjectedValue<TableManipulationConfiguration> stringTable = new InjectedValue<>();
+    private final ValueDependency<TableManipulationConfiguration> binaryTable;
+    private final ValueDependency<TableManipulationConfiguration> stringTable;
 
-    private final String containerName;
-    private final String cacheName;
-
-    private volatile JdbcMixedStoreConfigurationBuilder builder;
-
-    MixedKeyedJDBCStoreBuilder(String containerName, String cacheName) {
-        super(JdbcMixedStoreConfigurationBuilder.class, containerName, cacheName);
-        this.containerName = containerName;
-        this.cacheName = cacheName;
+    MixedKeyedJDBCStoreBuilder(PathAddress cacheAddress) {
+        super(cacheAddress, JdbcMixedStoreConfigurationBuilder.class);
+        this.binaryTable = new InjectedValueDependency<>(CacheComponent.BINARY_TABLE.getServiceName(cacheAddress), TableManipulationConfiguration.class);
+        this.stringTable = new InjectedValueDependency<>(CacheComponent.STRING_TABLE.getServiceName(cacheAddress), TableManipulationConfiguration.class);
     }
 
     @Override
     public ServiceBuilder<PersistenceConfiguration> build(ServiceTarget target) {
-        return super.build(target)
-                .addDependency(CacheComponent.BINARY_TABLE.getServiceName(this.containerName, this.cacheName), TableManipulationConfiguration.class, this.binaryTable)
-                .addDependency(CacheComponent.STRING_TABLE.getServiceName(this.containerName, this.cacheName), TableManipulationConfiguration.class, this.stringTable)
-        ;
+        ServiceBuilder<PersistenceConfiguration> builder = super.build(target);
+        Stream.of(this.binaryTable, this.stringTable).forEach(dependency -> dependency.register(builder));
+        return builder;
     }
 
     @Override
-    public PersistenceConfiguration getValue() {
-        this.builder.binaryTable().read(this.binaryTable.getValue());
-        this.builder.stringTable().read(this.stringTable.getValue());
-        return super.getValue();
-    }
-
-    @Override
-    JdbcMixedStoreConfigurationBuilder createStore(OperationContext context, ModelNode model) throws OperationFailedException {
-        this.builder = super.createStore(context, model);
-        return this.builder;
+    public void accept(JdbcMixedStoreConfigurationBuilder builder) {
+        builder.binaryTable().read(this.binaryTable.getValue());
+        builder.stringTable().read(this.stringTable.getValue());
+        super.accept(builder);
     }
 }

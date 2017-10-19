@@ -22,15 +22,15 @@
 
 package org.jboss.as.test.integration.ee.injection.resource.infinispan;
 
-import org.junit.Assert;
-import org.infinispan.Cache;
-import org.infinispan.manager.CacheContainer;
-
 import javax.annotation.ManagedBean;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
+
+import org.infinispan.Cache;
+import org.infinispan.manager.CacheContainer;
+import org.junit.Assert;
 
 /**
  * @author Paul Ferraro
@@ -62,22 +62,20 @@ public class InfinispanBean {
             // Test custom type
             this.cache.put(2, new Bean());
         } catch (Exception e) {
-            e.printStackTrace(System.err);
             throw new RuntimeException(e);
         }
 
         try {
             // Make sure we can also perform a vanilla java:comp/env jndi lookup of container
             Object result = new InitialContext().lookup(CONTAINER_JNDI_NAME);
-            Assert.assertSame(this.container, result);
+            Assert.assertEquals(this.container, result);
         } catch (NamingException e) {
             Assert.fail(e.getMessage());
         }
 
     }
 
-    public static class Bean implements java.io.Serializable
-    {
+    public static class Bean implements java.io.Serializable {
         private static final long serialVersionUID = -7265704761812104791L;
     }
 }

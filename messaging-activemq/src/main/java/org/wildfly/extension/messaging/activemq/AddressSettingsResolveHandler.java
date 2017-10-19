@@ -25,6 +25,8 @@ package org.wildfly.extension.messaging.activemq;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
 import static org.wildfly.extension.messaging.activemq.ActiveMQActivationService.ignoreOperationIfServerNotActive;
 import static org.wildfly.extension.messaging.activemq.AddressSettingDefinition.ADDRESS_FULL_MESSAGE_POLICY;
+import static org.wildfly.extension.messaging.activemq.AddressSettingDefinition.AUTO_CREATE_JMS_QUEUES;
+import static org.wildfly.extension.messaging.activemq.AddressSettingDefinition.AUTO_DELETE_JMS_QUEUES;
 import static org.wildfly.extension.messaging.activemq.AddressSettingDefinition.EXPIRY_DELAY;
 import static org.wildfly.extension.messaging.activemq.AddressSettingDefinition.LAST_VALUE_QUEUE;
 import static org.wildfly.extension.messaging.activemq.AddressSettingDefinition.MAX_DELIVERY_ATTEMPTS;
@@ -45,8 +47,6 @@ import static org.wildfly.extension.messaging.activemq.CommonAttributes.EXPIRY_A
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.RESOLVE_ADDRESS_SETTING;
 import static org.wildfly.extension.messaging.activemq.OperationDefinitionHelper.createNonEmptyStringAttribute;
 
-import java.util.EnumSet;
-
 import org.apache.activemq.artemis.core.server.ActiveMQServer;
 import org.apache.activemq.artemis.core.settings.impl.AddressSettings;
 import org.jboss.as.controller.AbstractRuntimeOnlyHandler;
@@ -58,7 +58,6 @@ import org.jboss.as.controller.SimpleOperationDefinition;
 import org.jboss.as.controller.SimpleOperationDefinitionBuilder;
 import org.jboss.as.controller.descriptions.ResourceDescriptionResolver;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
-import org.jboss.as.controller.registry.OperationEntry;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
 import org.jboss.msc.service.ServiceController;
@@ -130,12 +129,14 @@ public class AddressSettingsResolveHandler extends AbstractRuntimeOnlyHandler {
         result.get(SLOW_CONSUMER_CHECK_PERIOD.getName()).set(settings.getSlowConsumerCheckPeriod());
         result.get(SLOW_CONSUMER_POLICY.getName()).set(settings.getSlowConsumerPolicy().toString());
         result.get(SLOW_CONSUMER_THRESHOLD.getName()).set(settings.getSlowConsumerThreshold());
-
+        result.get(AUTO_CREATE_JMS_QUEUES.getName()).set(settings.isAutoCreateJmsQueues());
+        result.get(AUTO_DELETE_JMS_QUEUES.getName()).set(settings.isAutoDeleteJmsQueues());
     }
 
     public static void registerOperationHandler(ManagementResourceRegistration registry, ResourceDescriptionResolver resolver) {
         SimpleOperationDefinition op = new SimpleOperationDefinitionBuilder(RESOLVE_ADDRESS_SETTING, resolver)
-                .withFlags(EnumSet.of(OperationEntry.Flag.READ_ONLY, OperationEntry.Flag.RUNTIME_ONLY))
+                .setReadOnly()
+                .setRuntimeOnly()
                 .addParameter(ACTIVEMQ_ADDRESS)
                 .setReplyType(ModelType.LIST)
                 .setReplyParameters(AddressSettingDefinition.ATTRIBUTES)

@@ -41,6 +41,9 @@ import org.junit.runner.RunWith;
 import javax.jms.Message;
 import javax.jms.Queue;
 import javax.naming.InitialContext;
+import java.util.PropertyPermission;
+
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
 /**
  * Tests EJB2.0 MDBs with message selector.
@@ -61,7 +64,7 @@ public class MDB20MessageSelectorTestCase extends AbstractMDB2xTestCase {
 
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
-            jmsAdminOperations = JMSOperationsProvider.getInstance(managementClient);
+            jmsAdminOperations = JMSOperationsProvider.getInstance(managementClient.getControllerClient());
             jmsAdminOperations.createJmsQueue("ejb2x/queue", "java:jboss/ejb2x/queue");
             jmsAdminOperations.createJmsQueue("ejb2x/replyQueueA", "java:jboss/ejb2x/replyQueueA");
             jmsAdminOperations.createJmsQueue("ejb2x/replyQueueB", "java:jboss/ejb2x/replyQueueB");
@@ -87,7 +90,7 @@ public class MDB20MessageSelectorTestCase extends AbstractMDB2xTestCase {
         ejbJar.addAsManifestResource(MDB20MessageSelectorTestCase.class.getPackage(), "ejb-jar-20-message-selector.xml", "ejb-jar.xml");
         ejbJar.addAsManifestResource(MDB20MessageSelectorTestCase.class.getPackage(), "jboss-ejb3.xml", "jboss-ejb3.xml");
         ejbJar.addAsManifestResource(new StringAsset("Dependencies: org.jboss.as.controller-client, org.jboss.dmr \n"), "MANIFEST.MF");
-        logger.info(ejbJar.toString(true));
+        ejbJar.addAsManifestResource(createPermissionsXmlAsset(new PropertyPermission("ts.timeout.factor", "read")), "jboss-permissions.xml");
         return ejbJar;
     }
 

@@ -23,37 +23,38 @@
 package org.jboss.as.clustering.jgroups.subsystem;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import org.jboss.as.clustering.controller.CapabilityServiceNameProvider;
 import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.clustering.jgroups.JChannelFactory;
-import org.jboss.as.clustering.jgroups.ProtocolDefaults;
 import org.jboss.as.clustering.jgroups.logging.JGroupsLogger;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.as.controller.PathAddress;
+import org.jboss.as.controller.PathElement;
+import org.jboss.as.controller.registry.Resource;
 import org.jboss.as.server.ServerEnvironment;
 import org.jboss.as.server.ServerEnvironmentService;
-import org.jboss.as.server.Services;
 import org.jboss.dmr.ModelNode;
-import org.jboss.dmr.Property;
-import org.jboss.modules.ModuleLoader;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceController;
-import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceTarget;
 import org.jboss.msc.service.ValueService;
 import org.jboss.msc.value.InjectedValue;
 import org.jboss.msc.value.Value;
+import org.jgroups.protocols.TP;
+import org.jgroups.stack.Protocol;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
 import org.wildfly.clustering.jgroups.spi.ProtocolConfiguration;
 import org.wildfly.clustering.jgroups.spi.ProtocolStackConfiguration;
 import org.wildfly.clustering.jgroups.spi.RelayConfiguration;
 import org.wildfly.clustering.jgroups.spi.TransportConfiguration;
-import org.wildfly.clustering.jgroups.spi.service.ProtocolStackServiceName;
 import org.wildfly.clustering.service.Builder;
-import org.wildfly.clustering.service.Dependency;
 import org.wildfly.clustering.service.InjectedValueDependency;
 import org.wildfly.clustering.service.ValueDependency;
 
@@ -61,91 +62,69 @@ import org.wildfly.clustering.service.ValueDependency;
  * Builder for a service that provides a {@link ChannelFactory} for creating channels.
  * @author Paul Ferraro
  */
-public class JChannelFactoryBuilder implements ResourceServiceBuilder<ChannelFactory>, Value<ChannelFactory>, ProtocolStackConfiguration {
+public class JChannelFactoryBuilder extends CapabilityServiceNameProvider implements ResourceServiceBuilder<ChannelFactory>, ProtocolStackConfiguration {
 
-    private final InjectedValue<ProtocolDefaults> defaults = new InjectedValue<>();
     private final InjectedValue<ServerEnvironment> environment = new InjectedValue<>();
-    private final InjectedValue<ModuleLoader> loader = new InjectedValue<>();
-    private final String name;
-    private ValueDependency<TransportConfiguration> transport = null;
-    private final List<ValueDependency<ProtocolConfiguration>> protocols = new LinkedList<>();
-    private ValueDependency<RelayConfiguration> relay = null;
+    private final PathAddress address;
 
-    public JChannelFactoryBuilder(String name) {
-        this.name = name;
-    }
+    private volatile boolean statisticsEnabled;
 
-    @Override
-    public ServiceName getServiceName() {
-        return ProtocolStackServiceName.CHANNEL_FACTORY.getServiceName(this.name);
+    @SuppressWarnings("rawtypes")
+    private volatile ValueDependency<TransportConfiguration> transport = null;
+    @SuppressWarnings("rawtypes")
+    private volatile List<ValueDependency<ProtocolConfiguration>> protocols = null;
+    private volatile ValueDependency<RelayConfiguration> relay = null;
+
+    public JChannelFactoryBuilder(PathAddress address) {
+        super(StackResourceDefinition.Capability.JCHANNEL_FACTORY, address);
+        this.address = address;
     }
 
     @Override
     public ServiceBuilder<ChannelFactory> build(ServiceTarget target) {
-        ServiceBuilder<ChannelFactory> builder = target.addService(this.getServiceName(), new ValueService<>(this))
-                .addDependency(ProtocolDefaultsBuilder.SERVICE_NAME, ProtocolDefaults.class, this.defaults)
+        Value<ChannelFactory> value = () -> new JChannelFactory(this);
+        ServiceBuilder<ChannelFactory> builder = target.addService(this.getServiceName(), new ValueService<>(value))
                 .addDependency(ServerEnvironmentService.SERVICE_NAME, ServerEnvironment.class, this.environment)
-                .addDependency(Services.JBOSS_SERVICE_MODULE_LOADER, ModuleLoader.class, this.loader)
                 .setInitialMode(ServiceController.Mode.ON_DEMAND);
-        if (this.transport != null) {
-            this.transport.register(builder);
-        }
-        for (Dependency protocol : this.protocols) {
-            protocol.register(builder);
-        }
-        if (this.relay != null) {
-            this.relay.register(builder);
-        }
+        Stream.concat(Stream.of(this.transport, this.relay).filter(Objects::nonNull), this.protocols.stream()).forEach(dependency -> dependency.register(builder));
         return builder;
     }
 
     @Override
     public Builder<ChannelFactory> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        if (!model.hasDefined(TransportResourceDefinition.WILDCARD_PATH.getKey())) {
-            throw JGroupsLogger.ROOT_LOGGER.transportNotDefined(this.name);
+        this.statisticsEnabled = StackResourceDefinition.Attribute.STATISTICS_ENABLED.resolveModelAttribute(context, model).asBoolean();
+
+        Resource resource = context.readResourceFromRoot(this.address, false);
+        Optional<PathElement> transport = resource.getChildren(TransportResourceDefinition.WILDCARD_PATH.getKey()).stream().map(Resource.ResourceEntry::getPathElement).findFirst();
+        if (!transport.isPresent()) {
+            throw JGroupsLogger.ROOT_LOGGER.transportNotDefined(this.getName());
         }
 
-        Property transport = model.get(TransportResourceDefinition.WILDCARD_PATH.getKey()).asProperty();
-
-        this.transport = new InjectedValueDependency<>(new TransportConfigurationBuilder(this.name, transport.getName()), TransportConfiguration.class);
-        this.protocols.clear();
-
-        if (model.hasDefined(ProtocolResourceDefinition.WILDCARD_PATH.getKey())) {
-            for (Property protocol : model.get(ProtocolResourceDefinition.WILDCARD_PATH.getKey()).asPropertyList()) {
-                this.protocols.add(new InjectedValueDependency<>(new ProtocolConfigurationBuilder(this.name, protocol.getName()), ProtocolConfiguration.class));
-            }
-        }
-
-        this.relay = model.hasDefined(RelayResourceDefinition.PATH.getKey()) ? new InjectedValueDependency<>(new RelayConfigurationBuilder(this.name), RelayConfiguration.class) : null;
+        this.transport = new InjectedValueDependency<>(new SingletonProtocolServiceNameProvider(this.address, transport.get()), TransportConfiguration.class);
+        this.protocols = resource.getChildren(ProtocolResourceDefinition.WILDCARD_PATH.getKey()).stream().map(entry -> new InjectedValueDependency<>(new ProtocolServiceNameProvider(this.address, entry.getPathElement()), ProtocolConfiguration.class)).collect(Collectors.toList());
+        this.relay = resource.hasChild(RelayResourceDefinition.PATH) ? new InjectedValueDependency<>(new SingletonProtocolServiceNameProvider(this.address, RelayResourceDefinition.PATH), RelayConfiguration.class) : null;
 
         return this;
     }
 
     @Override
-    public ChannelFactory getValue() {
-        return new JChannelFactory(this);
-    }
-
-    @Override
     public String getName() {
-        return this.name;
+        return this.address.getLastElement().getValue();
     }
 
     @Override
-    public Map<String, String> getDefaultProperties(String protocol) {
-        return this.defaults.getValue().getProperties(protocol);
+    public TransportConfiguration<? extends TP> getTransport() {
+        return this.transport.getValue();
     }
 
     @Override
-    public TransportConfiguration getTransport() {
-        return (this.transport != null) ? this.transport.getValue() : null;
-    }
-
-    @Override
-    public List<ProtocolConfiguration> getProtocols() {
-        List<ProtocolConfiguration> protocols = new ArrayList<>(this.protocols.size());
-        for (Value<ProtocolConfiguration> protocol : this.protocols) {
-            protocols.add(protocol.getValue());
+    public List<ProtocolConfiguration<? extends Protocol>> getProtocols() {
+        // This works in eclipse, but fails in openjdk 1.8.0_121
+        // return this.protocols.stream().map(Value::getValue).collect(Collectors.toList());
+        List<ProtocolConfiguration<? extends Protocol>> protocols = new ArrayList<>(this.protocols.size());
+        for (@SuppressWarnings("rawtypes") Value<ProtocolConfiguration> protocolValue : this.protocols) {
+            ProtocolConfiguration<? extends Protocol> protocol = protocolValue.getValue();
+            protocols.add(protocol);
         }
         return protocols;
     }
@@ -161,7 +140,7 @@ public class JChannelFactoryBuilder implements ResourceServiceBuilder<ChannelFac
     }
 
     @Override
-    public ModuleLoader getModuleLoader() {
-        return this.loader.getValue();
+    public boolean isStatisticsEnabled() {
+        return this.statisticsEnabled;
     }
 }

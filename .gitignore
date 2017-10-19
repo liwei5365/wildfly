@@ -6,6 +6,7 @@ target
 # ignore downloaded maven
 /tools/maven
 /tools/maven.zip
+/tools/wrapper
 # ignore eclipse files
 .project
 .classpath
@@ -56,3 +57,6 @@ client/shade/dependency-reduced-pom.xml
 
 #OS X stuff
 .DS_Store
+
+# Zanata files
+**/.zanata-cache/

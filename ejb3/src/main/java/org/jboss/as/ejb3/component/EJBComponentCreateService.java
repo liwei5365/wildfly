@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 import org.jboss.as.core.security.ServerSecurityManager;
 import org.jboss.as.ee.component.BasicComponentCreateService;
@@ -48,8 +49,9 @@ import org.jboss.as.ee.component.ViewDescription;
 import org.jboss.as.ejb3.component.interceptors.ShutDownInterceptorFactory;
 import org.jboss.as.ejb3.component.messagedriven.MessageDrivenComponentDescription;
 import org.jboss.as.ejb3.deployment.ApplicationExceptions;
-import org.jboss.as.ejb3.remote.EJBRemoteTransactionsRepository;
 import org.jboss.as.ejb3.security.EJBSecurityMetaData;
+import org.jboss.as.ejb3.subsystem.ApplicationSecurityDomainService.ApplicationSecurityDomain;
+import org.jboss.as.ejb3.suspend.EJBSuspendHandlerService;
 import org.jboss.as.server.deployment.DeploymentUnit;
 import org.jboss.invocation.InterceptorFactory;
 import org.jboss.invocation.Interceptors;
@@ -59,6 +61,7 @@ import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.value.InjectedValue;
 import org.wildfly.extension.requestcontroller.ControlPoint;
+import org.wildfly.security.auth.server.SecurityDomain;
 
 /**
  * @author Jaikiran Pai
@@ -95,15 +98,19 @@ public class EJBComponentCreateService extends BasicComponentCreateService {
     private final String distinctName;
     private final String policyContextID;
 
-    private final InjectedValue<EJBRemoteTransactionsRepository> ejbRemoteTransactionsRepository = new InjectedValue<EJBRemoteTransactionsRepository>();
     private final InjectedValue<TransactionManager> transactionManagerInjectedValue = new InjectedValue<>();
     private final InjectedValue<UserTransaction> userTransactionInjectedValue = new InjectedValue<>();
     private final InjectedValue<TransactionSynchronizationRegistry> transactionSynchronizationRegistryValue = new InjectedValue<TransactionSynchronizationRegistry>();
     private final InjectedValue<ServerSecurityManager> serverSecurityManagerInjectedValue = new InjectedValue<>();
     private final InjectedValue<ControlPoint> controlPoint = new InjectedValue<>();
     private final InjectedValue<AtomicBoolean> exceptionLoggingEnabled = new InjectedValue<>();
+    private final InjectedValue<ApplicationSecurityDomain> applicationSecurityDomain = new InjectedValue<>();
+    private final InjectedValue<Function> identityOutflowFunction = new InjectedValue<>();
+    private final InjectedValue<EJBSuspendHandlerService> ejbSuspendHandler = new InjectedValue<>();
 
     private final ShutDownInterceptorFactory shutDownInterceptorFactory;
+
+    private final boolean securityRequired;
 
     /**
      * Construct a new instance.
@@ -203,6 +210,7 @@ public class EJBComponentCreateService extends BasicComponentCreateService {
         this.moduleName = componentConfiguration.getModuleName();
         this.distinctName = componentConfiguration.getComponentDescription().getModuleDescription().getDistinctName();
         this.shutDownInterceptorFactory = ejbComponentDescription.getShutDownInterceptorFactory();
+        this.securityRequired = ejbComponentDescription.isSecurityRequired();
     }
 
     @Override
@@ -323,15 +331,6 @@ public class EJBComponentCreateService extends BasicComponentCreateService {
         return moduleName;
     }
 
-    public Injector<EJBRemoteTransactionsRepository> getEJBRemoteTransactionsRepositoryInjector() {
-        return this.ejbRemoteTransactionsRepository;
-    }
-
-    EJBRemoteTransactionsRepository getEJBRemoteTransactionsRepository() {
-        // remote tx repo is applicable only for remote views, hence the optionalValue
-        return this.ejbRemoteTransactionsRepository.getOptionalValue();
-    }
-
     Injector<TransactionManager> getTransactionManagerInjector() {
         return this.transactionManagerInjectedValue;
     }
@@ -356,8 +355,16 @@ public class EJBComponentCreateService extends BasicComponentCreateService {
         return transactionSynchronizationRegistryValue.getOptionalValue();
     }
 
+    public Injector<EJBSuspendHandlerService> getEJBSuspendHandlerInjector() {
+        return this.ejbSuspendHandler;
+    }
+
+    EJBSuspendHandlerService getEJBSuspendHandler() {
+        return this.ejbSuspendHandler.getValue();
+    }
+
     ServerSecurityManager getServerSecurityManager() {
-        return this.serverSecurityManagerInjectedValue.getValue();
+        return this.serverSecurityManagerInjectedValue.getOptionalValue();
     }
 
     Injector<ServerSecurityManager> getServerSecurityManagerInjector() {
@@ -384,7 +391,37 @@ public class EJBComponentCreateService extends BasicComponentCreateService {
         return exceptionLoggingEnabled.getValue();
     }
 
+    Injector<ApplicationSecurityDomain> getApplicationSecurityDomainInjector() {
+        return applicationSecurityDomain;
+    }
+
+    public ApplicationSecurityDomain getApplicationSecurityDomain() {
+        return applicationSecurityDomain.getOptionalValue();
+    }
+
+    public SecurityDomain getSecurityDomain() {
+        ApplicationSecurityDomain applicationSecurityDomain = getApplicationSecurityDomain();
+        return applicationSecurityDomain != null ? applicationSecurityDomain.getSecurityDomain() : null;
+    }
+
+    public boolean isEnableJacc() {
+        ApplicationSecurityDomain applicationSecurityDomain = getApplicationSecurityDomain();
+        return applicationSecurityDomain != null ? applicationSecurityDomain.isEnableJacc() : false;
+    }
+
+    Injector<Function> getIdentityOutflowFunctionInjector() {
+        return identityOutflowFunction;
+    }
+
+    public Function getIdentityOutflowFunction() {
+        return identityOutflowFunction.getOptionalValue();
+    }
+
     public ShutDownInterceptorFactory getShutDownInterceptorFactory() {
         return shutDownInterceptorFactory;
+    }
+
+    public boolean isSecurityRequired() {
+        return securityRequired;
     }
 }

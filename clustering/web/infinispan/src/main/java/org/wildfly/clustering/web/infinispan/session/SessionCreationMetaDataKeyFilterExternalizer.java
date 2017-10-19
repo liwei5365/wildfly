@@ -26,11 +26,13 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
+import org.kohsuke.MetaInfServices;
 import org.wildfly.clustering.marshalling.Externalizer;
 
 /**
  * @author Paul Ferraro
  */
+@MetaInfServices(Externalizer.class)
 public class SessionCreationMetaDataKeyFilterExternalizer implements Externalizer<SessionCreationMetaDataKeyFilter> {
 
     @Override
@@ -43,7 +45,7 @@ public class SessionCreationMetaDataKeyFilterExternalizer implements Externalize
     }
 
     @Override
-    public Class<? extends SessionCreationMetaDataKeyFilter> getTargetClass() {
+    public Class<SessionCreationMetaDataKeyFilter> getTargetClass() {
         return SessionCreationMetaDataKeyFilter.class;
     }
 }

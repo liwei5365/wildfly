@@ -23,16 +23,15 @@
 package org.jboss.as.clustering.infinispan.subsystem;
 
 import org.infinispan.configuration.cache.SitesConfiguration;
-import org.jboss.as.clustering.controller.AddStepHandler;
+import org.jboss.as.clustering.controller.ManagementResourceRegistration;
 import org.jboss.as.clustering.controller.ParentResourceServiceHandler;
-import org.jboss.as.clustering.controller.RemoveStepHandler;
 import org.jboss.as.clustering.controller.ResourceDescriptor;
+import org.jboss.as.clustering.controller.SimpleResourceRegistration;
 import org.jboss.as.clustering.controller.ResourceServiceBuilderFactory;
 import org.jboss.as.clustering.controller.ResourceServiceHandler;
 import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
-import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.transform.PathAddressTransformer;
 import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
 
@@ -59,12 +58,10 @@ public class BackupsResourceDefinition extends ComponentResourceDefinition {
         BackupResourceDefinition.buildTransformation(version, builder);
     }
 
-    private final ResourceServiceBuilderFactory<SitesConfiguration> builderFactory = new BackupsBuilderFactory();
-    private final boolean runtimeRegistration;
+    private final ResourceServiceBuilderFactory<SitesConfiguration> builderFactory = address -> new BackupsBuilder(address.getParent());
 
-    public BackupsResourceDefinition(boolean runtimeRegistration) {
+    public BackupsResourceDefinition() {
         super(PATH);
-        this.runtimeRegistration = runtimeRegistration;
     }
 
     @Override
@@ -73,9 +70,8 @@ public class BackupsResourceDefinition extends ComponentResourceDefinition {
 
         ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver());
         ResourceServiceHandler handler = new ParentResourceServiceHandler<>(this.builderFactory);
-        new AddStepHandler(descriptor, handler).register(registration);
-        new RemoveStepHandler(descriptor, handler).register(registration);
+        new SimpleResourceRegistration(descriptor, handler).register(registration);
 
-        new BackupResourceDefinition(this.builderFactory, this.runtimeRegistration).register(registration);
+        new BackupResourceDefinition(this.builderFactory).register(registration);
     }
 }
